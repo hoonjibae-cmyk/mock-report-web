@@ -1,0 +1,1770 @@
+{
+  "version": "2026.07.13",
+  "classificationNote": "행동영역·내용영역·난이도·학년수준은 공식 정답·해설의 출제 의도와 문항 해결 과정을 바탕으로 학원 진단용으로 재분류한 기준입니다.",
+  "subjects": {
+    "korean": {
+      "key": "korean",
+      "name": "국어",
+      "sheetNames": [
+        "국어",
+        "국어영역",
+        "Korean"
+      ],
+      "examName": "2026년 3월 고1 전국연합학력평가 국어",
+      "testDate": "2026-03-24",
+      "organizer": "서울특별시교육청",
+      "questionCount": 45,
+      "maxScore": 100,
+      "nationalAverage": 55.49,
+      "nationalDataLabel": "2026년 3월 고1 전국 성적 통계",
+      "nationalDataNote": "등급 경계 및 누적 비율 사이를 선형 보간한 ‘전국 상위 추정%’입니다. 공식 개인 백분위가 아닙니다.",
+      "gradeCuts": [
+        {
+          "grade": 1,
+          "minScore": 89,
+          "topPercent": 4.15
+        },
+        {
+          "grade": 2,
+          "minScore": 81,
+          "topPercent": 11.3
+        },
+        {
+          "grade": 3,
+          "minScore": 71,
+          "topPercent": 24.3
+        },
+        {
+          "grade": 4,
+          "minScore": 61,
+          "topPercent": 40.93
+        },
+        {
+          "grade": 5,
+          "minScore": 50,
+          "topPercent": 61.2
+        },
+        {
+          "grade": 6,
+          "minScore": 40,
+          "topPercent": 77.79
+        },
+        {
+          "grade": 7,
+          "minScore": 30,
+          "topPercent": 89.5
+        },
+        {
+          "grade": 8,
+          "minScore": 21,
+          "topPercent": 96.27
+        },
+        {
+          "grade": 9,
+          "minScore": 0,
+          "topPercent": 100.0
+        }
+      ],
+      "percentileAnchors": [
+        {
+          "score": 100,
+          "topPercent": 0.1
+        },
+        {
+          "score": 89,
+          "topPercent": 4.15
+        },
+        {
+          "score": 81,
+          "topPercent": 11.3
+        },
+        {
+          "score": 71,
+          "topPercent": 24.3
+        },
+        {
+          "score": 61,
+          "topPercent": 40.93
+        },
+        {
+          "score": 50,
+          "topPercent": 61.2
+        },
+        {
+          "score": 40,
+          "topPercent": 77.79
+        },
+        {
+          "score": 30,
+          "topPercent": 89.5
+        },
+        {
+          "score": 21,
+          "topPercent": 96.27
+        },
+        {
+          "score": 0,
+          "topPercent": 100.0
+        }
+      ],
+      "items": [
+        {
+          "number": 1,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "표현·전략 분석",
+          "area": "화법",
+          "content": "화법·매체–발표",
+          "detail": "발표자의 말하기 전략",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 2,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "화법",
+          "content": "화법·매체–발표",
+          "detail": "발표 자료의 내용 이해",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 3,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "화법",
+          "content": "화법·매체–발표",
+          "detail": "담화 응집성 실현 방식",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 4,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "표현·전략 분석",
+          "area": "화법",
+          "content": "화법·매체–토론",
+          "detail": "토론 입론의 말하기 방식",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 5,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "화법",
+          "content": "화법·매체–토론",
+          "detail": "토론 쟁점별 입론 내용",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 6,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "화법",
+          "content": "화법·매체–토론",
+          "detail": "법률 자료를 활용한 반론",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 7,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "개념·원리 이해",
+          "area": "문법",
+          "content": "문법–국어사",
+          "detail": "중세 국어 모음 표기",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 8,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "개념·원리 이해",
+          "area": "문법",
+          "content": "문법–문장",
+          "detail": "부정 표현의 종류와 형식",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 9,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "문법",
+          "content": "문법–문장",
+          "detail": "관형어 실현과 수식 구조",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 10,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "문법",
+          "content": "문법–음운",
+          "detail": "표준 발음법 적용",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 11,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "독서",
+          "content": "독서–과학·기술",
+          "detail": "골격근 지문 세부 내용",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 12,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "독서",
+          "content": "독서–과학·기술",
+          "detail": "근육 에너지 공급 원인 추론",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 13,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "독서",
+          "content": "독서–과학·기술",
+          "detail": "지레 원리의 구체적 적용",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 14,
+          "answer": 2,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "독서",
+          "content": "독서–과학·기술",
+          "detail": "근육 원섬유 수축 변화 적용",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 15,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "독서",
+          "content": "독서–예술",
+          "detail": "그라피티 지문 세부 내용",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 16,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "독서",
+          "content": "독서–예술",
+          "detail": "비평의 근거 추론",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 17,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "독서",
+          "content": "독서–예술",
+          "detail": "그라피티 작품에 개념 적용",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 18,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "독서",
+          "content": "독서–인문·사회",
+          "detail": "두 문화론의 설명 방식 비교",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 19,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "독서",
+          "content": "독서–인문·사회",
+          "detail": "화이트의 문화 체계 이해",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 20,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "독서",
+          "content": "독서–인문·사회",
+          "detail": "반 엔트로피 개념 적용",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 21,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "독서",
+          "content": "독서–인문·사회",
+          "detail": "‘동사로서의 문화’ 의미 추론",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 22,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "독서",
+          "content": "독서–인문·사회",
+          "detail": "문화 이론의 사례 적용",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 23,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "독서",
+          "content": "독서–인문·사회",
+          "detail": "문맥상 어휘 바꿔 쓰기",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 24,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "독서·작문",
+          "content": "독서·작문 통합",
+          "detail": "휴리스틱·디지털 경제 세부 내용",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 25,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "독서·작문",
+          "content": "독서·작문 통합",
+          "detail": "기사 작성용 자료 읽기",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 26,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "표현·전략 분석",
+          "area": "독서·작문",
+          "content": "독서·작문 통합",
+          "detail": "기사문 글쓰기 계획 반영",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 27,
+          "answer": 2,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "독서·작문",
+          "content": "독서·작문 통합",
+          "detail": "추가 자료로 초고 보완",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 28,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "표현·전략 분석",
+          "area": "작문",
+          "content": "작문–수필",
+          "detail": "수필의 표현 방식",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 29,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "작문",
+          "content": "작문–수필",
+          "detail": "글쓰기 계획 반영 여부",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 30,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "작문",
+          "content": "작문–수필",
+          "detail": "고쳐쓰기 효과 판단",
+          "difficulty": "응용",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 31,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "문학",
+          "content": "문학–시가 복합",
+          "detail": "현대시·가사의 표현상 공통점",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 32,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "문학",
+          "content": "문학–시가 복합",
+          "detail": "시어의 의미 비교",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 33,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "문학",
+          "content": "문학–시가 복합",
+          "detail": "시어의 문맥적 의미",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 34,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "문학",
+          "content": "문학–시가 복합",
+          "detail": "시상 전개 방식",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 35,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "문학",
+          "content": "문학–시가 복합",
+          "detail": "외적 준거를 활용한 감상",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 36,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "문학",
+          "content": "문학–고전소설",
+          "detail": "고전소설 세부 내용",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 37,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "표현·전략 분석",
+          "area": "문학",
+          "content": "문학–고전소설",
+          "detail": "인물의 말하기 방식",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 38,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "문학",
+          "content": "문학–고전소설",
+          "detail": "발화 의도 파악",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 39,
+          "answer": 4,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "문학",
+          "content": "문학–고전소설",
+          "detail": "여성 영웅 서사 관점 감상",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 40,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "정보 확인",
+          "area": "문학",
+          "content": "문학–희곡",
+          "detail": "희곡 세부 내용",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 41,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "문학",
+          "content": "문학–희곡",
+          "detail": "지시문과 인물 갈등",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 42,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "문학",
+          "content": "문학–희곡",
+          "detail": "이념 갈등과 상징 감상",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 43,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "관계·구조 분석",
+          "area": "문학",
+          "content": "문학–현대소설",
+          "detail": "현대소설 사건 전개",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 44,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론·의미 해석",
+          "area": "문학",
+          "content": "문학–현대소설",
+          "detail": "인물의 심리와 태도",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 45,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "적용·비판·평가",
+          "area": "문학",
+          "content": "문학–현대소설",
+          "detail": "시뮬라시옹 개념을 활용한 감상",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        }
+      ]
+    },
+    "math": {
+      "key": "math",
+      "name": "수학",
+      "sheetNames": [
+        "수학",
+        "수학영역",
+        "Math"
+      ],
+      "examName": "2026년 3월 고1 전국연합학력평가 수학",
+      "testDate": "2026-03-24",
+      "organizer": "서울특별시교육청",
+      "questionCount": 30,
+      "maxScore": 100,
+      "nationalAverage": 43.31,
+      "nationalDataLabel": "2026년 3월 고1 전국 성적 통계",
+      "nationalDataNote": "등급 경계 및 누적 비율 사이를 선형 보간한 ‘전국 상위 추정%’입니다. 공식 개인 백분위가 아닙니다.",
+      "gradeCuts": [
+        {
+          "grade": 1,
+          "minScore": 81,
+          "topPercent": 4.08
+        },
+        {
+          "grade": 2,
+          "minScore": 69,
+          "topPercent": 12.25
+        },
+        {
+          "grade": 3,
+          "minScore": 60,
+          "topPercent": 23.08
+        },
+        {
+          "grade": 4,
+          "minScore": 48,
+          "topPercent": 41.41
+        },
+        {
+          "grade": 5,
+          "minScore": 36,
+          "topPercent": 60.99
+        },
+        {
+          "grade": 6,
+          "minScore": 26,
+          "topPercent": 77.02
+        },
+        {
+          "grade": 7,
+          "minScore": 17,
+          "topPercent": 90.64
+        },
+        {
+          "grade": 8,
+          "minScore": 12,
+          "topPercent": 96.7
+        },
+        {
+          "grade": 9,
+          "minScore": 0,
+          "topPercent": 100.0
+        }
+      ],
+      "percentileAnchors": [
+        {
+          "score": 100,
+          "topPercent": 0.1
+        },
+        {
+          "score": 81,
+          "topPercent": 4.08
+        },
+        {
+          "score": 69,
+          "topPercent": 12.25
+        },
+        {
+          "score": 60,
+          "topPercent": 23.08
+        },
+        {
+          "score": 48,
+          "topPercent": 41.41
+        },
+        {
+          "score": 36,
+          "topPercent": 60.99
+        },
+        {
+          "score": 26,
+          "topPercent": 77.02
+        },
+        {
+          "score": 17,
+          "topPercent": 90.64
+        },
+        {
+          "score": 12,
+          "topPercent": 96.7
+        },
+        {
+          "score": 0,
+          "topPercent": 100.0
+        }
+      ],
+      "items": [
+        {
+          "number": 1,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "계산",
+          "area": "수와 연산",
+          "content": "유리수",
+          "detail": "유리수 연산",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 2,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "계산",
+          "area": "문자와 식",
+          "content": "다항식",
+          "detail": "다항식 연산",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 3,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "계산",
+          "area": "기하",
+          "content": "삼각비",
+          "detail": "특수각의 삼각비 계산",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 4,
+          "answer": 2,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "계산",
+          "area": "문자와 식",
+          "content": "인수분해",
+          "detail": "다항식 인수분해",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 5,
+          "answer": 2,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "개념 이해",
+          "area": "기하",
+          "content": "피타고라스 정리",
+          "detail": "피타고라스 정리",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 6,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "개념 이해",
+          "area": "자료와 가능성",
+          "content": "상대도수",
+          "detail": "줄기와 잎 그림·상대도수",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 7,
+          "answer": 4,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "문제 해결",
+          "area": "문자와 식",
+          "content": "일차방정식",
+          "detail": "일차방정식과 도형의 넓이",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 8,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "문자와 식",
+          "content": "이차방정식",
+          "detail": "매개변수 이차방정식",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 9,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "개념 이해",
+          "area": "함수",
+          "content": "일차함수",
+          "detail": "평행한 직선과 절편",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 10,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "개념 이해",
+          "area": "자료와 가능성",
+          "content": "산점도와 대푯값",
+          "detail": "산점도·최빈값·조건부 평균",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 11,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "문제 해결",
+          "area": "기하",
+          "content": "회전체",
+          "detail": "회전체의 부피",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 12,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "원의 성질",
+          "detail": "원주각과 호의 길이",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 13,
+          "answer": 2,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "문제 해결",
+          "area": "문자와 식",
+          "content": "일차부등식",
+          "detail": "일차부등식의 실생활 활용",
+          "difficulty": "보통",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 14,
+          "answer": 3,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "문제 해결",
+          "area": "자료와 가능성",
+          "content": "확률",
+          "detail": "서로소인 두 수의 확률",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 15,
+          "answer": 4,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "문제 해결",
+          "area": "문자와 식",
+          "content": "연립일차방정식",
+          "detail": "원형 트랙 속력·연립일차방정식",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 16,
+          "answer": 2,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "정다각형과 삼각비",
+          "detail": "정육각형과 삼각비",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 17,
+          "answer": 5,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "함수",
+          "content": "일차함수",
+          "detail": "일차함수 그래프·사다리꼴 경우 분류",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 18,
+          "answer": 3,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "삼각형의 내심",
+          "detail": "내심·접선 길이·삼각비",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 19,
+          "answer": 1,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "피타고라스 정리",
+          "detail": "종이접기·피타고라스 정리",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 20,
+          "answer": 4,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "함수",
+          "content": "이차함수",
+          "detail": "두 이차함수와 넓이 조건",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 21,
+          "answer": 4,
+          "points": 4,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "삼각형의 닮음",
+          "detail": "넓이비·닮음·제곱근",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 22,
+          "answer": 3,
+          "points": 3,
+          "answerType": "number",
+          "behavior": "계산",
+          "area": "함수",
+          "content": "직선의 방정식",
+          "detail": "직선의 방정식과 y절편",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 23,
+          "answer": 27,
+          "points": 3,
+          "answerType": "number",
+          "behavior": "계산",
+          "area": "수와 연산",
+          "content": "제곱근",
+          "detail": "제곱근 계산",
+          "difficulty": "보통",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 24,
+          "answer": 12,
+          "points": 3,
+          "answerType": "number",
+          "behavior": "계산",
+          "area": "수와 연산",
+          "content": "지수법칙",
+          "detail": "지수법칙과 최대공약수",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 25,
+          "answer": 30,
+          "points": 3,
+          "answerType": "number",
+          "behavior": "문제 해결",
+          "area": "수와 연산",
+          "content": "순환소수",
+          "detail": "순환소수와 자연수 조건",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 26,
+          "answer": 14,
+          "points": 4,
+          "answerType": "number",
+          "behavior": "문제 해결",
+          "area": "자료와 가능성",
+          "content": "대푯값과 산포도",
+          "detail": "중앙값과 분산",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 27,
+          "answer": 141,
+          "points": 4,
+          "answerType": "number",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "정다각형",
+          "detail": "정다각형의 각",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 28,
+          "answer": 24,
+          "points": 4,
+          "answerType": "number",
+          "behavior": "추론",
+          "area": "함수",
+          "content": "정비례·반비례",
+          "detail": "정비례·반비례 그래프와 넓이",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 29,
+          "answer": 6,
+          "points": 4,
+          "answerType": "number",
+          "behavior": "추론",
+          "area": "함수",
+          "content": "이차함수",
+          "detail": "매개변수 이차함수와 삼각형 넓이",
+          "difficulty": "고난도",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 30,
+          "answer": 25,
+          "points": 4,
+          "answerType": "number",
+          "behavior": "추론",
+          "area": "기하",
+          "content": "종합 기하",
+          "detail": "평행사변형·닮음·내심·원주각·삼각비 종합",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        }
+      ]
+    },
+    "english": {
+      "key": "english",
+      "name": "영어",
+      "sheetNames": [
+        "영어",
+        "영어영역",
+        "English"
+      ],
+      "examName": "2026년 6월 고1 전국연합학력평가 영어",
+      "testDate": "2026-06-04",
+      "organizer": "부산광역시교육청",
+      "questionCount": 45,
+      "maxScore": 100,
+      "nationalAverage": 57.85,
+      "nationalDataLabel": "2026년 6월 고1 전국 성적 통계",
+      "nationalDataNote": "영어는 절대평가 등급 경계와 전국 누적 비율 사이를 선형 보간한 ‘전국 상위 추정%’입니다. 공식 개인 백분위가 아닙니다.",
+      "gradeCuts": [
+        {
+          "grade": 1,
+          "minScore": 90,
+          "topPercent": 7.76
+        },
+        {
+          "grade": 2,
+          "minScore": 80,
+          "topPercent": 18.05
+        },
+        {
+          "grade": 3,
+          "minScore": 70,
+          "topPercent": 32.51
+        },
+        {
+          "grade": 4,
+          "minScore": 60,
+          "topPercent": 49.2
+        },
+        {
+          "grade": 5,
+          "minScore": 50,
+          "topPercent": 64.42
+        },
+        {
+          "grade": 6,
+          "minScore": 40,
+          "topPercent": 77.2
+        },
+        {
+          "grade": 7,
+          "minScore": 30,
+          "topPercent": 87.68
+        },
+        {
+          "grade": 8,
+          "minScore": 20,
+          "topPercent": 96.29
+        },
+        {
+          "grade": 9,
+          "minScore": 0,
+          "topPercent": 100.0
+        }
+      ],
+      "percentileAnchors": [
+        {
+          "score": 100,
+          "topPercent": 0.1
+        },
+        {
+          "score": 90,
+          "topPercent": 7.76
+        },
+        {
+          "score": 80,
+          "topPercent": 18.05
+        },
+        {
+          "score": 70,
+          "topPercent": 32.51
+        },
+        {
+          "score": 60,
+          "topPercent": 49.2
+        },
+        {
+          "score": 50,
+          "topPercent": 64.42
+        },
+        {
+          "score": 40,
+          "topPercent": 77.2
+        },
+        {
+          "score": 30,
+          "topPercent": 87.68
+        },
+        {
+          "score": 20,
+          "topPercent": 96.29
+        },
+        {
+          "score": 0,
+          "topPercent": 100.0
+        }
+      ],
+      "items": [
+        {
+          "number": 1,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "담화의 목적",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 2,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "화자의 의견",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 3,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "담화의 요지",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 4,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "그림 내용 불일치",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 5,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "화자가 할 일",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 6,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "숫자 정보 계산",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 7,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "이유 파악",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 8,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "언급 유무",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 9,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "담화 내용 불일치",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 10,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "도표 조건 파악",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 11,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "짧은 대화의 적절한 응답",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 12,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "짧은 대화의 적절한 응답",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 13,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "긴 대화의 적절한 응답",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 14,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "긴 대화의 적절한 응답",
+          "difficulty": "응용",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 15,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "상황에 적절한 응답",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 16,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "장문 듣기 주제",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 17,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "듣기 이해",
+          "area": "듣기",
+          "content": "듣기·말하기",
+          "detail": "장문 듣기 언급 유무",
+          "difficulty": "기본",
+          "gradeLevel": "중3"
+        },
+        {
+          "number": 18,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "대의 파악",
+          "area": "읽기",
+          "content": "독해–목적·심경·주장",
+          "detail": "글의 목적",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 19,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–목적·심경·주장",
+          "detail": "인물의 심경 변화",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 20,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "대의 파악",
+          "area": "읽기",
+          "content": "독해–목적·심경·주장",
+          "detail": "필자의 주장",
+          "difficulty": "기본",
+          "gradeLevel": "중3~고1"
+        },
+        {
+          "number": 21,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–대의·함축",
+          "detail": "함축적 의미",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 22,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "대의 파악",
+          "area": "읽기",
+          "content": "독해–대의·함축",
+          "detail": "글의 요지",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 23,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "대의 파악",
+          "area": "읽기",
+          "content": "독해–대의·함축",
+          "detail": "글의 주제",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 24,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "대의 파악",
+          "area": "읽기",
+          "content": "독해–대의·함축",
+          "detail": "글의 제목",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 25,
+          "answer": 5,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "세부 정보 파악",
+          "area": "읽기",
+          "content": "독해–도표·안내문·세부정보",
+          "detail": "도표 내용 불일치",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 26,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "세부 정보 파악",
+          "area": "읽기",
+          "content": "독해–도표·안내문·세부정보",
+          "detail": "인물 정보 불일치",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 27,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "세부 정보 파악",
+          "area": "읽기",
+          "content": "독해–도표·안내문·세부정보",
+          "detail": "안내문 내용 불일치",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 28,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "세부 정보 파악",
+          "area": "읽기",
+          "content": "독해–도표·안내문·세부정보",
+          "detail": "안내문 내용 일치",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 29,
+          "answer": 4,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "언어 형식 판단",
+          "area": "어법·어휘",
+          "content": "독해–어법·어휘",
+          "detail": "어법상 오류",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 30,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "언어 형식 판단",
+          "area": "어법·어휘",
+          "content": "독해–어법·어휘",
+          "detail": "문맥상 어휘",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 31,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–빈칸 추론",
+          "detail": "빈칸 추론",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 32,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–빈칸 추론",
+          "detail": "빈칸 추론",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 33,
+          "answer": 2,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–빈칸 추론",
+          "detail": "빈칸 추론",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 34,
+          "answer": 1,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–빈칸 추론",
+          "detail": "빈칸 추론",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 35,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–글의 흐름",
+          "detail": "무관한 문장",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 36,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–글의 흐름",
+          "detail": "글의 순서",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 37,
+          "answer": 5,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–글의 흐름",
+          "detail": "글의 순서",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 38,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–글의 흐름",
+          "detail": "문장 삽입",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 39,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–글의 흐름",
+          "detail": "문장 삽입",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 40,
+          "answer": 1,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–글의 흐름",
+          "detail": "문단 요약",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 41,
+          "answer": 3,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "대의 파악",
+          "area": "읽기",
+          "content": "독해–장문 독해",
+          "detail": "장문 제목",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 42,
+          "answer": 3,
+          "points": 3,
+          "answerType": "choice",
+          "behavior": "언어 형식 판단",
+          "area": "어법·어휘",
+          "content": "독해–장문 독해",
+          "detail": "장문 문맥상 어휘",
+          "difficulty": "고난도",
+          "gradeLevel": "고1 심화"
+        },
+        {
+          "number": 43,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "글 구조 파악",
+          "area": "읽기",
+          "content": "독해–장문 독해",
+          "detail": "장문 순서",
+          "difficulty": "보통",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 44,
+          "answer": 2,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "추론",
+          "area": "읽기",
+          "content": "독해–장문 독해",
+          "detail": "지칭 추론",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        },
+        {
+          "number": 45,
+          "answer": 4,
+          "points": 2,
+          "answerType": "choice",
+          "behavior": "세부 정보 파악",
+          "area": "읽기",
+          "content": "독해–장문 독해",
+          "detail": "장문 세부 내용",
+          "difficulty": "기본",
+          "gradeLevel": "고1"
+        }
+      ]
+    }
+  }
+}
