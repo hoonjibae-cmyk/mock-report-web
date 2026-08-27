@@ -278,6 +278,7 @@ export default function AdminDashboard({
           </div>
         </div>
         <div className="account-summary">
+          <a className="button secondary" href="/admin/omr">OMR 시험</a>
           <div><strong>{currentUser.displayName}</strong><span>{currentUser.username}</span></div>
           <button className="button ghost" onClick={logout}>로그아웃</button>
         </div>

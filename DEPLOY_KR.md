@@ -61,8 +61,14 @@ Vercel의 **Environment Variables**에 다음을 입력합니다.
 | `AUTH_SECRET` | 영문·숫자를 섞은 긴 임의 문자열, 32자 이상 권장 |
 | `OPENAI_API_KEY` | AI 총평을 사용할 경우 OpenAI API 키 |
 | `REPORT_PIN_REQUIRED` | `true` |
+| `OMR_API_URL` | OMR 판독 서비스 주소(예: `https://omr-api-xxxx.onrender.com`) |
+| `OMR_API_KEY` | OMR 서비스와 공유하는 비밀 키(서비스 배포 시 정한 값) |
 
 `NEXT_PUBLIC_SITE_URL`은 비워도 됩니다. 커스텀 도메인을 쓰고 링크 주소를 고정하고 싶을 때만 `https://도메인`을 입력합니다.
+
+`OMR_API_URL`/`OMR_API_KEY`는 **OMR 답안지 생성·스캔 판독** 기능(관리자 → “OMR 시험”)에 필요합니다.
+별도 Python OMR 서비스(무상태)를 Render 등에 배포하고 그 주소·키를 입력하세요. 이 값이 없으면
+기존 엑셀 업로드 성적표 기능은 정상 동작하고, OMR 답안지 생성 시에만 오류 메시지가 표시됩니다.
 
 ## 5단계. 배포하기
 
