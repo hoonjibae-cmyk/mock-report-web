@@ -64,31 +64,29 @@ const WORKFLOW = [
 ];
 
 export default function AdminHome({ currentUser, exams, reports, setupError, canCreate }: Props) {
-  const now = Date.now();
-  const recentReports = reports.filter(
-    (report) => now - new Date(report.createdAt).getTime() < 30 * 24 * 3600 * 1000,
-  ).length;
-
   return (
     <main className="admin-shell">
       <AdminTopNav user={currentUser} />
 
       {setupError ? <p className="form-error block">{setupError}</p> : null}
 
-      <div className="stat-tiles">
-        <div className="stat-tile">
-          <span>등록된 OMR 시험</span>
-          <strong>{exams.length}</strong>
+      <section className="panel" style={{ marginBottom: 20 }}>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">WORKFLOW</p>
+            <h2>시험 진행 순서</h2>
+          </div>
         </div>
-        <div className="stat-tile">
-          <span>생성된 성적표</span>
-          <strong>{reports.length}</strong>
+        <div className="workflow-row">
+          {WORKFLOW.map((item) => (
+            <div className="workflow-step" key={item.step}>
+              <span>{item.step}</span>
+              <strong>{item.title}</strong>
+              <p>{item.desc}</p>
+            </div>
+          ))}
         </div>
-        <div className="stat-tile">
-          <span>최근 30일 성적표</span>
-          <strong>{recentReports}</strong>
-        </div>
-      </div>
+      </section>
 
       <section className="panel">
         <div className="section-heading">
@@ -187,24 +185,6 @@ export default function AdminHome({ currentUser, exams, reports, setupError, can
           )}
         </section>
       </div>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">WORKFLOW</p>
-            <h2>시험 진행 순서</h2>
-          </div>
-        </div>
-        <div className="workflow-row">
-          {WORKFLOW.map((item) => (
-            <div className="workflow-step" key={item.step}>
-              <span>{item.step}</span>
-              <strong>{item.title}</strong>
-              <p>{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
     </main>
   );
 }

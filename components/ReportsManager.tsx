@@ -30,16 +30,14 @@ export default function ReportsManager({ initialReports, baseUrl, setupError, cu
   const [dateTo, setDateTo] = useState("");
   const [copied, setCopied] = useState("");
 
-  // 시험(리포트 묶음) 필터 항목 — 최신순
+  // 시험 필터 항목 — 같은 제목·묶음명은 업로드가 여러 번이어도 하나로 묶는다. 최신순.
   const batches = useMemo(() => {
-    const map = new Map<string, { id: string; label: string; createdAt: string }>();
+    const map = new Map<string, { label: string; createdAt: string }>();
     for (const report of reports) {
-      if (!map.has(report.batchId)) {
-        map.set(report.batchId, {
-          id: report.batchId,
-          label: [report.batchTitle, report.examLabel].filter(Boolean).join(" · "),
-          createdAt: report.createdAt,
-        });
+      const label = [report.batchTitle, report.examLabel].filter(Boolean).join(" · ");
+      const existing = map.get(label);
+      if (!existing || existing.createdAt < report.createdAt) {
+        map.set(label, { label, createdAt: report.createdAt });
       }
     }
     return [...map.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -48,7 +46,12 @@ export default function ReportsManager({ initialReports, baseUrl, setupError, cu
   const visibleReports = useMemo(() => {
     const query = search.trim().toLowerCase();
     return reports.filter((report) => {
-      if (batchFilter && report.batchId !== batchFilter) return false;
+      if (
+        batchFilter &&
+        [report.batchTitle, report.examLabel].filter(Boolean).join(" · ") !== batchFilter
+      ) {
+        return false;
+      }
       const created = report.createdAt.slice(0, 10);
       if (dateFrom && created < dateFrom) return false;
       if (dateTo && created > dateTo) return false;
@@ -131,7 +134,6 @@ export default function ReportsManager({ initialReports, baseUrl, setupError, cu
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "묶음 삭제에 실패했습니다.");
       setReports((current) => current.filter((report) => report.batchId !== batchId));
-      if (batchFilter === batchId) setBatchFilter("");
       setStatus(`‘${batchTitle}’ 묶음의 성적표 ${data.deletedCount ?? count}건을 삭제했습니다.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "묶음 삭제에 실패했습니다.");
@@ -186,7 +188,7 @@ export default function ReportsManager({ initialReports, baseUrl, setupError, cu
               <select value={batchFilter} onChange={(event) => setBatchFilter(event.target.value)}>
                 <option value="">전체 시험</option>
                 {batches.map((batch) => (
-                  <option key={batch.id} value={batch.id}>{batch.label || "제목 없음"}</option>
+                  <option key={batch.label} value={batch.label}>{batch.label || "제목 없음"}</option>
                 ))}
               </select>
             </label>
