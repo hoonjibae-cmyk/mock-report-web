@@ -133,10 +133,8 @@ export default function OmrExamForm() {
         <div className="form-row">
           <label>
             <span>답안지 스타일</span>
-            <select name="omrStyle" defaultValue="exam">
-              <option value="exam">수능형(가로)</option>
-              <option value="basic">기본형(세로)</option>
-            </select>
+            <input type="hidden" name="omrStyle" value="exam" />
+            <input value="수능형(가로) · 고정" readOnly disabled />
           </label>
           <label>
             <span>시험일</span>
