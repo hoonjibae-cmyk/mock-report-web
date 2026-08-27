@@ -127,5 +127,6 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
     period: typeof cfg.period === "string" ? cfg.period : "",
     subject_label: typeof cfg.subject_label === "string" ? cfg.subject_label : "",
     academy: ACADEMY_NAME,
+    essay_count: typeof cfg.essay_count === "number" ? cfg.essay_count : 0,
   };
 }

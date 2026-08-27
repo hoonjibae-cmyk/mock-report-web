@@ -30,6 +30,7 @@ export interface OmrConfig {
   per_column?: number;
   period?: string;
   subject_label?: string;
+  essay_count?: number;
   [key: string]: unknown;
 }
 
@@ -62,6 +63,7 @@ export interface OmrSheetSpec {
   period?: string;
   subject_label?: string;
   academy?: string;
+  essay_count?: number;
   dpi?: number;
 }
 
