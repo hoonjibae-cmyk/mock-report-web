@@ -120,19 +120,6 @@ button { cursor: pointer; }
   align-items: center;
   justify-content: space-between;
 }
-.stat-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
-.stat-tile {
-  background: var(--surface);
-  border: 1px solid #e1e7ef;
-  border-radius: 14px;
-  padding: 16px 20px;
-  box-shadow: 0 8px 28px rgba(19, 47, 88, .06);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.stat-tile span { font-size: 12px; font-weight: 700; color: var(--muted); }
-.stat-tile strong { font-size: 30px; color: var(--navy-deep); letter-spacing: -.03em; }
 .type-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
 .type-card {
   border: 1px solid var(--line);
@@ -166,7 +153,6 @@ button { cursor: pointer; }
 .workflow-step strong { font-size: 13.5px; color: var(--navy-deep); }
 .workflow-step p { margin: 0; font-size: 12px; color: var(--muted); }
 @media (max-width: 900px) {
-  .stat-tiles { grid-template-columns: 1fr; }
   .workflow-row { grid-template-columns: 1fr 1fr; }
 }
 .admin-tabs {
@@ -936,3 +922,60 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 .a4-report-brand > div { min-width: 52mm; }
 .a4-report-brand strong, .a4-footer-brand strong { white-space: nowrap; }
+
+/* --- 범용(OMR) 성적표 --- */
+.generic-kpis { grid-template-columns: repeat(4, 1fr); }
+.dist-wrap { margin-top: 26px; }
+.dist-track {
+  position: relative;
+  height: 10px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #eaf0f8, #d6e2f2);
+}
+.dist-marker { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.dist-marker i {
+  display: block;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(16, 43, 85, .3);
+}
+.dist-marker.mean i { background: #98a2b3; width: 11px; height: 11px; }
+.dist-marker.me i { background: var(--navy); }
+.dist-marker em {
+  position: absolute;
+  left: 50%; transform: translateX(-50%);
+  white-space: nowrap;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.dist-marker.mean em { top: 16px; }
+.dist-marker.me em { bottom: 16px; color: var(--navy-deep); font-weight: 800; }
+.dist-ends { display: flex; justify-content: space-between; margin-top: 24px; font-size: 11.5px; color: var(--muted); }
+.omr-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 6px;
+}
+.omr-item-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 2px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.omr-item-cell .no { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.omr-item-cell .mark { font-size: 12.5px; font-weight: 800; color: var(--ink); }
+.omr-item-cell.ok { background: var(--success-soft); }
+.omr-item-cell.ok .mark { color: var(--success); }
+.omr-item-cell.wrong { background: var(--danger-soft); }
+.omr-item-cell.wrong .mark { color: var(--danger); }
+.omr-item-cell.blank { background: #f1f3f7; }
+.omr-item-cell.weak { border-color: var(--danger); }
+@media (max-width: 720px) {
+  .generic-kpis { grid-template-columns: repeat(2, 1fr); }
+}

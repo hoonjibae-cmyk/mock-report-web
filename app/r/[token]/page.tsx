@@ -1,7 +1,9 @@
 import AcademyLogo from "@/components/AcademyLogo";
+import GenericReport from "@/components/GenericReport";
 import PinGate from "@/components/PinGate";
 import ReportView from "@/components/ReportView";
 import { hasReportAccess } from "@/lib/auth";
+import { isGenericReport } from "@/lib/omr-report-types";
 import { getReportByToken, recordReportView } from "@/lib/reports";
 
 export const dynamic = "force-dynamic";
@@ -34,5 +36,6 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   }
 
   await recordReportView(row.id, row.view_count).catch(() => undefined);
+  if (isGenericReport(row.report_data)) return <GenericReport report={row.report_data} />;
   return <ReportView report={row.report_data} />;
 }

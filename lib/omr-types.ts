@@ -48,6 +48,10 @@ export interface OmrExam {
   omrConfig: OmrConfig;
   /** {문항번호: 정답 보기번호(1-base)} — 키는 문자열(jsonb) */
   answerKey: Record<string, number>;
+  /** {문항번호: 배점} — 비어 있으면 100점 만점 균등 배점 */
+  points: Record<string, number>;
+  /** 절대평가 등급컷 [{grade, min}] — min은 100점 환산 하한. 비어 있으면 등급 미표기 */
+  gradeCuts: Array<{ grade: number; min: number }>;
   useTeacherComment: boolean;
   createdByName: string | null;
   createdAt: string;
