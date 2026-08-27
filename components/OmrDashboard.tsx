@@ -112,6 +112,11 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/reports`}>
                           성적표
                         </Link>
+                        {exam.useTeacherComment ? (
+                          <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/comments`}>
+                            담임 의견
+                          </Link>
+                        ) : null}
                         {canDelete ? (
                           <button
                             className="button tiny danger"

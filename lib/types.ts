@@ -181,6 +181,10 @@ export interface ReportDbRow {
   is_active: boolean;
   report_data: StudentReportData;
   ai_summary: AIReview | null;
+  /* OMR 연동(v2) 컬럼 — 국영수 성적표에서는 null */
+  exam_id?: string | null;
+  student_key?: string | null;
+  teacher_comment?: unknown;
   view_count: number;
   last_viewed_at: string | null;
   created_at: string;

@@ -158,6 +158,7 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
         <div style={{ display: "flex", gap: 8 }}>
           <Link className="button ghost" href="/admin/omr">← 시험 목록</Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/scans`}>← 스캔 · 검수</Link>
+          <Link className="button secondary" href={`/admin/omr/${exam.id}/comments`}>담임 의견 →</Link>
         </div>
       </header>
 

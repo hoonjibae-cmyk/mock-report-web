@@ -2,6 +2,16 @@ import AcademyLogo from "@/components/AcademyLogo";
 import ReportActions from "@/components/ReportActions";
 import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 
+/** 열람 시점에 주입되는 담임 의견(성적표 생성 후에도 수정 가능) */
+export interface ReportComments {
+  /** 시험 공통 총평 */
+  overview: string | null;
+  /** 학생별 개별 의견 */
+  personal: string | null;
+  /** 성적표에 칩으로 노출되는 긍정 키워드 */
+  keywords: string[];
+}
+
 /** 표준점수 성장 추이 — 단일 시리즈 라인, 기준선 100 */
 function GrowthChart({ points }: { points: GrowthPoint[] }) {
   const W = 640;
@@ -76,9 +86,9 @@ function GrowthChart({ points }: { points: GrowthPoint[] }) {
             </circle>
             {(i === 0 || last) ? (
               <text
-                x={xTo(i)}
+                x={i === 0 && !last ? xTo(i) + 10 : xTo(i)}
                 y={yTo(p.standardScore) - 12}
-                textAnchor="middle"
+                textAnchor={i === 0 && !last ? "start" : "middle"}
                 fontSize={last ? 13 : 11}
                 fontWeight={last ? 800 : 600}
                 fill={last ? "#102b55" : "#667085"}
@@ -121,10 +131,19 @@ function DistributionBar({ report }: { report: GenericReportData }) {
   );
 }
 
-export default function GenericReport({ report }: { report: GenericReportData }) {
+export default function GenericReport({
+  report,
+  comments,
+}: {
+  report: GenericReportData;
+  comments?: ReportComments;
+}) {
   const { score, cohort } = report;
   const wrongItems = report.items.filter((item) => !item.correct);
   const weakSet = new Set(report.weakItems);
+  const overviewText = comments?.overview ?? null;
+  const personalText = comments?.personal ?? report.teacherComment?.text ?? null;
+  const keywordChips = comments?.keywords ?? [];
 
   return (
     <main className="report-shell">
@@ -280,10 +299,42 @@ export default function GenericReport({ report }: { report: GenericReportData })
           </section>
         ) : null}
 
-        {report.teacherComment?.text ? (
+        {overviewText || personalText ? (
           <section className="ai-review-card">
-            <div className="ai-label"><span>담임</span><strong>담임 의견</strong></div>
-            <p className="review-overview">{report.teacherComment.text}</p>
+            <div className="ai-label"><span>담임</span><strong>선생님 의견</strong></div>
+            {overviewText ? (
+              <div style={{ marginBottom: personalText ? 18 : 0 }}>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14.5 }}>이번 시험 총평</h3>
+                <p className="review-overview" style={{ whiteSpace: "pre-wrap" }}>{overviewText}</p>
+              </div>
+            ) : null}
+            {personalText ? (
+              <div>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14.5 }}>
+                  {report.student.name} 학생에게
+                </h3>
+                {keywordChips.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 10px" }}>
+                    {keywordChips.map((keyword) => (
+                      <span
+                        key={keyword}
+                        style={{
+                          padding: "3px 11px",
+                          borderRadius: 99,
+                          fontSize: 12.5,
+                          fontWeight: 750,
+                          background: "rgba(255,255,255,.16)",
+                          border: "1px solid rgba(255,255,255,.35)",
+                        }}
+                      >
+                        #{keyword}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="review-overview" style={{ whiteSpace: "pre-wrap" }}>{personalText}</p>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
