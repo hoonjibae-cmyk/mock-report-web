@@ -40,6 +40,7 @@ export default function OmrExamForm() {
       idDigits: Number(fd.get("idDigits")),
       omrStyle: String(fd.get("omrStyle") || "exam"),
       perColumn: Number(fd.get("perColumn")) || undefined,
+      essayCount: Number(fd.get("essayCount")) || 0,
       period: String(fd.get("period") || ""),
       subjectLabel: String(fd.get("subjectLabel") || ""),
       useTeacherComment: fd.get("useTeacherComment") === "on",
@@ -132,11 +133,17 @@ export default function OmrExamForm() {
 
         <div className="form-row">
           <label>
+            <span>서술형(주관식) 문항 수</span>
+            <input name="essayCount" type="number" min={0} max={20} defaultValue={0} />
+            <small className="hint">0이면 객관식만. 1 이상이면 답안지 오른쪽에 손기입 칸이 추가됩니다.</small>
+          </label>
+        </div>
+
+        <div className="form-row">
+          <label>
             <span>답안지 스타일</span>
-            <select name="omrStyle" defaultValue="exam">
-              <option value="exam">수능형(가로)</option>
-              <option value="basic">기본형(세로)</option>
-            </select>
+            <input type="hidden" name="omrStyle" value="exam" />
+            <input value="수능형(가로) · 고정" readOnly disabled />
           </label>
           <label>
             <span>시험일</span>

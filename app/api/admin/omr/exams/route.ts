@@ -57,6 +57,13 @@ export async function POST(request: Request) {
     if (typeof body.subjectLabel === "string" && body.subjectLabel.trim()) {
       omrConfig.subject_label = body.subjectLabel.trim();
     }
+    const essayCount = Number(body.essayCount);
+    if (Number.isInteger(essayCount) && essayCount > 0) {
+      if (essayCount > 20) {
+        return NextResponse.json({ error: "서술형 문항 수는 0~20 사이여야 합니다." }, { status: 400 });
+      }
+      omrConfig.essay_count = essayCount;
+    }
 
     const exam = await createExam(
       {
