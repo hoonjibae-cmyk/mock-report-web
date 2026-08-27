@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
@@ -22,8 +22,10 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
   });
   const [bulk, setBulk] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(setupError);
   const [message, setMessage] = useState("");
+  const excelRef = useRef<HTMLInputElement>(null);
 
   const total = exam?.numQuestions ?? 0;
   const choices = exam?.numChoices ?? 5;
@@ -56,6 +58,42 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
     setMessage(
       `1번부터 ${applied}문항에 일괄 적용했습니다.${digits.length > total ? ` (${digits.length - total}자 초과분은 무시)` : ""}`,
     );
+  }
+
+  async function uploadExcel() {
+    const file = excelRef.current?.files?.[0];
+    if (!file || !exam) return;
+    setUploading(true);
+    setError("");
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/key/excel`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "엑셀을 처리하지 못했습니다.");
+      const uploaded: Record<string, number> = data.exam?.answerKey ?? {};
+      setKey(() => {
+        const next: Record<string, number | null> = {};
+        for (let q = 1; q <= total; q += 1) {
+          next[String(q)] = typeof uploaded[String(q)] === "number" ? uploaded[String(q)] : null;
+        }
+        return next;
+      });
+      setMessage(
+        data.filled >= data.total
+          ? `엑셀에서 정답 ${data.filled}/${data.total}문항을 불러와 저장했습니다.`
+          : `엑셀에서 ${data.filled}/${data.total}문항을 저장했습니다 — 비어 있는 문항을 확인해 주세요.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "엑셀 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setUploading(false);
+      if (excelRef.current) excelRef.current.value = "";
+    }
   }
 
   async function save() {
@@ -141,25 +179,56 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
             </p>
           </div>
           {canEdit ? (
-            <button className="button primary" onClick={save} disabled={saving}>
-              {saving ? "저장 중…" : "정답 저장"}
-            </button>
+            <div className="toolbar" style={{ flexWrap: "wrap" }}>
+              <a className="button secondary" href={`/api/admin/omr/exams/${exam.id}/key/excel`}>
+                엑셀 양식 받기
+              </a>
+              <input
+                ref={excelRef}
+                type="file"
+                accept=".xlsx"
+                style={{ display: "none" }}
+                onChange={uploadExcel}
+              />
+              <button
+                className="button secondary"
+                type="button"
+                disabled={uploading}
+                onClick={() => excelRef.current?.click()}
+              >
+                {uploading ? "업로드 중…" : "엑셀 업로드"}
+              </button>
+              <button className="button primary" onClick={save} disabled={saving}>
+                {saving ? "저장 중…" : "정답 저장"}
+              </button>
+            </div>
           ) : null}
         </div>
 
         {canEdit ? (
           <div className="info-box">
             <strong>빠른 입력</strong>
-            <p>1번부터 순서대로 정답 숫자를 붙여넣으면 한 번에 채워집니다. 공백·쉼표는 무시됩니다.</p>
-            <div className="form-row" style={{ marginTop: 8 }}>
-              <label style={{ flex: 1 }}>
-                <input
-                  value={bulk}
-                  placeholder={`예: ${Array.from({ length: Math.min(10, total) }, (_, i) => ((i % choices) + 1)).join("")} …`}
-                  onChange={(e) => setBulk(e.target.value)}
-                />
-              </label>
-              <button className="button secondary" type="button" onClick={applyBulk}>
+            <p>
+              1번부터 순서대로 정답 숫자를 붙여넣고 <strong>일괄 적용</strong>을 누르면 한 번에
+              채워집니다(공백·쉼표 무시). 또는 <strong>엑셀 양식 받기</strong>로 내려받아 정답을
+              채운 뒤 <strong>엑셀 업로드</strong>를 눌러도 됩니다 — 업로드하면 바로 저장됩니다.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 10, maxWidth: 560 }}>
+              <input
+                value={bulk}
+                style={{ flex: 1 }}
+                placeholder={`예: ${Array.from({ length: Math.min(10, total) }, (_, i) => ((i % choices) + 1)).join("")} …`}
+                onChange={(e) => setBulk(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyBulk();
+                }}
+              />
+              <button
+                className="button secondary"
+                type="button"
+                style={{ flex: "0 0 auto" }}
+                onClick={applyBulk}
+              >
                 일괄 적용
               </button>
             </div>
@@ -169,27 +238,39 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-            gap: 8,
-            marginTop: 12,
+            gridTemplateColumns: `repeat(auto-fill, minmax(${64 + choices * 32}px, 1fr))`,
+            gap: 10,
+            marginTop: 14,
           }}
         >
           {Array.from({ length: total }, (_, i) => i + 1).map((q) => {
             const value = key[String(q)];
+            const empty = value == null;
             return (
               <div
                 key={q}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 8,
-                  padding: "6px 8px",
-                  borderRadius: 8,
-                  background: value == null ? "#fdecea" : "#f4f6fa",
+                  gap: 10,
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  background: empty ? "#fff" : "#eef4fb",
+                  border: empty ? "1px dashed #d9a8a8" : "1px solid #cfdcee",
                 }}
               >
-                <span style={{ fontWeight: 800, minWidth: 26, textAlign: "right" }}>{q}</span>
-                <div style={{ display: "flex", gap: 4, flex: 1 }}>
+                <span
+                  style={{
+                    fontWeight: 800,
+                    minWidth: 24,
+                    textAlign: "right",
+                    color: empty ? "#b91c1c" : "#102b55",
+                    fontSize: 13.5,
+                  }}
+                >
+                  {q}
+                </span>
+                <div style={{ display: "flex", gap: 5 }}>
                   {Array.from({ length: choices }, (_, c) => c + 1).map((c) => (
                     <button
                       key={c}
@@ -197,16 +278,18 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                       disabled={!canEdit}
                       onClick={() => setKey((prev) => ({ ...prev, [String(q)]: prev[String(q)] === c ? null : c }))}
                       style={{
-                        width: 24,
-                        height: 24,
+                        width: 27,
+                        height: 27,
+                        flex: "0 0 auto",
                         borderRadius: "50%",
                         border: value === c ? "2px solid #183c73" : "1px solid #b8c0cc",
                         background: value === c ? "#183c73" : "white",
                         color: value === c ? "white" : "#5a6472",
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: 700,
                         cursor: canEdit ? "pointer" : "default",
                         lineHeight: 1,
+                        padding: 0,
                       }}
                     >
                       {c}

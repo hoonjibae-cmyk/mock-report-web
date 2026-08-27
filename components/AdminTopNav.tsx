@@ -35,8 +35,8 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
         <div className="brand-lockup">
           <AcademyLogo />
           <div>
-            <strong>목동유쌤영어학원</strong>
-            <span>시험 · 성적표 관리 · {user.role === "admin" ? "관리자" : "일반 사용자"}</span>
+            <strong>OMR 리포트</strong>
+            <span>목동유쌤영어학원 · {user.role === "admin" ? "관리자" : "일반 사용자"}</span>
           </div>
         </div>
         <div className="account-summary">
