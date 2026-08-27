@@ -175,6 +175,9 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
           <Link className="button secondary" href={`/admin/omr/${exam.id}/key`}>
             정답 입력
           </Link>
+          <Link className="button secondary" href={`/admin/omr/${exam.id}/reports`}>
+            성적표 생성 →
+          </Link>
           <a
             className="button secondary"
             href={`/api/admin/omr/exams/${exam.id}/sheet`}

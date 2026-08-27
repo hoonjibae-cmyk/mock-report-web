@@ -1,0 +1,281 @@
+import { NextResponse } from "next/server";
+import { authorizeApi } from "@/lib/api-auth";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { createPublicToken, hashPin } from "@/lib/crypto";
+import { getExam } from "@/lib/omr-exams";
+import { listScans } from "@/lib/omr-scans";
+import { scoreExam, maxScore } from "@/lib/omr-scoring";
+import { EXAM_TYPE_LABELS, ACADEMY_NAME } from "@/lib/omr-types";
+import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
+import { isGenericReport } from "@/lib/omr-report-types";
+import { maskPhone, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
+
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
+interface StudentInput {
+  scanId: string;
+  name: string;
+  school?: string;
+  phone?: string;
+}
+
+/** 학생 식별 제안 + 이 시험의 기존 성적표 현황 */
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeApi("viewReports");
+  if (auth.response) return auth.response;
+  const { id } = await context.params;
+
+  try {
+    const exam = await getExam(id);
+    if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+
+    const scans = await listScans(id);
+    const keys = [
+      ...new Set(scans.map((scan) => scan.studentId).filter((v): v is string => Boolean(v))),
+    ];
+
+    const supabase = getSupabaseAdmin();
+
+    // 이전 성적표에서 수험번호 → 이름·학교 제안(최신 우선)
+    const suggestions: Record<string, { name: string; school: string }> = {};
+    if (keys.length > 0) {
+      const { data } = await supabase
+        .from("student_reports")
+        .select("student_key,student_name,school,created_at")
+        .in("student_key", keys)
+        .order("created_at", { ascending: false });
+      for (const row of data ?? []) {
+        const key = row.student_key as string;
+        if (key && !suggestions[key]) {
+          suggestions[key] = { name: row.student_name ?? "", school: row.school ?? "" };
+        }
+      }
+    }
+
+    const { count } = await supabase
+      .from("student_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("exam_id", id);
+
+    return NextResponse.json({ ok: true, suggestions, existingReports: count ?? 0 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "조회 오류" },
+      { status: 500 },
+    );
+  }
+}
+
+/** 검수 완료 스캔을 채점해 학생별 성적표(웹링크)를 생성한다. */
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeApi("createReports");
+  if (auth.response) return auth.response;
+  const { id } = await context.params;
+
+  try {
+    const exam = await getExam(id);
+    if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+
+    const keyFilled = Object.keys(exam.answerKey ?? {}).length;
+    if (keyFilled < exam.numQuestions) {
+      return NextResponse.json(
+        { error: `정답이 ${keyFilled}/${exam.numQuestions}문항만 입력되어 있습니다. 정답 입력을 먼저 완료해 주세요.` },
+        { status: 400 },
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const inputs: StudentInput[] = Array.isArray(body.students) ? body.students : [];
+    const requestPin = body.pinRequired !== false;
+
+    const allScans = await listScans(id);
+    const reviewed = allScans.filter((scan) => scan.status === "reviewed" && scan.studentId);
+    if (reviewed.length === 0) {
+      return NextResponse.json(
+        { error: "검수 완료된 답안이 없습니다. 스캔 · 검수를 먼저 진행해 주세요." },
+        { status: 400 },
+      );
+    }
+
+    const nameByScan = new Map<string, StudentInput>();
+    for (const input of inputs) {
+      if (input && typeof input.scanId === "string" && typeof input.name === "string") {
+        nameByScan.set(input.scanId, input);
+      }
+    }
+    const missing = reviewed.filter((scan) => !nameByScan.get(scan.id)?.name?.trim());
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error: `학생 이름이 비어 있는 답안이 ${missing.length}건 있습니다(수험번호 ${missing
+            .map((scan) => scan.studentId)
+            .slice(0, 5)
+            .join(", ")}${missing.length > 5 ? " 외" : ""}). 이름을 모두 입력해 주세요.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    // 채점(검수 완료 전체가 응시 집단)
+    const { cohort, scored } = scoreExam(exam, reviewed);
+    const scoredByScan = new Map(scored.map((s) => [s.scanId, s]));
+    const examMax = maxScore(exam);
+
+    const supabase = getSupabaseAdmin();
+
+    // 성장 추이: 같은 student_key + 같은 시험 유형의 이전 C_generic 성적표
+    const keys = [...new Set(reviewed.map((scan) => scan.studentId as string))];
+    const growthByKey = new Map<string, GrowthPoint[]>();
+    if (keys.length > 0) {
+      const { data: prior } = await supabase
+        .from("student_reports")
+        .select("student_key,exam_id,report_data,created_at")
+        .in("student_key", keys)
+        .not("exam_id", "is", null)
+        .order("created_at", { ascending: true });
+      for (const row of prior ?? []) {
+        const data = row.report_data;
+        if (!isGenericReport(data)) continue;
+        if (data.examType !== exam.examType) continue;
+        if (row.exam_id === id) continue; // 재생성 시 같은 시험 중복 방지
+        const key = row.student_key as string;
+        const list = growthByKey.get(key) ?? [];
+        // 같은 시험은 최신 생성본 하나만
+        const existingIdx = list.findIndex((p) => p.examId === row.exam_id);
+        const point: GrowthPoint = {
+          examId: row.exam_id as string,
+          title: data.examTitle,
+          date: data.examDate ?? (row.created_at as string).slice(0, 10),
+          standardScore: data.standardScore,
+          raw: data.score.raw,
+          mean: data.cohort.mean,
+        };
+        if (existingIdx >= 0) list[existingIdx] = point;
+        else list.push(point);
+        growthByKey.set(key, list);
+      }
+    }
+
+    // 성적표 묶음 생성
+    const { data: batch, error: batchError } = await supabase
+      .from("report_batches")
+      .insert({
+        title: exam.title,
+        exam_label: exam.examDate || EXAM_TYPE_LABELS[exam.examType],
+        source_filename: `OMR ${reviewed.length}매`,
+        report_count: reviewed.length,
+        created_by_name: auth.user.displayName,
+        created_by_username: auth.user.username,
+      })
+      .select("id")
+      .single();
+    if (batchError || !batch) {
+      throw new Error(`성적표 묶음 저장 실패: ${batchError?.message ?? "알 수 없는 오류"}`);
+    }
+
+    const essayCount =
+      typeof exam.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
+    const generatedAt = new Date().toISOString();
+
+    const rows = reviewed.map((scan) => {
+      const input = nameByScan.get(scan.id)!;
+      const result = scoredByScan.get(scan.id)!;
+      const key = scan.studentId as string;
+      const growth = [...(growthByKey.get(key) ?? [])].sort((a, b) =>
+        a.date.localeCompare(b.date),
+      );
+      growth.push({
+        examId: id,
+        title: exam.title,
+        date: exam.examDate || generatedAt.slice(0, 10),
+        standardScore: result.standardScore,
+        raw: result.raw,
+        mean: cohort.mean,
+      });
+
+      const reportData: GenericReportData = {
+        schemaVersion: 2,
+        family: "C_generic",
+        examId: id,
+        examType: exam.examType,
+        examTypeLabel: EXAM_TYPE_LABELS[exam.examType],
+        examTitle: exam.title,
+        examDate: exam.examDate,
+        academy: ACADEMY_NAME,
+        student: { key, name: input.name.trim(), school: input.school?.trim() ?? "" },
+        score: {
+          raw: result.raw,
+          max: examMax,
+          correctCount: result.correctCount,
+          wrongCount: result.wrongCount,
+          blankCount: result.blankCount,
+          totalQuestions: exam.numQuestions,
+        },
+        cohort,
+        standardScore: result.standardScore,
+        rank: result.rank,
+        topPercent: result.topPercent,
+        grade: result.grade,
+        items: result.items,
+        weakItems: result.weakItems,
+        growth,
+        essayCount,
+        teacherComment: null,
+        generatedAt,
+      };
+
+      const phone = normalizePhone(input.phone ?? "");
+      const pin = phoneLast4(phone);
+      const pinRequired = requestPin && Boolean(pin);
+
+      return {
+        batch_id: batch.id,
+        public_token: createPublicToken(),
+        student_name: input.name.trim(),
+        school: input.school?.trim() || null,
+        grade: null,
+        parent_phone_masked: phone ? maskPhone(phone) : null,
+        access_pin_hash: pinRequired ? hashPin(pin) : null,
+        pin_required: pinRequired,
+        is_active: true,
+        report_data: reportData,
+        exam_id: id,
+        student_key: key,
+        scan_path: scan.scanPath,
+      };
+    });
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("student_reports")
+      .insert(rows)
+      .select("id,public_token,student_name,school,pin_required,created_at");
+    if (insertError || !inserted) {
+      await supabase.from("report_batches").delete().eq("id", batch.id);
+      throw new Error(`성적표 저장 실패: ${insertError?.message ?? "알 수 없는 오류"}`);
+    }
+
+    const baseUrl = siteBaseUrl(request.url);
+    return NextResponse.json({
+      ok: true,
+      batchId: batch.id,
+      reports: inserted.map((row) => ({
+        id: row.id,
+        studentName: row.student_name,
+        school: row.school ?? "",
+        token: row.public_token,
+        url: `${baseUrl}/r/${row.public_token}`,
+        pinRequired: row.pin_required,
+        createdAt: row.created_at,
+      })),
+      cohort,
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "성적표 생성 오류" },
+      { status: 500 },
+    );
+  }
+}

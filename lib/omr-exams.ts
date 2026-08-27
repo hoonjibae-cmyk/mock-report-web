@@ -23,6 +23,8 @@ interface ExamRow {
   omr_style: "exam" | "basic";
   omr_config: OmrConfig | null;
   answer_key: Record<string, number> | null;
+  points: Record<string, number> | null;
+  grade_cuts: Array<{ grade: number; min: number }> | null;
   use_teacher_comment: boolean;
   created_by_name: string | null;
   created_at: string;
@@ -42,6 +44,8 @@ function mapExam(row: ExamRow): OmrExam {
     omrStyle: row.omr_style,
     omrConfig: row.omr_config ?? {},
     answerKey: row.answer_key ?? {},
+    points: row.points ?? {},
+    gradeCuts: row.grade_cuts ?? [],
     useTeacherComment: row.use_teacher_comment,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
@@ -49,7 +53,7 @@ function mapExam(row: ExamRow): OmrExam {
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,use_teacher_comment,created_by_name,created_at";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,points,grade_cuts,use_teacher_comment,created_by_name,created_at";
 
 export interface CreateExamInput {
   examType: ExamType;

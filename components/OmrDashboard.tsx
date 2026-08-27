@@ -109,6 +109,9 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/scans`}>
                           스캔 · 검수
                         </Link>
+                        <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/reports`}>
+                          성적표
+                        </Link>
                         {canDelete ? (
                           <button
                             className="button tiny danger"
