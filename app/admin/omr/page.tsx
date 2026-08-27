@@ -25,6 +25,11 @@ export default async function OmrExamsPage() {
       setupError={setupError}
       canCreate={hasPermission(user, "createReports")}
       canDelete={hasPermission(user, "deleteReports")}
+      currentUser={{
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+      }}
     />
   );
 }

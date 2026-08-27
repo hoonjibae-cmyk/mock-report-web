@@ -46,6 +46,8 @@ export interface OmrExam {
   idDigits: number;
   omrStyle: "exam" | "basic";
   omrConfig: OmrConfig;
+  /** {문항번호: 정답 보기번호(1-base)} — 키는 문자열(jsonb) */
+  answerKey: Record<string, number>;
   useTeacherComment: boolean;
   createdByName: string | null;
   createdAt: string;

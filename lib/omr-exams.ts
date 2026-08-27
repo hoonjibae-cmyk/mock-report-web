@@ -22,6 +22,7 @@ interface ExamRow {
   id_digits: number;
   omr_style: "exam" | "basic";
   omr_config: OmrConfig | null;
+  answer_key: Record<string, number> | null;
   use_teacher_comment: boolean;
   created_by_name: string | null;
   created_at: string;
@@ -40,6 +41,7 @@ function mapExam(row: ExamRow): OmrExam {
     idDigits: row.id_digits,
     omrStyle: row.omr_style,
     omrConfig: row.omr_config ?? {},
+    answerKey: row.answer_key ?? {},
     useTeacherComment: row.use_teacher_comment,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
@@ -47,7 +49,7 @@ function mapExam(row: ExamRow): OmrExam {
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,use_teacher_comment,created_by_name,created_at";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,use_teacher_comment,created_by_name,created_at";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -105,6 +107,22 @@ export async function getExam(id: string): Promise<OmrExam | null> {
   const { data, error } = await supabase.from("exams").select(SELECT).eq("id", id).maybeSingle();
   if (error) throw new Error(`시험을 불러오지 못했습니다: ${error.message}`);
   return data ? mapExam(data as ExamRow) : null;
+}
+
+/** 정답키 저장 — {문항번호: 정답 보기번호} */
+export async function updateExamAnswerKey(
+  id: string,
+  answerKey: Record<string, number>,
+): Promise<OmrExam> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("exams")
+    .update({ answer_key: answerKey })
+    .eq("id", id)
+    .select(SELECT)
+    .single();
+  if (error || !data) throw new Error(`정답 저장 실패: ${error?.message ?? "알 수 없는 오류"}`);
+  return mapExam(data as ExamRow);
 }
 
 export async function deleteExam(id: string): Promise<void> {

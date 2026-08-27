@@ -1,37 +1,40 @@
-import AdminHome from "@/components/AdminHome";
+import { headers } from "next/headers";
+import ReportsManager from "@/components/ReportsManager";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
-import { listExams } from "@/lib/omr-exams";
 import { listAdminReports } from "@/lib/reports";
-import type { OmrExam } from "@/lib/omr-types";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+export default async function ReportsPage() {
   const currentUser = await getCurrentUser();
   if (!currentUser) return null;
 
-  let exams: OmrExam[] = [];
   let reports: Awaited<ReturnType<typeof listAdminReports>> = [];
   let setupError = "";
   if (hasPermission(currentUser, "viewReports")) {
     try {
-      [exams, reports] = await Promise.all([listExams(), listAdminReports()]);
+      reports = await listAdminReports();
     } catch (error) {
       setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";
     }
   }
 
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
+  const protocol = requestHeaders.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
+  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`).replace(/\/$/, "");
+
   return (
-    <AdminHome
+    <ReportsManager
+      initialReports={reports}
+      baseUrl={baseUrl}
+      setupError={setupError}
       currentUser={{
         username: currentUser.username,
         displayName: currentUser.displayName,
         role: currentUser.role,
+        permissions: currentUser.permissions,
       }}
-      exams={exams}
-      reports={reports}
-      setupError={setupError}
-      canCreate={hasPermission(currentUser, "createReports")}
     />
   );
 }
