@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import AcademyLogo from "@/components/AcademyLogo";
+import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 
 interface Props {
@@ -10,9 +10,10 @@ interface Props {
   setupError: string;
   canCreate: boolean;
   canDelete: boolean;
+  currentUser: NavUser;
 }
 
-export default function OmrDashboard({ initialExams, setupError, canCreate, canDelete }: Props) {
+export default function OmrDashboard({ initialExams, setupError, canCreate, canDelete, currentUser }: Props) {
   const [exams, setExams] = useState<OmrExam[]>(initialExams);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(setupError);
@@ -35,31 +36,22 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
 
   return (
     <div className="admin-shell">
-      <header className="admin-header">
-        <div className="brand-lockup">
-          <AcademyLogo size="large" />
-          <div>
-            <strong>OMR 시험 관리</strong>
-            <span>목동유쌤영어학원</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link className="button ghost" href="/admin">← 성적표 관리</Link>
-          {canCreate ? (
-            <Link className="button primary" href="/admin/omr/new">+ 새 시험</Link>
-          ) : null}
-        </div>
-      </header>
+      <AdminTopNav user={currentUser} />
 
       {error ? <p className="form-error block">{error}</p> : null}
 
       <div className="panel">
-        <div className="section-heading">
+        <div className="section-heading wrap">
           <div>
             <p className="eyebrow">OMR EXAMS</p>
             <h2>시험 목록</h2>
-            <p className="subtle">답안지를 출력해 배부하고, 스캔을 판독해 성적표를 만듭니다.</p>
+            <p className="subtle">
+              답안지 출력 → 정답 입력 → 스캔 판독 → 검수 → 성적표 순서로 진행합니다.
+            </p>
           </div>
+          {canCreate ? (
+            <Link className="button primary" href="/admin/omr/new">+ 새 시험</Link>
+          ) : null}
         </div>
 
         {exams.length === 0 ? (
@@ -89,6 +81,16 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
                     <td>
                       {exam.numQuestions}문항 · {exam.numChoices}지 ·{" "}
                       {exam.omrStyle === "exam" ? "수능형" : "기본형"}
+                      <span>
+                        {(() => {
+                          const filled = Object.keys(exam.answerKey ?? {}).length;
+                          return filled >= exam.numQuestions
+                            ? `정답 완료`
+                            : filled > 0
+                              ? `정답 ${filled}/${exam.numQuestions}`
+                              : "정답 미입력";
+                        })()}
+                      </span>
                     </td>
                     <td>{exam.createdAt ? exam.createdAt.slice(0, 10) : ""}</td>
                     <td>
@@ -101,6 +103,9 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
                         >
                           답안지 PDF
                         </a>
+                        <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/key`}>
+                          정답 입력
+                        </Link>
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/scans`}>
                           스캔 · 검수
                         </Link>
