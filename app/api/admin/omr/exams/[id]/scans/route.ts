@@ -1,0 +1,128 @@
+import { NextResponse } from "next/server";
+import { authorizeApi } from "@/lib/api-auth";
+import { readScans } from "@/lib/omr-api";
+import { getExam, sheetSpecFor } from "@/lib/omr-exams";
+import { listScans, upsertScans, uploadScanFile, type UpsertScanInput } from "@/lib/omr-scans";
+
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
+const MAX_FILES = 60;
+const MAX_FILE_BYTES = 15 * 1024 * 1024; // 장당 15MB
+
+// 판독된 답안: {"1": 3, ...} 형태로 정규화(값은 1-base 보기번호 또는 null)
+function normalizeAnswers(raw: Record<string, number | null> | undefined, total: number) {
+  const out: Record<string, number | null> = {};
+  for (let q = 1; q <= total; q += 1) {
+    const value = raw?.[String(q)];
+    out[String(q)] = typeof value === "number" ? value : null;
+  }
+  return out;
+}
+
+/** 시험의 판독 결과 목록 */
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeApi("viewReports");
+  if (auth.response) return auth.response;
+  const { id } = await context.params;
+
+  try {
+    const exam = await getExam(id);
+    if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+    return NextResponse.json({ ok: true, scans: await listScans(id) });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "판독 목록 오류" },
+      { status: 500 },
+    );
+  }
+}
+
+/** 스캔 이미지 업로드 → 원본 보관 → OMR API 판독 → 결과 저장 */
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await authorizeApi("createReports");
+  if (auth.response) return auth.response;
+  const { id } = await context.params;
+
+  try {
+    const exam = await getExam(id);
+    if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+
+    const form = await request.formData();
+    const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
+    if (files.length === 0) {
+      return NextResponse.json({ error: "업로드할 스캔 이미지를 선택해 주세요." }, { status: 400 });
+    }
+    if (files.length > MAX_FILES) {
+      return NextResponse.json(
+        { error: `한 번에 최대 ${MAX_FILES}장까지 올릴 수 있습니다.` },
+        { status: 400 },
+      );
+    }
+    const tooBig = files.find((file) => file.size > MAX_FILE_BYTES);
+    if (tooBig) {
+      return NextResponse.json(
+        { error: `'${tooBig.name}' 파일이 너무 큽니다(장당 15MB 이하).` },
+        { status: 400 },
+      );
+    }
+
+    // 원본 보관 — 버킷이 없으면 경로 없이 진행(판독은 계속)
+    const paths = new Map<string, string | null>();
+    for (const file of files) {
+      const path = await uploadScanFile(
+        id,
+        file.name,
+        await file.arrayBuffer(),
+        file.type || "image/jpeg",
+      );
+      paths.set(file.name, path);
+    }
+
+    const read = await readScans(sheetSpecFor(exam), files);
+
+    const rows: UpsertScanInput[] = read.results.map((result) => ({
+      examId: id,
+      filename: result.filename,
+      scanPath: paths.get(result.filename) ?? null,
+      studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
+      studentIdQr: result.student_id_qr ?? null,
+      studentIdBubbles: result.student_id_bubbles ?? null,
+      answers: normalizeAnswers(result.answers, exam.numQuestions),
+      reviewFlags: result.review_flags ?? [],
+      status: "pending",
+    }));
+
+    // 판독 자체가 실패한 파일도 검수 화면에 남겨 다시 올릴 수 있게 한다.
+    for (const problem of read.problems ?? []) {
+      rows.push({
+        examId: id,
+        filename: problem.filename,
+        scanPath: paths.get(problem.filename) ?? null,
+        answers: normalizeAnswers(undefined, exam.numQuestions),
+        reviewFlags: [],
+        status: "pending",
+        readError: problem.error,
+      });
+    }
+
+    await upsertScans(rows);
+    const scans = await listScans(id);
+    const storageSkipped = [...paths.values()].every((path) => path === null);
+
+    return NextResponse.json({
+      ok: true,
+      scans,
+      read: read.results.length,
+      failed: read.problems?.length ?? 0,
+      storageSkipped,
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "스캔 판독 오류" },
+      { status: 500 },
+    );
+  }
+}
