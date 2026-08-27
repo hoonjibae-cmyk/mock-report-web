@@ -13,7 +13,7 @@ export default async function LoginPage() {
           <AcademyLogo />
           <div>
             <strong>목동유쌤영어학원</strong>
-            <span>중3 모의고사 웹리포트</span>
+            <span>OMR 리포트</span>
           </div>
         </div>
         <h1>계정 로그인</h1>
