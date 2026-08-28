@@ -164,6 +164,70 @@ function AreaBars({ areas }: { areas: AreaStat[] }) {
   );
 }
 
+/**
+ * 갈래별 성취 표 — 막대만으로는 '몇 점 만점에 몇 점'이 안 보인다.
+ * 배점·득점·반 평균을 숫자로 함께 실어 학부모가 바로 읽을 수 있게 한다.
+ */
+function AreaTable({ areas }: { areas: AreaStat[] }) {
+  return (
+    <div className="area-table-wrap">
+      <table className="area-table">
+        <thead>
+          <tr>
+            <th>영역</th>
+            <th>배점</th>
+            <th>득점</th>
+            <th>반 평균</th>
+            <th>내 성취율</th>
+            <th>반 평균 성취율</th>
+          </tr>
+        </thead>
+        <tbody>
+          {areas.map((stat) => (
+            <tr key={stat.area}>
+              <td className="name">{stat.area}</td>
+              <td>{stat.possible}</td>
+              <td>
+                <strong>{stat.earned}</strong>
+              </td>
+              <td>{stat.cohortEarned}</td>
+              <td className={stat.rate >= stat.cohortRate ? "up" : "down"}>{stat.rate}%</td>
+              <td>{stat.cohortRate}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** 분석영역 / 내용 두 계층에 같은 모양으로 쓰는 분석 묶음 */
+function BreakdownSection({
+  title,
+  hint,
+  note,
+  areas,
+}: {
+  title: string;
+  hint: string;
+  note: string;
+  areas: AreaStat[];
+}) {
+  return (
+    <section className="analysis-card">
+      <div className="card-title-row">
+        <h4>{title}</h4>
+        <span>{hint}</span>
+      </div>
+      <AreaBars areas={areas} />
+      <AreaTable areas={areas} />
+      <p className="subtle" style={{ marginTop: 10 }}>
+        {note}
+      </p>
+    </section>
+  );
+}
+
 export default function GenericReport({
   report,
   comments,
@@ -173,6 +237,11 @@ export default function GenericReport({
 }) {
   const { score, cohort } = report;
   const wrongItems = report.items.filter((item) => !item.correct);
+  // 분류를 입력한 시험에서만 상세 표를 싣는다 — 없는 열을 빈칸으로 채우면 지저분하다
+  const hasArea = report.items.some((item) => item.area);
+  const hasContent = report.items.some((item) => item.content);
+  const hasBreakdown = hasArea || hasContent;
+  const hasSpecifiedDifficulty = report.items.some((item) => item.difficultySpecified);
   const weakSet = new Set(report.weakItems);
   const overviewText = comments?.overview ?? null;
   const personalText = comments?.personal ?? report.teacherComment?.text ?? null;
@@ -307,17 +376,21 @@ export default function GenericReport({
         ) : null}
 
         {report.areas.length > 0 ? (
-          <section className="analysis-card">
-            <div className="card-title-row">
-              <h4>영역별 성취</h4>
-              <span>막대 = 내 성취율 · 세로선 = 반 평균</span>
-            </div>
-            <AreaBars areas={report.areas} />
-            <p className="subtle" style={{ marginTop: 10 }}>
-              성취율이 낮은 영역부터 표시했습니다. 반 평균보다 낮은 영역을 먼저 보완하면 총점이
-              빠르게 오릅니다.
-            </p>
-          </section>
+          <BreakdownSection
+            title="영역별 분석"
+            hint="막대 = 내 성취율 · 세로선 = 반 평균"
+            note="듣기·문법·독해처럼 큰 갈래로 묶은 결과입니다. 성취율이 낮은 영역부터 표시했으니, 반 평균보다 낮은 영역을 먼저 보완하면 총점이 빠르게 오릅니다."
+            areas={report.areas}
+          />
+        ) : null}
+
+        {(report.contents?.length ?? 0) > 0 ? (
+          <BreakdownSection
+            title="내용별 분석"
+            hint="막대 = 내 성취율 · 세로선 = 반 평균"
+            note="빈칸추론·어법성 판단처럼 문항 유형으로 묶은 결과입니다. 같은 영역 안에서도 어떤 유형에서 막히는지 드러나므로, 다음 학습에서 무엇을 집중할지 정할 때 봅니다."
+            areas={report.contents ?? []}
+          />
         ) : null}
 
         {report.growth.length >= 2 ? (
@@ -362,10 +435,56 @@ export default function GenericReport({
           </div>
           <p className="subtle" style={{ marginTop: 8 }}>
             ○ 정답 · ①→② 오답(내 표기→정답) · – 미표기 · 서술형은 득점/배점 · 붉은 테두리는
-            우선 복습 문항. 아래 정답률 색은 반 전체 결과로 자동 분류한 난이도입니다 —{" "}
-            <b className="d-쉬움">쉬움</b> · <b className="d-보통">보통</b> ·{" "}
-            <b className="d-어려움">어려움</b>.
+            우선 복습 문항. 정답률 색은 난이도입니다 — <b className="d-쉬움">쉬움</b> ·{" "}
+            <b className="d-보통">보통</b> · <b className="d-어려움">어려움</b>
+            {hasSpecifiedDifficulty
+              ? " (출제 시 정한 난이도이며, 지정이 없는 문항은 반 정답률로 매깁니다)"
+              : " (반 전체 결과로 자동 분류)"}
+            .
           </p>
+
+          {/* 문항 하나하나의 분류까지 보고 싶을 때를 위한 전체 표.
+              분류를 입력하지 않은 시험에서는 위 격자로 충분하므로 싣지 않는다. */}
+          {hasBreakdown ? (
+            <details className="item-detail">
+              <summary>문항별 상세 보기 ({report.items.length}문항)</summary>
+              <div className="area-table-wrap">
+                <table className="area-table item-table">
+                  <thead>
+                    <tr>
+                      <th>문항</th>
+                      <th>정답</th>
+                      {hasArea ? <th>분석영역</th> : null}
+                      {hasContent ? <th>내용</th> : null}
+                      <th>득점</th>
+                      <th>반 정답률</th>
+                      <th>난이도</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.items.map((item) => (
+                      <tr key={item.no} className={weakSet.has(item.no) ? "weak" : undefined}>
+                        <td>{item.no}</td>
+                        <td className={item.correct ? "ok-mark" : "x-mark"}>
+                          {item.essay ? "–" : item.correct ? "○" : "✕"}
+                        </td>
+                        {hasArea ? <td className="name">{item.area ?? "–"}</td> : null}
+                        {hasContent ? <td className="name">{item.content ?? "–"}</td> : null}
+                        <td>
+                          {item.earned > 0 ? <strong>{item.earned}</strong> : "–"}
+                          <em className="of-point">/{item.point}</em>
+                        </td>
+                        <td>{item.correctRate}%</td>
+                        <td>
+                          <span className={`diff-chip d-${item.difficulty}`}>{item.difficulty}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : null}
         </section>
 
         {wrongItems.length > 0 ? (

@@ -4,7 +4,14 @@
 import type { MarkValue } from "@/lib/omr-answers";
 import type { ExamType } from "@/lib/omr-types";
 
-/** 집단 정답률로 자동 분류한 난이도 */
+/**
+ * 문항 난이도.
+ *
+ * 출제자가 지정한 값을 우선 쓰고, 지정이 없으면 집단 정답률로 자동 분류한다.
+ * 둘은 다른 것을 말한다 — 지정 난이도는 '이 문항을 어느 수준으로 냈는가'이고,
+ * 자동 난이도는 '실제로 얼마나 맞혔는가'다. 쉽게 낸 문항을 반이 많이 틀렸다면
+ * 그 자체가 지도에 필요한 정보라, 지정값이 있으면 덮어쓰지 않는다.
+ */
 export type Difficulty = "쉬움" | "보통" | "어려움";
 
 export interface GenericItemResult {
@@ -22,8 +29,12 @@ export interface GenericItemResult {
   /** 응시 집단 정답률(%) — 서술형은 평균 득점률 */
   correctRate: number;
   difficulty: Difficulty;
-  /** 문항 영역(미지정 시 null) */
+  /** 난이도를 출제자가 직접 지정했는가(false면 정답률에서 도출한 값) */
+  difficultySpecified: boolean;
+  /** 분석영역 — 듣기·문법·독해 같은 큰 갈래(미지정 시 null) */
   area: string | null;
+  /** 내용 — 빈칸추론·어법성 판단 같은 세부 유형(미지정 시 null) */
+  content: string | null;
   /** 국영수 모의고사 기준 자료가 있을 때만 채워지는 분류 */
   classification?: {
     behavior: string;
@@ -49,15 +60,21 @@ export interface NationalComparison {
   note: string;
 }
 
-/** 영역별 성취 — 학생 성취율과 집단 평균 성취율 비교 */
+/**
+ * 갈래별 성취 — 학생 성취율과 집단 평균 성취율 비교.
+ *
+ * 분석영역(대분류)과 내용(세부 유형) 두 계층에 같은 모양으로 쓴다.
+ */
 export interface AreaStat {
   area: string;
   earned: number;
   possible: number;
-  /** 학생 성취율(%) */
+  /** 학생 성취율(%) = 득점/배점 */
   rate: number;
-  /** 응시 집단 평균 성취율(%) */
+  /** 응시 집단 평균 성취율(%) = 평균득점/배점 */
   cohortRate: number;
+  /** 응시 집단 평균 득점(원점수) — 성취율만으론 감이 안 오므로 함께 싣는다 */
+  cohortEarned: number;
 }
 
 export interface GrowthPoint {
@@ -113,8 +130,10 @@ export interface GenericReportData {
   /** 등급컷이 설정된 경우에만 */
   grade: number | null;
   items: GenericItemResult[];
-  /** 영역별 성취(영역 미설정 시 빈 배열) */
+  /** 분석영역(대분류)별 성취 — 미설정 시 빈 배열 */
   areas: AreaStat[];
+  /** 내용(세부 유형)별 성취 — 미설정 시 빈 배열 */
+  contents?: AreaStat[];
   /** 학생이 틀렸고 집단 정답률도 낮은 문항 번호(오답 우선 복습) */
   weakItems: number[];
   /** 같은 유형 시험의 표준점수 추이(이번 시험 포함, 날짜순) */
