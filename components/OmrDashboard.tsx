@@ -8,12 +8,21 @@ import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 interface Props {
   initialExams: OmrExam[];
   setupError: string;
+  /** OMR_API_URL이 이 배포 환경에 설정되어 있는가 */
+  omrServiceReady: boolean;
   canCreate: boolean;
   canDelete: boolean;
   currentUser: NavUser;
 }
 
-export default function OmrDashboard({ initialExams, setupError, canCreate, canDelete, currentUser }: Props) {
+export default function OmrDashboard({
+  initialExams,
+  setupError,
+  omrServiceReady,
+  canCreate,
+  canDelete,
+  currentUser,
+}: Props) {
   const [exams, setExams] = useState<OmrExam[]>(initialExams);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(setupError);
@@ -39,6 +48,15 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
       <AdminTopNav user={currentUser} />
 
       {error ? <p className="form-error block">{error}</p> : null}
+
+      {!omrServiceReady ? (
+        <p className="form-error block">
+          <strong>답안지 서비스가 연결되지 않았습니다.</strong> 이 배포 환경에{" "}
+          <code>OMR_API_URL</code>이 없어서 답안지 PDF 출력과 스캔 판독이 동작하지 않습니다. Vercel →
+          Settings → Environment Variables 에서 <code>OMR_API_URL</code>·<code>OMR_API_KEY</code>를
+          Production · Preview · Development 세 곳 모두에 추가한 뒤 다시 배포해 주세요.
+        </p>
+      ) : null}
 
       <div className="panel">
         <div className="section-heading wrap">
