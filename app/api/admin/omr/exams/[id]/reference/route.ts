@@ -6,7 +6,7 @@ import { authorizeApi } from "@/lib/api-auth";
 import { getExam, updateExamAnswerKey, updateMockReference } from "@/lib/omr-exams";
 import { parseMockReference } from "@/lib/mock-reference";
 import { mockSubjectOf } from "@/lib/omr-types";
-import type { MarkValue } from "@/lib/omr-answers";
+import type { AnswerKeyValue } from "@/lib/omr-answers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -101,7 +101,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const filled = Object.keys(exam.answerKey ?? {}).length;
     let appliedKey = 0;
     if (filled < exam.numQuestions) {
-      const answerKey: Record<string, MarkValue> = { ...exam.answerKey };
+      const answerKey: Record<string, AnswerKeyValue> = { ...exam.answerKey };
       const points: Record<string, number> = { ...exam.points };
       const meta: Record<string, { area?: string }> = { ...exam.questionMeta };
       for (const item of reference.items) {

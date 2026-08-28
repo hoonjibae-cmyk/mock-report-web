@@ -1,6 +1,6 @@
 // OMR 시험/성적표 공통 타입
 
-import type { MarkValue } from "@/lib/omr-answers";
+import type { AnswerKeyValue } from "@/lib/omr-answers";
 import type { MockReference } from "@/lib/mock-reference";
 
 export type ExamType = "mock" | "saturday" | "monthly" | "placement" | "inclass";
@@ -69,9 +69,10 @@ export interface OmrExam {
   omrConfig: OmrConfig;
   /**
    * {문항번호: 정답} — 키는 문자열(jsonb).
-   * 값이 숫자면 보기 하나, 배열이면 '모두 고르기' 문항(전부 맞혀야 정답).
+   * 객관식은 숫자(보기 하나) 또는 배열('모두 고르기' — 전부 맞혀야 정답),
+   * 주관식은 정답 문장(똑같이 맞다고 볼 답이 여럿이면 | 로 나눠 적는다).
    */
-  answerKey: Record<string, MarkValue>;
+  answerKey: Record<string, AnswerKeyValue>;
   /** {문항번호: 배점} — 비어 있으면 100점 만점 균등 배점 */
   points: Record<string, number>;
   /**

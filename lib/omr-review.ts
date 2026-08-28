@@ -9,7 +9,7 @@
 //   ② 수험번호의 신뢰성     — 이게 틀리면 성적표가 통째로 다른 학생에게 간다
 //   ③ 답안지 사이의 모순    — 같은 수험번호가 두 장에 있는가
 
-import { isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
+import { isMultiAnswer, toChoices, type AnswerKeyValue, type MarkValue } from "@/lib/omr-answers";
 import type { OmrScan } from "@/lib/omr-scans";
 
 /** 사람이 봐야 하는 이유 — 화면에 그대로 띄운다. */
@@ -50,7 +50,7 @@ export interface ReviewContext {
    */
   idDigits?: number;
   /** 정답표 — '모두 고르기' 문항을 알아야 복수 표기가 정상인지 판단할 수 있다 */
-  answerKey?: Record<string, MarkValue>;
+  answerKey?: Record<string, AnswerKeyValue>;
   /** 이 시험에서 두 번 이상 나온 수험번호 */
   duplicateIds?: Set<string>;
   /**

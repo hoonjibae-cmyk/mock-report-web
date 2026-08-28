@@ -273,7 +273,10 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
     for (const q of numbers) {
       const essayQ = q > objectiveCount;
       const point = round1(pointFor(exam, q));
-      const answer = essayQ ? null : (exam.answerKey?.[String(q)] ?? null);
+      // 주관식 정답은 문장이라 보기번호 자리에 넣을 수 없다. 주관식 점수는
+      // essayScores(사람이 채점하거나 전사 대조로 매긴 값)에서 온다.
+      const rawAnswer = essayQ ? null : (exam.answerKey?.[String(q)] ?? null);
+      const answer: MarkValue = typeof rawAnswer === "string" ? null : rawAnswer;
       const marked = essayQ ? null : (p.marks[q - 1] ?? null);
       const isCorrect = essayQ ? false : sameChoices(marked, answer);
       const earned = essayQ ? round1(p.essay[q] ?? 0) : isCorrect ? point : 0;

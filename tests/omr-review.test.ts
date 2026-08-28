@@ -30,6 +30,8 @@ function scan(over: Partial<OmrScan> = {}): OmrScan {
     studentIdBubbles: "20001",
     answers: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [String(i + 1), 3])),
     essayScores: {},
+    essayAnswers: {},
+    essayCrops: {},
     reviewFlags: [],
     readConfidence: { uncertain: [], multiMarked: [], idUncertain: false, idConflict: false },
     status: "pending",
