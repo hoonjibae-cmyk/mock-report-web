@@ -43,10 +43,15 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
     const overview = row.exam_id
       ? await getExamOverview(row.exam_id).catch(() => null)
       : null;
+    // 초안(draft) 상태는 아직 학부모에게 보일 글이 아니므로 확정된 것만 싣는다.
+    const overviewFinal = overview?.status === "final";
+    const personalFinal = personal.status === "final";
     const comments: ReportComments = {
-      overview: overview?.status === "final" ? overview.final : null,
-      personal: personal.status === "final" ? personal.personalFinal : null,
-      keywords: personal.status === "final" ? personal.displayKeywords : [],
+      overview: overviewFinal ? overview.final : null,
+      areaNotes: overviewFinal ? overview.areaNotes : [],
+      personal: personalFinal ? personal.personalFinal : null,
+      areaFeedback: personalFinal ? personal.areaFeedback : [],
+      keywords: personalFinal ? personal.displayKeywords : [],
     };
     return <GenericReport report={row.report_data} comments={comments} />;
   }

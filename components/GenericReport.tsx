@@ -7,10 +7,22 @@ import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-
 export interface ReportComments {
   /** 시험 공통 총평 */
   overview: string | null;
-  /** 학생별 개별 의견 */
+  /** 영역별 출제 안내 — 응시생 전원에게 똑같이 실린다 */
+  areaNotes?: Array<{ area: string; text: string }>;
+  /** 학생별 개별 의견(종합 평가) */
   personal: string | null;
+  /** 영역별 평가 — 등급 + 서술 */
+  areaFeedback?: Array<{ area: string; rating: string; text: string }>;
   /** 성적표에 칩으로 노출되는 긍정 키워드 */
   keywords: string[];
+}
+
+/** 등급 이름을 CSS 클래스로 — 한글 클래스명 대신 안정적인 영문 키를 쓴다 */
+function ratingClass(rating: string): string {
+  if (rating === "매우 우수") return "best";
+  if (rating === "우수") return "good";
+  if (rating === "보통") return "fair";
+  return "work";
 }
 
 /** 표준점수 성장 추이 — 단일 시리즈 라인, 기준선 100 */
@@ -246,6 +258,10 @@ export default function GenericReport({
   const overviewText = comments?.overview ?? null;
   const personalText = comments?.personal ?? report.teacherComment?.text ?? null;
   const keywordChips = comments?.keywords ?? [];
+  const areaNotes = (comments?.areaNotes ?? []).filter((entry) => entry.text.trim());
+  const areaFeedback = (comments?.areaFeedback ?? []).filter(
+    (entry) => entry.text.trim() || entry.rating,
+  );
 
   return (
     <main className="report-shell">
@@ -543,6 +559,19 @@ export default function GenericReport({
                 <p className="review-overview" style={{ whiteSpace: "pre-wrap" }}>{overviewText}</p>
               </div>
             ) : null}
+
+            {/* 영역별 출제 안내 — 무엇을 확인하려 한 시험인지 */}
+            {areaNotes.length > 0 ? (
+              <div className="area-notes">
+                <h3>이번 시험에서 확인한 것</h3>
+                {areaNotes.map((entry) => (
+                  <div className="area-note-row" key={entry.area}>
+                    <strong>{entry.area}</strong>
+                    <p style={{ whiteSpace: "pre-wrap" }}>{entry.text}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {personalText ? (
               <div>
                 <h3 style={{ margin: "0 0 6px", fontSize: 14.5 }}>
@@ -568,6 +597,24 @@ export default function GenericReport({
                   </div>
                 ) : null}
                 <p className="review-overview" style={{ whiteSpace: "pre-wrap" }}>{personalText}</p>
+              </div>
+            ) : null}
+
+            {/* 영역별 평가 — 종합 평가만으로는 어디가 강하고 약한지 안 보인다 */}
+            {areaFeedback.length > 0 ? (
+              <div className="area-feedback">
+                <h3>영역별 평가</h3>
+                {areaFeedback.map((entry) => (
+                  <div className="area-feedback-row" key={entry.area}>
+                    <div className="area-feedback-head">
+                      <strong>{entry.area}</strong>
+                      <span className={`rating-chip r-${ratingClass(entry.rating)}`}>
+                        {entry.rating}
+                      </span>
+                    </div>
+                    {entry.text ? <p style={{ whiteSpace: "pre-wrap" }}>{entry.text}</p> : null}
+                  </div>
+                ))}
               </div>
             ) : null}
           </section>
