@@ -40,27 +40,36 @@ function markedCount(answers: Record<string, number | null> | undefined): number
 }
 
 /**
- * 판독이 실패했을 때만 그 원인을 안내한다.
+ * 답안지와 시험 설정이 실제로 호환되는지 판정한다.
  *
- * 시험 ID가 달라도 문항 수·보기 수·서술형 수가 같으면 답안지 배치가 동일해 판독은
- * 정확하다(같은 설정으로 시험을 다시 만든 경우가 여기 해당한다). 그래서 ID만으로는
- * 경고하지 않고, 실제로 표기를 제대로 읽지 못했을 때만 알린다.
+ * 기준은 시험 ID가 아니라 **레이아웃 지문**이다. 배치를 결정하는 값(문항 수·보기 수·
+ * 수험번호 자리수·열당 문항 수·스타일·서술형 수)이 같으면 시험이 달라도 판독이
+ * 정확하고, 같은 시험이라도 설정을 바꿔 다시 뽑았다면 배치가 달라 판독이 무너진다.
+ * 지문이 없는 구형 답안지는 표기율로만 판단한다.
  */
 function readFailureReason(
-  result: { exam_id: string | null; answers: Record<string, number | null> },
-  examId: string,
+  result: {
+    exam_id: string | null;
+    sheet_layout?: string | null;
+    expected_layout?: string | null;
+    answers: Record<string, number | null>;
+  },
   numQuestions: number,
 ): string | null {
-  const marked = markedCount(result.answers);
-  // 학생이 답을 적게 썼을 뿐인 경우를 경고로 오인하지 않도록 임계를 낮게 잡는다.
-  // 배치가 어긋나면 판독이 이 정도로 처참하게 무너진다(예: 5/45).
-  if (numQuestions < 10 || marked >= numQuestions * 0.3) return null;
+  const sheet = (result.sheet_layout ?? "").trim();
+  const expected = (result.expected_layout ?? "").trim();
 
-  const qrExam = (result.exam_id ?? "").trim();
-  if (qrExam && qrExam !== examId) {
-    return `표기를 ${marked}/${numQuestions}문항만 읽었습니다. 이 답안지는 다른 시험에서 출력된 것으로 보입니다(답안지 시험 ID: ${qrExam}). 문항 수·보기 수·서술형 문항 수가 이 시험과 같은지 확인하거나, 이 시험의 답안지를 새로 출력해 사용해 주세요.`;
+  // 지문이 둘 다 있고 다르면, 배치가 달라 판독을 신뢰할 수 없다.
+  if (sheet && expected && sheet !== expected) {
+    return "이 답안지는 지금 시험과 다른 설정(문항 수·보기 수·서술형 문항 수 등)으로 출력된 것입니다. 설정을 출력 당시와 같게 맞추거나, 이 시험의 답안지를 새로 출력해 사용해 주세요.";
   }
-  return `표기를 ${marked}/${numQuestions}문항만 읽었습니다. 답안지가 접히거나 잘리지 않았는지, 시험 설정(문항 수·보기 수·서술형 문항 수)이 출력 당시와 같은지 확인해 주세요.`;
+
+  const marked = markedCount(result.answers);
+  // 배치가 같은데도 거의 못 읽었다면 스캔 품질 문제다(답을 적게 쓴 학생과 구분하기 위해 임계는 낮게).
+  if (numQuestions >= 10 && marked < numQuestions * 0.3) {
+    return `표기를 ${marked}/${numQuestions}문항만 읽었습니다. 답안지가 접히거나 잘리지 않았는지, 네 모서리의 검은 사각형이 온전한지 확인해 주세요.`;
+  }
+  return null;
 }
 
 // 판독된 답안: {"1": 3, ...} 형태로 정규화(값은 1-base 보기번호 또는 null)
@@ -177,8 +186,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const rows: UpsertScanInput[] = read.results.map((result) => {
       const answers = normalizeAnswers(result.answers, exam.numQuestions);
       const reason = readFailureReason(
-        { exam_id: result.exam_id ?? null, answers },
-        id,
+        {
+          exam_id: result.exam_id ?? null,
+          sheet_layout: result.sheet_layout ?? null,
+          expected_layout: result.expected_layout ?? null,
+          answers,
+        },
         exam.numQuestions,
       );
       if (reason) failedReadCount += 1;

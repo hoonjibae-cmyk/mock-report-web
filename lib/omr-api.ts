@@ -42,6 +42,10 @@ export interface ReadResultRow {
   student_id_qr: string | null;
   student_id_bubbles: string | null;
   exam_id: string | null;
+  /** 답안지 QR에 새겨진 레이아웃 지문(구형 답안지는 null) */
+  sheet_layout?: string | null;
+  /** 이번 판독에 사용한 시험 설정의 레이아웃 지문 */
+  expected_layout?: string | null;
   answers: Record<string, number | null>;
   review_flags: Array<Record<string, unknown>>;
 }

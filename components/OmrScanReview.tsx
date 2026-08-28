@@ -347,7 +347,11 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
 
                             {scan.readError ? (
                               <span className="status-chip danger">
-                                {scan.readError.includes("만 읽었습니다") ? "판독 확인 필요" : "판독 실패"}
+                                {scan.readError.includes("다른 설정")
+                                  ? "설정 다름"
+                                  : scan.readError.includes("만 읽었습니다")
+                                    ? "판독 확인 필요"
+                                    : "판독 실패"}
                               </span>
                             ) : scan.status === "reviewed" && !dirty ? (
                               <span className="status-chip active">검수 완료</span>
