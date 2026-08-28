@@ -78,6 +78,8 @@ export interface ReadResultRow {
   answers: Record<string, number | null>;
   /** 칠해진 보기 전부 — '모두 고르기' 문항 채점에 쓴다(구버전 API는 없음) */
   selections?: Record<string, number[]>;
+  /** 검수 화면용 미리보기(판독기가 실제로 본 이미지) JPEG base64 */
+  preview_jpeg_base64?: string;
   review_flags: Array<Record<string, unknown>>;
 }
 
@@ -90,6 +92,8 @@ export interface ReadScansResult {
 export async function readScans(spec: OmrSheetSpec, files: File[]): Promise<ReadScansResult> {
   const form = new FormData();
   form.append("spec", JSON.stringify(spec));
+  // 검수 화면에서 나란히 볼 미리보기를 함께 받는다(원본을 다시 받지 않아도 되게)
+  form.append("include_preview", "true");
   for (const file of files) form.append("files", file, file.name);
   const res = await fetch(`${apiBase()}/read`, {
     method: "POST",

@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import ScanPreview from "@/components/ScanPreview";
 import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
@@ -501,14 +502,17 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                           ) : null}
 
                           {isOpen ? (
-                            <div
-                              style={{
-                                marginTop: 12,
-                                display: "grid",
-                                gridTemplateColumns: `repeat(auto-fill, minmax(${64 + choices * 26}px, 1fr))`,
-                                gap: 8,
-                              }}
-                            >
+                            <div className="review-split">
+                              {/* 스캔 이미지는 펼친 답안지 한 장만 불러온다 */}
+                              <ScanPreview scanId={scan.id} />
+                              <div
+                                className="review-answers"
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: `repeat(auto-fill, minmax(${64 + choices * 26}px, 1fr))`,
+                                  gap: 8,
+                                }}
+                              >
                               {Array.from({ length: total }, (_, i) => i + 1).map((q) => {
                                 const picked = toChoices(draft.answers[String(q)]);
                                 // 정답이 둘 이상인 문항은 학생도 여러 개 표기하는 게 정상이다.
@@ -587,6 +591,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                                   </div>
                                 );
                               })}
+                              </div>
                             </div>
                           ) : null}
                         </div>
