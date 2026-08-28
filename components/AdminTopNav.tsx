@@ -41,7 +41,18 @@ const TABS: Tab[] = [
       })),
     ],
   },
-  { href: "/admin/reports", label: "웹 리포트" },
+  {
+    href: "/admin/reports",
+    label: "웹 리포트",
+    children: [
+      { href: "/admin/reports", label: "전체" },
+      ...EXAM_TYPE_ORDER.map((type) => ({
+        href: `/admin/reports?type=${type}`,
+        label: EXAM_TYPE_LABELS[type],
+        type,
+      })),
+    ],
+  },
   { href: "/admin/users", label: "계정 관리", adminOnly: true },
   { href: "/admin/settings", label: "설정", adminOnly: true },
 ];
