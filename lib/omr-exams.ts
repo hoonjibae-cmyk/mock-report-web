@@ -31,6 +31,25 @@ interface ExamRow {
   created_at: string;
 }
 
+/** 마이그레이션 미실행으로 컬럼이 없을 때, 실행할 파일을 알려준다. */
+function describeExamDbError(message: string): string {
+  const missingColumn = message.match(/column [\w.]*?(\w+) does not exist/i);
+  if (missingColumn) {
+    const column = missingColumn[1];
+    const guide: Record<string, string> = {
+      question_meta: "supabase/migration_v2_omr.sql",
+      points: "supabase/migration_v2_omr.sql",
+      overview_comment: "supabase/migration_v2_omr.sql",
+    };
+    const file = guide[column] ?? "supabase 폴더의 최신 migration 파일";
+    return `데이터베이스 업데이트가 필요합니다. Supabase → SQL Editor에서 ${file}을 실행해 주세요. (누락된 항목: ${column})`;
+  }
+  if (/relation .* does not exist/i.test(message)) {
+    return `데이터베이스 표가 아직 없습니다. Supabase → SQL Editor에서 supabase/migration_v2_omr.sql을 실행해 주세요. (원문: ${message})`;
+  }
+  return message;
+}
+
 function mapExam(row: ExamRow): OmrExam {
   return {
     id: row.id,
@@ -104,14 +123,14 @@ export async function listExams(): Promise<OmrExam[]> {
     .from("exams")
     .select(SELECT)
     .order("created_at", { ascending: false });
-  if (error) throw new Error(`시험 목록을 불러오지 못했습니다: ${error.message}`);
+  if (error) throw new Error(`시험 목록을 불러오지 못했습니다 — ${describeExamDbError(error.message)}`);
   return (data as ExamRow[]).map(mapExam);
 }
 
 export async function getExam(id: string): Promise<OmrExam | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("exams").select(SELECT).eq("id", id).maybeSingle();
-  if (error) throw new Error(`시험을 불러오지 못했습니다: ${error.message}`);
+  if (error) throw new Error(`시험을 불러오지 못했습니다 — ${describeExamDbError(error.message)}`);
   return data ? mapExam(data as ExamRow) : null;
 }
 
