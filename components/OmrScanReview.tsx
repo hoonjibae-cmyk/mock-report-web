@@ -20,6 +20,12 @@ interface Draft {
   answers: Record<string, MarkValue>;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
 /** 판독기가 남긴 검수 대상 문항 번호 */
 function flaggedQuestions(scan: OmrScan): Set<number> {
   const out = new Set<number>();
@@ -41,6 +47,9 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(setupError);
   const [message, setMessage] = useState("");
+  // 파일 입력의 FileList 대신 직접 들고 있어야 드래그 앤 드롭·개별 삭제가 된다
+  const [picked, setPicked] = useState<File[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const total = exam?.numQuestions ?? 0;
@@ -67,9 +76,21 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     return count;
   }
 
+  /** 이미지·PDF만 추리고, 같은 파일을 두 번 담지 않는다 */
+  function addFiles(incoming: FileList | File[] | null) {
+    const list = Array.from(incoming ?? []).filter(
+      (f) => f.type.startsWith("image/") || f.type === "application/pdf" || /\.pdf$/i.test(f.name),
+    );
+    if (list.length === 0) return;
+    setError("");
+    setPicked((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
+      return [...prev, ...list.filter((f) => !seen.has(`${f.name}:${f.size}`))];
+    });
+  }
+
   async function upload() {
-    const picked = fileRef.current?.files;
-    if (!picked || picked.length === 0) {
+    if (picked.length === 0) {
       setError("업로드할 스캔 이미지를 선택해 주세요.");
       return;
     }
@@ -77,7 +98,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     setError("");
     setMessage("");
     try {
-      const all = Array.from(picked);
+      const all = picked;
       // Vercel 서버리스 함수는 요청 본문이 4.5MB로 제한된다.
       // 큰 파일(또는 합계가 큰 묶음)은 보관함에 직접 올리고 경로만 서버에 넘긴다.
       const LIMIT = 3.5 * 1024 * 1024;
@@ -138,6 +159,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
       if (!res.ok) throw new Error(data.error || "판독하지 못했습니다.");
       setScans(data.scans ?? []);
       setDrafts({});
+      setPicked([]);
       if (fileRef.current) fileRef.current.value = "";
       const parts = [`${data.read ?? 0}장 판독 완료`];
       if (data.failed) parts.push(`${data.failed}장 실패`);
@@ -253,27 +275,106 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
               <p className="eyebrow">STEP 1</p>
               <h2>스캔 업로드</h2>
               <p className="subtle">
-                답안지를 스캔한 이미지(JPG·PNG) 또는 <strong>PDF</strong>를 한 번에 여러 개 올릴
-                수 있습니다. 여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동
-                분리됩니다. 업로드하면 바로 판독하며, 원본은 7일간 보관됩니다. 큰 파일은
-                보관함으로 직접 올라가므로 용량 제한 없이 처리됩니다.
+                답안지를 스캔한 이미지나 PDF를 올리면 바로 판독합니다.
               </p>
             </div>
           </div>
-          <div className="form-row">
-            <label style={{ flex: 1 }}>
-              <span>스캔 파일 (이미지 · PDF)</span>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*,.pdf,application/pdf"
-                multiple
-                disabled={uploading}
-              />
-            </label>
+
+          <div
+            className={`dropzone${dragOver ? " over" : ""}${uploading ? " busy" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (!uploading) addFiles(e.dataTransfer.files);
+            }}
+            onClick={() => {
+              if (!uploading) fileRef.current?.click();
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*,.pdf,application/pdf"
+              multiple
+              disabled={uploading}
+              style={{ display: "none" }}
+              onChange={(e) => addFiles(e.target.files)}
+            />
+            <strong>파일을 끌어다 놓거나 클릭해서 선택</strong>
+            <span>JPG · PNG · PDF · 여러 장 한 번에</span>
           </div>
-          <button className="button primary" onClick={upload} disabled={uploading}>
-            {uploading ? "판독 중…" : "업로드 · 판독"}
+
+          <ul className="dropzone-notes">
+            <li>여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동 분리됩니다.</li>
+            <li>큰 파일은 보관함으로 직접 올라가므로 용량 제한 없이 처리됩니다.</li>
+            <li>원본 스캔은 7일간 보관 후 자동 삭제됩니다.</li>
+          </ul>
+
+          {picked.length > 0 ? (
+            <div className="picked-files">
+              <div className="picked-files-head">
+                <strong>
+                  선택한 파일 {picked.length}개 · {formatBytes(picked.reduce((sum, f) => sum + f.size, 0))}
+                </strong>
+                <button
+                  className="button tiny ghost"
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => {
+                    setPicked([]);
+                    if (fileRef.current) fileRef.current.value = "";
+                  }}
+                >
+                  전체 지우기
+                </button>
+              </div>
+              <ul>
+                {picked.map((file) => (
+                  <li key={`${file.name}:${file.size}`}>
+                    <span className="name" title={file.name}>{file.name}</span>
+                    <span className="size">{formatBytes(file.size)}</span>
+                    <button
+                      type="button"
+                      aria-label={`${file.name} 빼기`}
+                      disabled={uploading}
+                      onClick={() =>
+                        setPicked((prev) =>
+                          prev.filter((f) => !(f.name === file.name && f.size === file.size)),
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <button
+            className="button primary"
+            style={{ marginTop: 14 }}
+            onClick={upload}
+            disabled={uploading || picked.length === 0}
+          >
+            {uploading
+              ? "판독 중…"
+              : picked.length > 0
+                ? `${picked.length}장 업로드 · 판독`
+                : "업로드 · 판독"}
           </button>
         </div>
       ) : null}
