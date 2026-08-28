@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { addAiReviews } from "@/lib/ai";
-import { DEFAULT_AI_MODEL, resolveAiModel } from "@/lib/ai-models";
+import { getAiModel } from "@/lib/app-settings";
 import { analyzeCohort, mergeStudents } from "@/lib/analysis";
 import { createPublicToken, hashPin } from "@/lib/crypto";
 import { mergeParsedResults, parseWorkbookBuffer } from "@/lib/parser";
@@ -22,7 +22,8 @@ export async function POST(request: Request) {
     const reportTitle = String(formData.get("reportTitle") || "중3 국영수 전국 모의고사 개인 성적표").trim();
     const examLabel = String(formData.get("examLabel") || "2026년도").trim();
     const requestPin = String(formData.get("pinRequired") ?? "false") === "true";
-    const aiModel = currentUser.role === "admin" ? resolveAiModel(formData.get("aiModel")) : DEFAULT_AI_MODEL;
+    // AI 모델은 설정(관리자 → 설정)에서 정한 값을 전체가 공유한다
+    const aiModel = await getAiModel();
 
     if (files.length === 0) return NextResponse.json({ error: "엑셀 파일을 한 개 이상 선택해 주세요." }, { status: 400 });
     if (files.reduce((sum, file) => sum + file.size, 0) > 4 * 1024 * 1024) {

@@ -113,12 +113,27 @@ button { cursor: pointer; }
 .form-error { color: var(--danger); font-size: 13px; margin: 0; }
 .form-error.block { margin-top: 14px; padding: 12px 14px; background: var(--danger-soft); border-radius: 10px; }
 
-.admin-shell { max-width: 1440px; margin: 0 auto; padding: 0 24px 60px; }
+.admin-shell { max-width: 1440px; margin: 0 auto; padding: 0 24px 60px; --header-h: 82px; }
+/* 헤더는 스크롤해도 상단에 붙어 있는다. 배경이 비치면 안 되므로 배경색과
+   아래 경계선을 준다. 좌측 메뉴도 sticky라 헤더 높이만큼 밀어 겹침을 막는다. */
 .admin-header {
-  height: 82px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--header-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: var(--background);
+  border-bottom: 1px solid transparent;
+  transition: border-color .15s;
+}
+.admin-header::after {
+  content: "";
+  position: absolute;
+  left: -24px; right: -24px; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(to bottom, rgba(19, 47, 88, .08), transparent);
 }
 .type-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
 .type-card {
@@ -164,12 +179,15 @@ button { cursor: pointer; }
   align-items: start;
 }
 .admin-shell:has(> .admin-side) > .admin-header { grid-column: 1 / -1; }
-.admin-shell > .admin-side { grid-column: 1; }
+/* 메뉴가 한 행만 차지하면 그 행 높이가 메뉴 높이까지 늘어나 첫 패널 아래에 빈
+   공간이 생긴다. 모든 행을 걸치게 해 본문 행 높이가 내용대로 잡히게 한다.
+   (row-gap이 없으므로 남는 빈 행은 높이 0이라 레이아웃에 영향이 없다) */
+.admin-shell > .admin-side { grid-column: 1; grid-row: 2 / span 50; align-self: start; }
 .admin-shell:has(> .admin-side) > *:not(.admin-header):not(.admin-side) { grid-column: 2; }
 
 .admin-side {
   position: sticky;
-  top: 20px;
+  top: calc(var(--header-h) + 14px);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -193,6 +211,24 @@ button { cursor: pointer; }
 .admin-side a:hover { color: var(--navy); background: var(--blue-soft); }
 .admin-side a.active { color: #fff; background: var(--navy); }
 
+.admin-side-group { display: contents; }
+/* 시험 유형 하위 메뉴 — 상위 항목 바로 아래에 들여쓰기해 붙인다 */
+.admin-subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 3px 0 6px 12px;
+  padding-left: 10px;
+  border-left: 2px solid #e4eaf3;
+}
+.admin-subnav a {
+  padding: 7px 10px;
+  font-size: 12.8px;
+  font-weight: 650;
+  border-radius: 8px;
+}
+.admin-subnav a.active { color: var(--navy); background: var(--blue-soft); font-weight: 800; }
+
 /* 좁은 화면: 가로 스크롤 탭으로 되돌림 */
 @media (max-width: 1000px) {
   .admin-shell:has(> .admin-side) { display: block; }
@@ -206,6 +242,17 @@ button { cursor: pointer; }
   }
   .admin-side .eyebrow { display: none; }
   .admin-side a { flex: 0 0 auto; padding: 9px 16px; white-space: nowrap; }
+  /* 하위 메뉴는 가로 탭에서 자리를 너무 먹으므로 접는다(본문 상단 필터로 대체) */
+  .admin-side-group { display: contents; }
+  .admin-subnav { display: none; }
+}
+
+@media (max-width: 760px) {
+  /* 헤더 높이가 내용에 따라 달라지므로 고정을 풀고 offset도 0으로 둔다 */
+  .admin-shell { --header-h: 0px; }
+  .admin-header { position: static; }
+  .admin-header::after { display: none; }
+  .admin-side { top: 14px; }
 }
 
 /* 정답 입력 화면의 배점·영역 입력칸 */
@@ -1133,3 +1180,40 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
   line-height: 1;
 }
 .picked-files li button:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+
+/* --- 설정: AI 모델 선택 --- */
+.ai-model-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.ai-model-option {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfcfe;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.ai-model-option:hover:not(:disabled) { border-color: var(--blue); background: var(--blue-soft); }
+.ai-model-option.active {
+  border-color: var(--navy);
+  background: var(--blue-soft);
+  box-shadow: 0 0 0 2px rgba(24, 60, 115, .18) inset;
+}
+.ai-model-option strong { font-size: 14.5px; color: var(--navy-deep); }
+.ai-model-option span { font-size: 12.5px; color: var(--muted); }
+.ai-model-option:disabled { opacity: .6; cursor: default; }
+
+/* --- 국영수 과목 필터 칩 --- */
+.subject-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+.subject-chips button {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12.8px;
+  font-weight: 700;
+}
+.subject-chips button:hover { border-color: var(--blue); color: var(--navy); }
+.subject-chips button.active { background: var(--navy); border-color: var(--navy); color: #fff; }

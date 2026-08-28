@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
-import { AI_MODEL_OPTIONS, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
+import type { AiModelId } from "@/lib/ai-models";
 import type { UserPermissions } from "@/lib/access";
 
 interface CreatedReport {
@@ -32,8 +32,6 @@ interface Props {
   currentUser: NavUser & { permissions: UserPermissions };
 }
 
-const MODEL_STORAGE_KEY = "mock-report-ai-model";
-
 export default function MockUpload({ setupError, aiEnabled, currentUser }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const isAdmin = currentUser.role === "admin";
@@ -45,22 +43,6 @@ export default function MockUpload({ setupError, aiEnabled, currentUser }: Props
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState("");
-  const [aiModel, setAiModel] = useState<AiModelId>(DEFAULT_AI_MODEL);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (AI_MODEL_OPTIONS.some((option) => option.value === saved)) {
-      setAiModel(saved as AiModelId);
-    }
-  }, [isAdmin]);
-
-  function selectAiModel(value: string) {
-    if (!isAdmin) return;
-    const matched = AI_MODEL_OPTIONS.find((option) => option.value === value)?.value ?? DEFAULT_AI_MODEL;
-    setAiModel(matched);
-    window.localStorage.setItem(MODEL_STORAGE_KEY, matched);
-  }
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,8 +64,8 @@ export default function MockUpload({ setupError, aiEnabled, currentUser }: Props
 
     formData.delete("files");
     [...files].forEach((file) => formData.append("files", file));
-    if (isAdmin) formData.set("aiModel", aiModel);
-    else formData.delete("aiModel");
+    // AI 모델은 서버가 시스템 설정에서 읽는다(관리자 → 설정)
+    formData.delete("aiModel");
     setLoading(true);
     setStatus("엑셀을 분석하고 학생별 성적표를 계산하고 있습니다…");
 
@@ -95,7 +77,7 @@ export default function MockUpload({ setupError, aiEnabled, currentUser }: Props
       setCreatedBatchId(data.batchId);
       setWarnings(data.warnings ?? []);
       setStatus(
-        `${data.reportCount}명의 웹리포트 링크를 생성했습니다.${isAdmin && aiEnabled ? ` AI 총평 모델: ${data.aiModel}` : ""}`,
+        `${data.reportCount}명의 웹리포트 링크를 생성했습니다.${aiEnabled ? ` AI 총평 모델: ${data.aiModel}` : ""}`,
       );
       form.reset();
     } catch (caught) {
@@ -136,19 +118,14 @@ export default function MockUpload({ setupError, aiEnabled, currentUser }: Props
                   <label><span>리포트 제목</span><input name="reportTitle" defaultValue="중3 국영수 전국 모의고사 개인 성적표" /></label>
                   <label><span>시험 묶음명</span><input name="examLabel" defaultValue="2026년도" /></label>
                 </div>
-                {isAdmin ? (
-                  <div className="ai-model-setting">
-                    <label>
-                      <span>AI 총평 모델</span>
-                      <select name="aiModel" value={aiModel} onChange={(event) => selectAiModel(event.target.value)} disabled={!aiEnabled}>
-                        {AI_MODEL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label} — {option.note}</option>)}
-                      </select>
-                    </label>
-                    <p>{aiEnabled ? "선택한 모델은 이 브라우저에 저장되며 다음 업로드에도 유지됩니다." : "OPENAI_API_KEY가 없어 규칙 기반 총평으로 생성됩니다."}</p>
-                  </div>
-                ) : (
-                  <div className="info-box compact-info"><strong>AI 총평</strong><p>일반 사용자 업로드는 시스템 기본 모델로 자동 생성됩니다.</p></div>
-                )}
+                <div className="info-box compact-info">
+                  <strong>AI 총평</strong>
+                  <p>
+                    {aiEnabled
+                      ? "관리자 → 설정에서 정한 AI 총평 모델이 적용됩니다."
+                      : "OPENAI_API_KEY가 없어 규칙 기반 총평으로 생성됩니다."}
+                  </p>
+                </div>
                 <label className="checkbox-row"><input type="checkbox" name="pinRequired" value="true" defaultChecked /><span>학부모 휴대전화 뒤 4자리로 리포트 보호</span></label>
                 <p className="helper-text">OpenAI API 키는 보안을 위해 Vercel 서버 환경변수에만 보관합니다.</p>
                 <button className="button primary full" type="submit" disabled={loading || Boolean(setupError)}>{loading ? "성적표 생성 중…" : "학생별 웹리포트 링크 생성"}</button>
@@ -167,7 +144,7 @@ export default function MockUpload({ setupError, aiEnabled, currentUser }: Props
             <li><span>1</span><div><strong>문항 채점</strong><p>올해 국·수·영 정답과 배점을 적용합니다.</p></div></li>
             <li><span>2</span><div><strong>영역 분석</strong><p>행동·내용·난이도·학년 수준별 성취율을 계산합니다.</p></div></li>
             <li><span>3</span><div><strong>전국·학원 비교</strong><p>등급, 전국 상위 추정%, 학원 평균·순위를 표시합니다.</p></div></li>
-            <li><span>4</span><div><strong>AI 총평</strong><p>{isAdmin ? "관리자가 선택한 모델" : "시스템 기본 모델"}로 강점·보완점·학습 계획을 작성합니다.</p></div></li>
+            <li><span>4</span><div><strong>AI 총평</strong><p>설정에서 정한 AI 모델로 강점·보완점·학습 계획을 작성합니다.</p></div></li>
             <li><span>5</span><div><strong>개별 링크</strong><p>학부모에게 보낼 반응형 웹리포트 링크를 생성합니다.</p></div></li>
           </ol>
         </aside>
