@@ -1314,3 +1314,102 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
   letter-spacing: .06em;
   color: var(--blue);
 }
+
+/* --- 검수: 답안 격자 + 스캔 미리보기 좌우 배치 --- */
+.review-split {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(0, 1.1fr);
+  gap: 16px;
+  margin-top: 12px;
+  align-items: start;
+}
+.review-answers { min-width: 0; }
+
+.scan-preview {
+  position: sticky;
+  top: calc(var(--header-h, 82px) + 14px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7f9fc;
+  overflow: hidden;
+}
+.scan-preview.loading, .scan-preview.empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.scan-preview.empty p { margin: 0; line-height: 1.7; }
+
+.scan-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--navy-deep);
+}
+.scan-preview-zoom { display: flex; align-items: center; gap: 4px; }
+.scan-preview-zoom strong {
+  min-width: 44px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.scan-preview-zoom button {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.scan-preview-zoom button:hover:not(:disabled) { border-color: var(--blue); background: var(--blue-soft); }
+.scan-preview-zoom button:disabled { opacity: .45; cursor: default; }
+
+.scan-preview-stage {
+  position: relative;
+  overflow: hidden;
+  height: 460px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef1f6;
+  cursor: zoom-in;
+  touch-action: none;
+}
+.scan-preview-stage.zoomed { cursor: grab; }
+.scan-preview-stage.zoomed:active { cursor: grabbing; }
+.scan-preview-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center center;
+  transition: transform .08s linear;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.scan-preview-hint {
+  margin: 0;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: #fff;
+  border-top: 1px solid var(--line);
+  line-height: 1.6;
+}
+.scan-preview-hint .mark-ok { color: #0f8a3c; }
+.scan-preview-hint .mark-multi { color: var(--danger); }
+
+@media (max-width: 1100px) {
+  .review-split { grid-template-columns: 1fr; }
+  .scan-preview { position: static; }
+  .scan-preview-stage { height: 380px; }
+}

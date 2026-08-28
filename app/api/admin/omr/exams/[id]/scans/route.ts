@@ -8,6 +8,7 @@ import {
   listScans,
   upsertScans,
   uploadScanFile,
+  uploadScanPreview,
   type UpsertScanInput,
 } from "@/lib/omr-scans";
 
@@ -194,6 +195,21 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const read = await readScans(sheetSpecFor(exam), files);
 
+    // 검수 화면에서 띄울 미리보기를 보관한다(장당 100KB 안팎).
+    // 실패해도 판독 결과는 그대로 저장한다.
+    const previewPaths = new Map<string, string>();
+    await Promise.all(
+      read.results.map(async (result) => {
+        if (!result.preview_jpeg_base64) return;
+        const stored = await uploadScanPreview(
+          id,
+          result.filename,
+          Buffer.from(result.preview_jpeg_base64, "base64"),
+        );
+        if (stored) previewPaths.set(result.filename, stored);
+      }),
+    );
+
     let failedReadCount = 0;
     const rows: UpsertScanInput[] = read.results.map((result) => {
       const answers = normalizeAnswers(result.answers, result.selections, exam.numQuestions);
@@ -212,6 +228,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         filename: result.filename,
         // PDF 페이지 결과는 원본 PDF의 저장 경로를 공유한다
         scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
+        previewPath: previewPaths.get(result.filename) ?? null,
         studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
         studentIdQr: result.student_id_qr ?? null,
         studentIdBubbles: result.student_id_bubbles ?? null,

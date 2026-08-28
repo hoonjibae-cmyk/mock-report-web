@@ -32,6 +32,8 @@ export interface OmrScan {
   examId: string;
   filename: string;
   scanPath: string | null;
+  /** 검수 화면용 미리보기(판독기가 실제로 본 이미지) Storage 경로 */
+  previewPath: string | null;
   studentId: string | null;
   studentIdQr: string | null;
   studentIdBubbles: string | null;
@@ -54,6 +56,7 @@ interface ScanRow {
   exam_id: string;
   filename: string;
   scan_path: string | null;
+  preview_path: string | null;
   student_id: string | null;
   student_id_qr: string | null;
   student_id_bubbles: string | null;
@@ -67,7 +70,7 @@ interface ScanRow {
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,review_flags,status,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,review_flags,status,read_error,created_at,updated_at";
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -75,6 +78,7 @@ function mapScan(row: ScanRow): OmrScan {
     examId: row.exam_id,
     filename: row.filename,
     scanPath: row.scan_path,
+    previewPath: row.preview_path ?? null,
     studentId: row.student_id,
     studentIdQr: row.student_id_qr,
     studentIdBubbles: row.student_id_bubbles,
@@ -92,6 +96,7 @@ export interface UpsertScanInput {
   examId: string;
   filename: string;
   scanPath?: string | null;
+  previewPath?: string | null;
   studentId?: string | null;
   studentIdQr?: string | null;
   studentIdBubbles?: string | null;
@@ -112,6 +117,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
         exam_id: input.examId,
         filename: input.filename,
         scan_path: input.scanPath ?? null,
+        preview_path: input.previewPath ?? null,
         student_id: input.studentId ?? null,
         student_id_qr: input.studentIdQr ?? null,
         student_id_bubbles: input.studentIdBubbles ?? null,
@@ -182,9 +188,10 @@ export async function deleteScan(id: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("omr_scans").delete().eq("id", id);
   if (error) throw new Error(`판독 결과 삭제 실패: ${error.message}`);
-  if (scan?.scanPath) {
-    // 원본 파일도 함께 정리(실패해도 삭제 자체는 성공으로 둔다)
-    await supabase.storage.from(SCAN_BUCKET).remove([scan.scanPath]).catch(() => undefined);
+  // 원본·미리보기 파일도 함께 정리(실패해도 삭제 자체는 성공으로 둔다)
+  const paths = [scan?.scanPath, scan?.previewPath].filter((p): p is string => Boolean(p));
+  if (paths.length > 0) {
+    await supabase.storage.from(SCAN_BUCKET).remove(paths).catch(() => undefined);
   }
 }
 
@@ -212,6 +219,50 @@ export async function uploadScanFile(
     return path;
   } catch (error) {
     console.warn(`스캔 원본 저장 실패(${filename})`, error);
+    return null;
+  }
+}
+
+/**
+ * 검수용 미리보기를 보관한다. 파일명이 겹치지 않도록 previews/ 아래에 둔다.
+ * 실패해도 판독 자체는 성공으로 두므로 null을 반환한다.
+ */
+export async function uploadScanPreview(
+  examId: string,
+  filename: string,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
+  const path = `${examId}/previews/${safe}.jpg`;
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.storage
+      .from(SCAN_BUCKET)
+      .upload(path, Buffer.from(bytes), { contentType: "image/jpeg", upsert: true });
+    if (error) {
+      console.warn(`미리보기 저장 실패(${filename}): ${error.message}`);
+      return null;
+    }
+    return path;
+  } catch (error) {
+    console.warn(`미리보기 저장 실패(${filename})`, error);
+    return null;
+  }
+}
+
+/** 검수 화면에서 이미지를 띄우기 위한 임시 열람 주소(기본 10분) */
+export async function createSignedViewUrl(
+  path: string,
+  expiresInSeconds = 600,
+): Promise<string | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage
+      .from(SCAN_BUCKET)
+      .createSignedUrl(path, expiresInSeconds);
+    if (error || !data) return null;
+    return data.signedUrl;
+  } catch {
     return null;
   }
 }
