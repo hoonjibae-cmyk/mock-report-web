@@ -979,3 +979,39 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 @media (max-width: 720px) {
   .generic-kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* --- 영역별 성취 --- */
+.area-bars { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.area-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 5px; }
+.area-head strong { font-size: 13.5px; color: var(--navy-deep); }
+.area-head span { font-size: 12px; color: var(--muted); }
+.area-head em { font-style: normal; font-weight: 800; margin-left: 8px; }
+.area-head em.up { color: var(--success); }
+.area-head em.down { color: var(--danger); }
+.area-track { position: relative; height: 10px; border-radius: 99px; background: #eef1f6; overflow: visible; }
+.area-fill { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #2f67b1, #183c73); }
+.area-avg {
+  position: absolute; top: -3px; width: 2px; height: 16px;
+  background: #667085; border-radius: 1px; transform: translateX(-1px);
+}
+
+/* --- 문항 정답률 · 자동 난이도 --- */
+.omr-item-cell .rate { font-size: 9.5px; font-weight: 800; letter-spacing: -.02em; }
+.omr-item-cell.partial { background: var(--gold-soft); }
+.omr-item-cell.partial .mark { color: var(--warning); }
+.d-쉬움 { color: var(--success); }
+.d-보통 { color: var(--warning); }
+.d-어려움 { color: var(--danger); }
+.diff-chip {
+  display: inline-block; padding: 1px 7px; border-radius: 99px;
+  font-size: 11px; font-weight: 800; white-space: nowrap;
+}
+.diff-chip.d-쉬움 { background: var(--success-soft); }
+.diff-chip.d-보통 { background: var(--warning-soft); }
+.diff-chip.d-어려움 { background: var(--danger-soft); }
+
+/* --- 관리자 화면 버전 표기 --- */
+.app-version {
+  margin: 18px 0 4px; text-align: center;
+  font-size: 11.5px; color: var(--muted); letter-spacing: .01em;
+}

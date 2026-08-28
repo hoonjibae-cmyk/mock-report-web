@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
+import { APP_RELEASED_AT, APP_VERSION_LABEL } from "@/lib/version";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { AdminReportListItem } from "@/lib/reports";
 
@@ -185,6 +186,10 @@ export default function AdminHome({ currentUser, exams, reports, setupError, can
           )}
         </section>
       </div>
+
+      <p className="app-version">
+        {APP_VERSION_LABEL} · {APP_RELEASED_AT} 업데이트
+      </p>
     </main>
   );
 }

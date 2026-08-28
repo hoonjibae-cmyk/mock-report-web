@@ -50,6 +50,8 @@ export interface OmrExam {
   answerKey: Record<string, number>;
   /** {문항번호: 배점} — 비어 있으면 100점 만점 균등 배점 */
   points: Record<string, number>;
+  /** {문항번호: {area}} — 문항별 영역(듣기·어법 등). 미설정 시 영역 분석 생략 */
+  questionMeta: Record<string, { area?: string }>;
   /** 절대평가 등급컷 [{grade, min}] — min은 100점 환산 하한. 비어 있으면 등급 미표기 */
   gradeCuts: Array<{ grade: number; min: number }>;
   useTeacherComment: boolean;

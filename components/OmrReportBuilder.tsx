@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
@@ -39,10 +39,14 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
   const [existingReports, setExistingReports] = useState(0);
   const [created, setCreated] = useState<CreatedLink[]>([]);
   const [loading, setLoading] = useState(false);
+  const [essayUploading, setEssayUploading] = useState(false);
+  const essayRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(setupError);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState("");
 
+  const essayCount =
+    typeof exam?.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
   const keyFilled = Object.keys(exam?.answerKey ?? {}).length;
   const keyReady = exam ? keyFilled >= exam.numQuestions : false;
 
@@ -85,6 +89,34 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
   }
 
   const namedCount = reviewed.filter((scan) => draftFor(scan).name.trim()).length;
+
+  async function uploadEssay() {
+    const file = essayRef.current?.files?.[0];
+    if (!file || !exam) return;
+    setEssayUploading(true);
+    setError("");
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/essay`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "서술형 점수를 반영하지 못했습니다.");
+      const extra =
+        data.unknownKeys?.length > 0
+          ? ` (찾지 못한 수험번호: ${data.unknownKeys.join(", ")})`
+          : "";
+      setMessage(`서술형 점수를 ${data.updated}명에게 반영했습니다.${extra} 이제 성적표를 생성하세요.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "서술형 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setEssayUploading(false);
+      if (essayRef.current) essayRef.current.value = "";
+    }
+  }
 
   async function generate() {
     if (!exam) return;
@@ -173,6 +205,42 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
               채점하려면 정답 입력을 먼저 완료해 주세요.{" "}
               <Link href={`/admin/omr/${exam.id}/key`}>정답 입력으로 이동 →</Link>
             </p>
+          </div>
+        </div>
+      ) : null}
+
+      {essayCount > 0 && canCreate ? (
+        <div className="panel">
+          <div className="section-heading wrap">
+            <div>
+              <p className="eyebrow">서술형</p>
+              <h2>주관식 채점</h2>
+              <p className="subtle">
+                서술형 {essayCount}문항은 OMR로 읽을 수 없어 직접 채점합니다. 채점표를 내려받으면
+                학생별로 문항 점수만 채우면 되고, 업로드하면 점수가 반영됩니다. 채점하지 않으면
+                해당 문항은 0점으로 처리됩니다.
+              </p>
+            </div>
+            <div className="toolbar" style={{ flexWrap: "wrap" }}>
+              <a className="button secondary" href={`/api/admin/omr/exams/${exam.id}/essay`}>
+                채점표 받기
+              </a>
+              <input
+                ref={essayRef}
+                type="file"
+                accept=".xlsx"
+                style={{ display: "none" }}
+                onChange={uploadEssay}
+              />
+              <button
+                className="button secondary"
+                type="button"
+                disabled={essayUploading}
+                onClick={() => essayRef.current?.click()}
+              >
+                {essayUploading ? "반영 중…" : "채점표 업로드"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

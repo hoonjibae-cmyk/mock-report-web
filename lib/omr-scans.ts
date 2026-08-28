@@ -16,6 +16,8 @@ export interface OmrScan {
   studentIdBubbles: string | null;
   /** {문항번호: 보기번호 | null} — 키는 문자열(jsonb) */
   answers: Record<string, number | null>;
+  /** 서술형 문항 점수 {문항번호: 점수} — 채점자가 입력 */
+  essayScores: Record<string, number>;
   reviewFlags: Array<Record<string, unknown>>;
   status: ScanStatus;
   readError: string | null;
@@ -32,6 +34,7 @@ interface ScanRow {
   student_id_qr: string | null;
   student_id_bubbles: string | null;
   answers: Record<string, number | null> | null;
+  essay_scores: Record<string, number> | null;
   review_flags: Array<Record<string, unknown>> | null;
   status: ScanStatus;
   read_error: string | null;
@@ -40,7 +43,7 @@ interface ScanRow {
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,student_id,student_id_qr,student_id_bubbles,answers,review_flags,status,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,review_flags,status,read_error,created_at,updated_at";
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -52,6 +55,7 @@ function mapScan(row: ScanRow): OmrScan {
     studentIdQr: row.student_id_qr,
     studentIdBubbles: row.student_id_bubbles,
     answers: row.answers ?? {},
+    essayScores: row.essay_scores ?? {},
     reviewFlags: row.review_flags ?? [],
     status: row.status,
     readError: row.read_error,
@@ -120,6 +124,7 @@ export async function getScan(id: string): Promise<OmrScan | null> {
 export interface UpdateScanInput {
   studentId?: string | null;
   answers?: Record<string, number | null>;
+  essayScores?: Record<string, number>;
   status?: ScanStatus;
 }
 
@@ -129,6 +134,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   const patch: Record<string, unknown> = {};
   if (input.studentId !== undefined) patch.student_id = input.studentId;
   if (input.answers !== undefined) patch.answers = input.answers;
+  if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
   if (input.status !== undefined) patch.status = input.status;
 
   const { data, error } = await supabase

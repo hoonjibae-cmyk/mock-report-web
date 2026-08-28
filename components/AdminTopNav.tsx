@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import AcademyLogo from "@/components/AcademyLogo";
+import { APP_VERSION } from "@/lib/version";
 
 export interface NavUser {
   username: string;
@@ -36,7 +37,9 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
           <AcademyLogo />
           <div>
             <strong>OMR 리포트</strong>
-            <span>목동유쌤영어학원 · {user.role === "admin" ? "관리자" : "일반 사용자"}</span>
+            <span>
+              목동유쌤영어학원 · {user.role === "admin" ? "관리자" : "일반 사용자"} · v{APP_VERSION}
+            </span>
           </div>
         </div>
         <div className="account-summary">

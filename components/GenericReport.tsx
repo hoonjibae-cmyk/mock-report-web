@@ -1,6 +1,6 @@
 import AcademyLogo from "@/components/AcademyLogo";
 import ReportActions from "@/components/ReportActions";
-import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
+import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 
 /** 열람 시점에 주입되는 담임 의견(성적표 생성 후에도 수정 가능) */
 export interface ReportComments {
@@ -131,6 +131,38 @@ function DistributionBar({ report }: { report: GenericReportData }) {
   );
 }
 
+/** 영역별 성취율 — 학생 막대 위에 집단 평균 마커를 겹쳐 비교한다 */
+function AreaBars({ areas }: { areas: AreaStat[] }) {
+  return (
+    <div className="area-bars">
+      {areas.map((stat) => {
+        const diff = Math.round((stat.rate - stat.cohortRate) * 10) / 10;
+        return (
+          <div className="area-row" key={stat.area}>
+            <div className="area-head">
+              <strong>{stat.area}</strong>
+              <span>
+                {stat.earned}/{stat.possible}점 · {stat.rate}%
+                <em className={diff >= 0 ? "up" : "down"}>
+                  {diff >= 0 ? `평균 +${diff}` : `평균 ${diff}`}
+                </em>
+              </span>
+            </div>
+            <div className="area-track">
+              <span className="area-fill" style={{ width: `${Math.max(0, Math.min(100, stat.rate))}%` }} />
+              <span
+                className="area-avg"
+                style={{ left: `${Math.max(0, Math.min(100, stat.cohortRate))}%` }}
+                title={`반 평균 ${stat.cohortRate}%`}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function GenericReport({
   report,
   comments,
@@ -213,11 +245,25 @@ export default function GenericReport({
               맞은 문항 {score.correctCount} · 틀린 문항 {score.wrongCount}
               {score.blankCount > 0 ? ` · 미표기 ${score.blankCount}` : ""} (총 {score.totalQuestions}문항)
               {report.essayCount > 0
-                ? ` · 서술형 ${report.essayCount}문항은 선생님이 별도로 채점해 안내합니다.`
+                ? ` · 객관식 ${score.objectiveRaw}점 + 서술형 ${score.essayRaw}점(${report.essayCount}문항)`
                 : ""}
             </p>
           </section>
         </section>
+
+        {report.areas.length > 0 ? (
+          <section className="analysis-card">
+            <div className="card-title-row">
+              <h4>영역별 성취</h4>
+              <span>막대 = 내 성취율 · 세로선 = 반 평균</span>
+            </div>
+            <AreaBars areas={report.areas} />
+            <p className="subtle" style={{ marginTop: 10 }}>
+              성취율이 낮은 영역부터 표시했습니다. 반 평균보다 낮은 영역을 먼저 보완하면 총점이
+              빠르게 오릅니다.
+            </p>
+          </section>
+        ) : null}
 
         {report.growth.length >= 2 ? (
           <section className="analysis-card">
@@ -236,24 +282,34 @@ export default function GenericReport({
         <section className="analysis-card">
           <div className="card-title-row">
             <h4>문항별 채점 결과</h4>
-            <span>표기 → 정답 · 색과 기호로 표시</span>
+            <span>표기 → 정답 · 아래 숫자는 반 정답률</span>
           </div>
           <div className="omr-item-grid">
             {report.items.map((item) => (
               <div
                 key={item.no}
-                className={`omr-item-cell ${item.correct ? "ok" : item.marked == null ? "blank" : "wrong"}${weakSet.has(item.no) ? " weak" : ""}`}
-                title={`${item.no}번 · 배점 ${item.point} · 정답률 ${item.correctRate}%`}
+                className={`omr-item-cell ${item.correct ? "ok" : item.essay ? "partial" : item.marked == null ? "blank" : "wrong"}${weakSet.has(item.no) ? " weak" : ""}`}
+                title={`${item.no}번${item.area ? ` · ${item.area}` : ""} · 배점 ${item.point}점 · 반 정답률 ${item.correctRate}% (${item.difficulty})`}
               >
                 <span className="no">{item.no}</span>
                 <span className="mark">
-                  {item.correct ? "○" : item.marked == null ? "–" : `${item.marked}→${item.answer ?? "?"}`}
+                  {item.essay
+                    ? `${item.earned}/${item.point}`
+                    : item.correct
+                      ? "○"
+                      : item.marked == null
+                        ? "–"
+                        : `${item.marked}→${item.answer ?? "?"}`}
                 </span>
+                <span className={`rate d-${item.difficulty}`}>{item.correctRate}%</span>
               </div>
             ))}
           </div>
           <p className="subtle" style={{ marginTop: 8 }}>
-            ○ 정답 · 숫자→숫자 오답(내 표기→정답) · – 미표기 · 붉은 테두리는 우선 복습 문항
+            ○ 정답 · 숫자→숫자 오답(내 표기→정답) · – 미표기 · 서술형은 득점/배점 · 붉은 테두리는
+            우선 복습 문항. 아래 정답률 색은 반 전체 결과로 자동 분류한 난이도입니다 —{" "}
+            <b className="d-쉬움">쉬움</b> · <b className="d-보통">보통</b> ·{" "}
+            <b className="d-어려움">어려움</b>.
           </p>
         </section>
 
@@ -265,7 +321,7 @@ export default function GenericReport({
             </div>
             <table className="report-table">
               <thead>
-                <tr><th>문항</th><th>내 표기</th><th>정답</th><th>배점</th><th>반 정답률</th></tr>
+                <tr><th>문항</th><th>영역</th><th>내 표기</th><th>정답</th><th>배점</th><th>반 정답률 · 난이도</th></tr>
               </thead>
               <tbody>
                 {wrongItems
@@ -274,9 +330,10 @@ export default function GenericReport({
                   .slice(0, 8)
                   .map((item) => (
                     <tr key={item.no}>
-                      <td><strong>{item.no}번</strong></td>
-                      <td>{item.marked ?? "미표기"}</td>
-                      <td>{item.answer}</td>
+                      <td><strong>{item.no}번</strong>{item.essay ? <span>서술형</span> : null}</td>
+                      <td>{item.area ?? "–"}</td>
+                      <td>{item.essay ? `${item.earned}점` : (item.marked ?? "미표기")}</td>
+                      <td>{item.essay ? "–" : item.answer}</td>
                       <td>{item.point}점</td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -286,6 +343,7 @@ export default function GenericReport({
                           <span style={{ fontSize: 12, color: "#667085", whiteSpace: "nowrap" }}>
                             {item.correctRate}%
                           </span>
+                          <span className={`diff-chip d-${item.difficulty}`}>{item.difficulty}</span>
                         </div>
                       </td>
                     </tr>
@@ -345,7 +403,10 @@ export default function GenericReport({
           </div>
           <div>
             <p>본 성적표는 OMR 답안을 자동 판독·채점한 결과이며, 석차·표준점수는 학원 응시 집단 기준입니다.</p>
-            <p>문의는 학원으로 연락 주세요.</p>
+            <p>
+              문의는 학원으로 연락 주세요.
+              {report.appVersion ? ` · 시스템 v${report.appVersion}` : ""}
+            </p>
           </div>
         </footer>
       </article>

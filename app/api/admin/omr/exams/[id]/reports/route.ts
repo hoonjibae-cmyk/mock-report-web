@@ -4,11 +4,12 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createPublicToken, hashPin } from "@/lib/crypto";
 import { getExam } from "@/lib/omr-exams";
 import { listScans } from "@/lib/omr-scans";
-import { scoreExam, maxScore } from "@/lib/omr-scoring";
+import { scoreExam, maxScore, essayCountOf } from "@/lib/omr-scoring";
 import { EXAM_TYPE_LABELS, ACADEMY_NAME } from "@/lib/omr-types";
 import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { maskPhone, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/version";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -181,8 +182,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       throw new Error(`성적표 묶음 저장 실패: ${batchError?.message ?? "알 수 없는 오류"}`);
     }
 
-    const essayCount =
-      typeof exam.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
+    const essayCount = essayCountOf(exam);
     const generatedAt = new Date().toISOString();
 
     const rows = reviewed.map((scan) => {
@@ -213,6 +213,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         student: { key, name: input.name.trim(), school: input.school?.trim() ?? "" },
         score: {
           raw: result.raw,
+          objectiveRaw: result.objectiveRaw,
+          essayRaw: result.essayRaw,
           max: examMax,
           correctCount: result.correctCount,
           wrongCount: result.wrongCount,
@@ -225,10 +227,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         topPercent: result.topPercent,
         grade: result.grade,
         items: result.items,
+        areas: result.areas,
         weakItems: result.weakItems,
         growth,
         essayCount,
         teacherComment: null,
+        appVersion: APP_VERSION,
         generatedAt,
       };
 
