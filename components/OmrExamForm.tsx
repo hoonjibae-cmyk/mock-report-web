@@ -1,9 +1,15 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { EXAM_TYPE_LABELS, USER_QUESTION_COUNT, type ExamType } from "@/lib/omr-types";
+import {
+  EXAM_TYPE_LABELS,
+  MOCK_SUBJECTS,
+  USER_QUESTION_COUNT,
+  type ExamType,
+  type MockSubject,
+} from "@/lib/omr-types";
 
 const TYPE_DEFAULTS: Record<ExamType, { q: number; subjectLabel: string; period: string }> = {
   mock: { q: 45, subjectLabel: "영어 영역", period: "3" },
@@ -13,16 +19,39 @@ const TYPE_DEFAULTS: Record<ExamType, { q: number; subjectLabel: string; period:
   inclass: { q: 20, subjectLabel: "", period: "" },
 };
 
+function subjectDefaults(subject: MockSubject) {
+  return MOCK_SUBJECTS.find((s) => s.value === subject) ?? MOCK_SUBJECTS[2];
+}
+
 export default function OmrExamForm() {
   const router = useRouter();
-  const [type, setType] = useState<ExamType>("monthly");
-  const [numQuestions, setNumQuestions] = useState(TYPE_DEFAULTS.monthly.q);
+  const params = useSearchParams();
+  // 좌측 하위 메뉴에서 '+ 새 시험'을 누르면 그 유형이 미리 골라져 있다
+  const preset = params.get("type");
+  const initialType: ExamType =
+    preset && preset in EXAM_TYPE_LABELS ? (preset as ExamType) : "monthly";
+
+  const [type, setType] = useState<ExamType>(initialType);
+  // 국영수 모의고사는 과목마다 시험지가 달라 답안지를 따로 만든다
+  const [mockSubject, setMockSubject] = useState<MockSubject>("english");
+  const [numQuestions, setNumQuestions] = useState(
+    initialType === "mock"
+      ? MOCK_SUBJECTS.find((s) => s.value === "english")!.questions
+      : TYPE_DEFAULTS[initialType].q,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   function onType(next: ExamType) {
     setType(next);
-    setNumQuestions(TYPE_DEFAULTS[next].q);
+    setNumQuestions(
+      next === "mock" ? subjectDefaults(mockSubject).questions : TYPE_DEFAULTS[next].q,
+    );
+  }
+
+  function onMockSubject(next: MockSubject) {
+    setMockSubject(next);
+    setNumQuestions(subjectDefaults(next).questions);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -53,7 +82,7 @@ export default function OmrExamForm() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "시험을 만들지 못했습니다.");
-      router.push("/admin/omr");
+      router.push(`/admin/omr?type=${type}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "시험 생성 중 오류가 발생했습니다.");
@@ -61,7 +90,11 @@ export default function OmrExamForm() {
     }
   }
 
-  const defaults = TYPE_DEFAULTS[type];
+  const isMock = type === "mock";
+  const subjectDefault = subjectDefaults(mockSubject);
+  const defaults = isMock
+    ? { q: subjectDefault.questions, subjectLabel: subjectDefault.subjectLabel, period: subjectDefault.period }
+    : TYPE_DEFAULTS[type];
   const fixedCount = !USER_QUESTION_COUNT[type];
 
   return (
@@ -96,9 +129,29 @@ export default function OmrExamForm() {
           </select>
         </label>
 
+        {isMock ? (
+          <label>
+            <span>과목 * (국어 · 영어 · 수학은 답안지를 각각 따로 만듭니다)</span>
+            <select value={mockSubject} onChange={(e) => onMockSubject(e.target.value as MockSubject)}>
+              {MOCK_SUBJECTS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label} — {s.questions}문항 · {s.period}교시
+                </option>
+              ))}
+            </select>
+            <small className="hint">
+              한 회차를 다 치르려면 국어 · 영어 · 수학 시험을 각각 만들어 답안지를 3종 출력하세요.
+            </small>
+          </label>
+        ) : null}
+
         <label>
           <span>시험 제목 *</span>
-          <input name="title" required placeholder="예: 4월 월말평가 · 영어" />
+          <input
+            name="title"
+            required
+            placeholder={isMock ? `예: 3월 전국 모의고사 · ${subjectDefault.label}` : "예: 4월 월말평가 · 영어"}
+          />
         </label>
 
         <div className="form-row">
@@ -154,18 +207,27 @@ export default function OmrExamForm() {
         <div className="form-row">
           <label>
             <span>교시(선택)</span>
-            <input name="period" defaultValue={defaults.period} placeholder="예: 3" />
+            <input key={`p-${type}-${mockSubject}`} name="period" defaultValue={defaults.period} placeholder="예: 3" />
           </label>
           <label>
             <span>영역 표기(선택)</span>
-            <input name="subjectLabel" defaultValue={defaults.subjectLabel} placeholder="예: 영어 영역" />
+            <input
+              key={`s-${type}-${mockSubject}`}
+              name="subjectLabel"
+              defaultValue={defaults.subjectLabel}
+              placeholder="예: 영어 영역"
+            />
           </label>
         </div>
 
-        <label>
-          <span>과목(선택)</span>
-          <input name="subject" placeholder="예: english" />
-        </label>
+        {isMock ? (
+          <input type="hidden" name="subject" value={mockSubject} />
+        ) : (
+          <label>
+            <span>과목(선택)</span>
+            <input name="subject" placeholder="예: english" />
+          </label>
+        )}
 
         <label className="checkbox-row">
           <input type="checkbox" name="useTeacherComment" />

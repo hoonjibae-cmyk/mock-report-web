@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getExam } from "@/lib/omr-exams";
 import { draftOverviewComment, draftStudentComment } from "@/lib/omr-ai";
 import { isGenericReport } from "@/lib/omr-report-types";
-import { resolveAiModel } from "@/lib/ai-models";
+import { getAiModel } from "@/lib/app-settings";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -28,7 +28,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));
-    const model = resolveAiModel(body.model);
+    // 요청마다 고르지 않고, 설정에 저장된 모델을 쓴다
+    const model = await getAiModel();
 
     if (body.target === "overview") {
       // 집단 통계는 이 시험의 아무 성적표에서나 동일하게 들어 있다

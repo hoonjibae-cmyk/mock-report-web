@@ -22,6 +22,24 @@ export const USER_QUESTION_COUNT: Record<ExamType, boolean> = {
   inclass: true,
 };
 
+/**
+ * 국영수 모의고사는 과목마다 시험지 구성이 달라 답안지를 따로 만든다.
+ * (수능 기준 — 국어 45문항 1교시 · 수학 30문항 2교시 · 영어 45문항 3교시)
+ */
+export const MOCK_SUBJECTS = [
+  { value: "korean", label: "국어", questions: 45, period: "1", subjectLabel: "국어 영역" },
+  { value: "math", label: "수학", questions: 30, period: "2", subjectLabel: "수학 영역" },
+  { value: "english", label: "영어", questions: 45, period: "3", subjectLabel: "영어 영역" },
+] as const;
+
+export type MockSubject = (typeof MOCK_SUBJECTS)[number]["value"];
+
+/** 저장된 subject 문자열을 국영수 과목으로 해석(아니면 null) */
+export function mockSubjectOf(subject: string | null | undefined) {
+  const key = String(subject ?? "").trim().toLowerCase();
+  return MOCK_SUBJECTS.find((s) => s.value === key) ?? null;
+}
+
 export function reportFamilyFor(type: ExamType): ReportFamily {
   if (type === "mock") return "A_rich";
   if (type === "saturday") return "B_english";
