@@ -175,7 +175,8 @@ export default function OmrExamForm() {
 
         <div className="form-row">
           <label>
-            <span>수험번호 자리수</span>
+            {/* 답안지에 찍히는 칸 수 = 쓸 수 있는 최대 자리수. 더 짧게 써도 된다. */}
+            <span>수험번호 최대 자리수</span>
             <input name="idDigits" type="number" min={3} max={9} defaultValue={5} />
           </label>
           <label>

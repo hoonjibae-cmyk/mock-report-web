@@ -72,10 +72,21 @@ test("표기가 경계에 걸친 문항이 있으면 붙잡는다", () => {
   assert.deepEqual(v.reasons[0].questions, [4, 9]);
 });
 
-test("수험번호가 없거나 자리수가 안 맞으면 붙잡는다", () => {
+test("수험번호가 없거나 읽지 못한 자리가 있으면 붙잡는다", () => {
   assert.ok(codes(scan({ studentId: null })).includes("noStudentId"));
-  assert.ok(codes(scan({ studentId: "201" })).includes("idLength"));
   assert.ok(codes(scan({ studentId: "20?01" })).includes("idUncertain"));
+});
+
+test("설정 자리수는 최대치 — 그보다 짧은 수험번호는 정상이다", () => {
+  // 학원 수험번호는 4자리가 기본이고, 겹치는 학생만 5자리를 쓴다.
+  // 5자리로 설정했다고 4자리를 검수 대상으로 만들면 거의 전원이 걸린다.
+  assert.equal(reviewVerdict(scan({ studentId: "7996" }), ctx).auto, true);
+  assert.equal(reviewVerdict(scan({ studentId: "79961" }), ctx).auto, true);
+  // 4자리보다 짧으면 마킹이 흐려 자리가 빠졌을 가능성이 높다
+  assert.ok(codes(scan({ studentId: "799" })).includes("idLength"));
+  assert.ok(codes(scan({ studentId: "7" })).includes("idLength"));
+  // 설정 자리수가 더 작으면 그 값을 따른다(3자리 시험에서 3자리는 정상)
+  assert.equal(reviewVerdict(scan({ studentId: "799" }), { ...ctx, idDigits: 3 }).auto, true);
 });
 
 test("수험번호 마킹이 흐리면 붙잡는다", () => {
