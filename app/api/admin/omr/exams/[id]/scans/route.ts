@@ -40,23 +40,27 @@ function markedCount(answers: Record<string, number | null> | undefined): number
 }
 
 /**
- * 답안지와 시험 설정이 어긋나면 판독 좌표가 통째로 밀린다.
- * QR에 새겨진 시험 ID로 먼저 잡고, ID가 없으면 표기율로 의심 신호를 준다.
+ * 판독이 실패했을 때만 그 원인을 안내한다.
+ *
+ * 시험 ID가 달라도 문항 수·보기 수·서술형 수가 같으면 답안지 배치가 동일해 판독은
+ * 정확하다(같은 설정으로 시험을 다시 만든 경우가 여기 해당한다). 그래서 ID만으로는
+ * 경고하지 않고, 실제로 표기를 제대로 읽지 못했을 때만 알린다.
  */
-function mismatchReason(
+function readFailureReason(
   result: { exam_id: string | null; answers: Record<string, number | null> },
   examId: string,
   numQuestions: number,
 ): string | null {
+  const marked = markedCount(result.answers);
+  // 학생이 답을 적게 썼을 뿐인 경우를 경고로 오인하지 않도록 임계를 낮게 잡는다.
+  // 배치가 어긋나면 판독이 이 정도로 처참하게 무너진다(예: 5/45).
+  if (numQuestions < 10 || marked >= numQuestions * 0.3) return null;
+
   const qrExam = (result.exam_id ?? "").trim();
   if (qrExam && qrExam !== examId) {
-    return `다른 시험의 답안지입니다(답안지에 새겨진 시험 ID: ${qrExam}). 이 답안지를 만든 시험에서 업로드하거나, 이 시험의 답안지를 새로 출력해 사용해 주세요.`;
+    return `표기를 ${marked}/${numQuestions}문항만 읽었습니다. 이 답안지는 다른 시험에서 출력된 것으로 보입니다(답안지 시험 ID: ${qrExam}). 문항 수·보기 수·서술형 문항 수가 이 시험과 같은지 확인하거나, 이 시험의 답안지를 새로 출력해 사용해 주세요.`;
   }
-  const marked = markedCount(result.answers);
-  if (numQuestions >= 10 && marked > 0 && marked < numQuestions * 0.5) {
-    return `표기가 ${marked}/${numQuestions}문항만 인식되었습니다. 답안지를 출력한 뒤 시험 설정(문항 수·보기 수·서술형 문항 수)을 바꾸면 판독 위치가 어긋납니다. 설정을 확인하고 답안지를 새로 출력해 주세요.`;
-  }
-  return null;
+  return `표기를 ${marked}/${numQuestions}문항만 읽었습니다. 답안지가 접히거나 잘리지 않았는지, 시험 설정(문항 수·보기 수·서술형 문항 수)이 출력 당시와 같은지 확인해 주세요.`;
 }
 
 // 판독된 답안: {"1": 3, ...} 형태로 정규화(값은 1-base 보기번호 또는 null)
@@ -169,15 +173,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const read = await readScans(sheetSpecFor(exam), files);
 
-    let mismatchCount = 0;
+    let failedReadCount = 0;
     const rows: UpsertScanInput[] = read.results.map((result) => {
       const answers = normalizeAnswers(result.answers, exam.numQuestions);
-      const reason = mismatchReason(
+      const reason = readFailureReason(
         { exam_id: result.exam_id ?? null, answers },
         id,
         exam.numQuestions,
       );
-      if (reason) mismatchCount += 1;
+      if (reason) failedReadCount += 1;
       return {
         examId: id,
         filename: result.filename,
@@ -215,7 +219,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       scans,
       read: read.results.length,
       failed: read.problems?.length ?? 0,
-      mismatched: mismatchCount,
+      lowConfidence: failedReadCount,
       storageSkipped,
     });
   } catch (error) {
