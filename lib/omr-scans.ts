@@ -15,6 +15,8 @@ function describeDbError(message: string): string {
     const column = missingColumn[1];
     const guide: Record<string, string> = {
       essay_scores: "supabase/migration_v4_essay_scores.sql",
+      essay_answers: "supabase/migration_v9_essay_transcription.sql",
+      essay_crops: "supabase/migration_v9_essay_transcription.sql",
       preview_path: "supabase/migration_v7_scan_preview.sql",
       read_confidence: "supabase/migration_v8_read_confidence.sql",
       reviewed_by: "supabase/migration_v8_read_confidence.sql",
@@ -64,6 +66,10 @@ export interface OmrScan {
   answers: Record<string, MarkValue>;
   /** 서술형 문항 점수 {문항번호: 점수} — 채점자가 입력 */
   essayScores: Record<string, number>;
+  /** {문항번호: 전사된 주관식 답안} — 선생님이 고치면 고친 값이 남는다 */
+  essayAnswers: Record<string, string>;
+  /** {문항번호: 보관함 경로} — 주관식 칸을 펴서 잘라낸 이미지(전사 대조용) */
+  essayCrops: Record<string, string>;
   reviewFlags: Array<Record<string, unknown>>;
   /** 판독 확신 정보 — 자동 검수 통과 판단용. 이전에 올린 답안지는 null. */
   readConfidence: ReadConfidence | null;
@@ -86,6 +92,8 @@ interface ScanRow {
   student_id_bubbles: string | null;
   answers: Record<string, MarkValue> | null;
   essay_scores: Record<string, number> | null;
+  essay_answers: Record<string, string> | null;
+  essay_crops: Record<string, string> | null;
   review_flags: Array<Record<string, unknown>> | null;
   read_confidence: ReadConfidence | null;
   status: ScanStatus;
@@ -96,7 +104,7 @@ interface ScanRow {
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,review_flags,read_confidence,status,reviewed_by,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,read_error,created_at,updated_at";
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -110,6 +118,8 @@ function mapScan(row: ScanRow): OmrScan {
     studentIdBubbles: row.student_id_bubbles,
     answers: row.answers ?? {},
     essayScores: row.essay_scores ?? {},
+    essayAnswers: row.essay_answers ?? {},
+    essayCrops: row.essay_crops ?? {},
     reviewFlags: row.review_flags ?? [],
     readConfidence: row.read_confidence ?? null,
     status: row.status,
@@ -131,6 +141,7 @@ export interface UpsertScanInput {
   answers?: Record<string, MarkValue>;
   reviewFlags?: Array<Record<string, unknown>>;
   readConfidence?: ReadConfidence | null;
+  essayCrops?: Record<string, string>;
   status?: ScanStatus;
   readError?: string | null;
 }
@@ -153,6 +164,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
         answers: input.answers ?? {},
         review_flags: input.reviewFlags ?? [],
         read_confidence: input.readConfidence ?? null,
+        essay_crops: input.essayCrops ?? {},
         status: input.status ?? "pending",
         read_error: input.readError ?? null,
       })),
@@ -185,6 +197,7 @@ export interface UpdateScanInput {
   studentId?: string | null;
   answers?: Record<string, MarkValue>;
   essayScores?: Record<string, number>;
+  essayAnswers?: Record<string, string>;
   status?: ScanStatus;
   reviewedBy?: string | null;
   readError?: string | null;
@@ -197,6 +210,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.studentId !== undefined) patch.student_id = input.studentId;
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
+  if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;
   if (input.status !== undefined) patch.status = input.status;
   if (input.reviewedBy !== undefined) patch.reviewed_by = input.reviewedBy;
   if (input.readError !== undefined) patch.read_error = input.readError;
@@ -220,8 +234,12 @@ export async function deleteScan(id: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("omr_scans").delete().eq("id", id);
   if (error) throw new Error(`판독 결과 삭제 실패: ${error.message}`);
-  // 원본·미리보기 파일도 함께 정리(실패해도 삭제 자체는 성공으로 둔다)
-  const paths = [scan?.scanPath, scan?.previewPath].filter((p): p is string => Boolean(p));
+  // 원본·미리보기·주관식 크롭도 함께 정리(실패해도 삭제 자체는 성공으로 둔다)
+  const paths = [
+    scan?.scanPath,
+    scan?.previewPath,
+    ...Object.values(scan?.essayCrops ?? {}),
+  ].filter((p): p is string => Boolean(p));
   if (paths.length > 0) {
     await supabase.storage.from(SCAN_BUCKET).remove(paths).catch(() => undefined);
   }
@@ -280,6 +298,39 @@ export async function uploadScanPreview(
     console.warn(`미리보기 저장 실패(${filename})`, error);
     return null;
   }
+}
+
+/**
+ * 주관식 칸 이미지를 보관한다. 문항마다 한 장이므로 경로에 문항번호를 넣는다.
+ * 실패해도 판독 자체는 성공으로 두므로 null을 반환한다.
+ */
+export async function uploadEssayCrop(
+  examId: string,
+  filename: string,
+  questionNo: number,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
+  const path = `${examId}/essays/${safe}__q${questionNo}.jpg`;
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.storage
+      .from(SCAN_BUCKET)
+      .upload(path, Buffer.from(bytes), { contentType: "image/jpeg", upsert: true });
+    if (error) {
+      console.warn(`주관식 이미지 저장 실패(${filename} ${questionNo}번): ${error.message}`);
+      return null;
+    }
+    return path;
+  } catch (error) {
+    console.warn(`주관식 이미지 저장 실패(${filename} ${questionNo}번)`, error);
+    return null;
+  }
+}
+
+/** 보관된 주관식 칸 이미지를 서버로 내려받는다(전사 요청용). */
+export async function downloadEssayCrop(path: string): Promise<Buffer | null> {
+  return downloadScanFile(path);
 }
 
 /** 검수 화면에서 이미지를 띄우기 위한 임시 열람 주소(기본 10분) */

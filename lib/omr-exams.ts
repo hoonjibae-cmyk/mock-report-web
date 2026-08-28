@@ -1,7 +1,7 @@
 // 시험(exams) 저장소 — Supabase service-role 경유
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import type { MarkValue } from "@/lib/omr-answers";
+import type { AnswerKeyValue, MarkValue } from "@/lib/omr-answers";
 import type { MockReference } from "@/lib/mock-reference";
 import {
   ACADEMY_NAME,
@@ -141,7 +141,7 @@ export async function getExam(id: string): Promise<OmrExam | null> {
 /** 정답키·배점·영역 저장 (전달된 항목만 갱신) */
 export async function updateExamAnswerKey(
   id: string,
-  answerKey: Record<string, MarkValue>,
+  answerKey: Record<string, AnswerKeyValue>,
   extra?: {
     points?: Record<string, number>;
     questionMeta?: Record<string, { area?: string }>;

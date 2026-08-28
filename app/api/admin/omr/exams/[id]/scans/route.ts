@@ -3,10 +3,12 @@ import { authorizeApi } from "@/lib/api-auth";
 import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { readScans } from "@/lib/omr-api";
 import { getExam, sheetSpecFor } from "@/lib/omr-exams";
+import { essayCountOf } from "@/lib/omr-scoring";
 import {
   downloadScanFile,
   listScans,
   upsertScans,
+  uploadEssayCrop,
   uploadScanFile,
   uploadScanPreview,
   type UpsertScanInput,
@@ -193,7 +195,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       paths.set(file.name, path);
     }
 
-    const read = await readScans(sheetSpecFor(exam), files);
+    const essayCount = essayCountOf(exam);
+    const read = await readScans(sheetSpecFor(exam), files, { essayCrops: essayCount > 0 });
 
     // 검수 화면에서 띄울 미리보기를 보관한다(장당 100KB 안팎).
     // 실패해도 판독 결과는 그대로 저장한다.
@@ -209,6 +212,26 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         if (stored) previewPaths.set(result.filename, stored);
       }),
     );
+
+    // 주관식 답안 칸 이미지를 보관한다. 나중에 전사하고, 채점 화면에서
+    // 전사 결과 옆에 나란히 띄워 사람이 대조할 수 있게 한다.
+    const essayCropPaths = new Map<string, Record<string, string>>();
+    if (essayCount > 0) {
+      await Promise.all(
+        read.results.map(async (result) => {
+          const crops = result.essay_crops_base64;
+          if (!crops) return;
+          const stored: Record<string, string> = {};
+          for (const [no, base64] of Object.entries(crops)) {
+            const path = await uploadEssayCrop(
+              id, result.filename, Number(no), Buffer.from(base64, "base64"),
+            );
+            if (path) stored[no] = path;
+          }
+          if (Object.keys(stored).length > 0) essayCropPaths.set(result.filename, stored);
+        }),
+      );
+    }
 
     let failedReadCount = 0;
     const rows: UpsertScanInput[] = read.results.map((result) => {
@@ -244,6 +267,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
               idConflict: Boolean(result.id_conflict),
             }
           : null,
+        essayCrops: essayCropPaths.get(result.filename) ?? {},
         status: "pending",
         readError: reason,
       };

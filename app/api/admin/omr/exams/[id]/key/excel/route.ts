@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import readXlsxFile from "read-excel-file/node";
 import { authorizeApi } from "@/lib/api-auth";
-import { compactMark, parseChoices, serializeChoices, type MarkValue } from "@/lib/omr-answers";
+import {
+  compactMark,
+  parseChoices,
+  serializeChoices,
+  type AnswerKeyValue,
+} from "@/lib/omr-answers";
 import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
 import { essayCountOf, normalizeDifficulty, pointFor } from "@/lib/omr-scoring";
 import { makeXlsx } from "@/lib/xlsx-lite";
@@ -59,7 +64,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       rows.push(metaRow(q, serializeChoices(exam.answerKey?.[String(q)]) || null));
     }
     for (let k = 1; k <= essayCount; k += 1) {
-      rows.push(metaRow(exam.numQuestions + k, "서술형"));
+      const q = exam.numQuestions + k;
+      // 주관식 정답은 문자열이라 객관식 answerKey와 자료형이 다르다.
+      // 같은 '정답' 칸을 쓰되, 저장된 문자열을 그대로 돌려준다.
+      const saved = exam.answerKey?.[String(q)];
+      rows.push(metaRow(q, typeof saved === "string" && saved ? saved : null));
     }
 
     const note = (text: string) => rows.push([text, null, null, null, null, null]);
@@ -70,6 +79,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     note("※ 분석영역: 큰 갈래입니다 — 듣기 · 문법 · 독해 · 어휘 · 서술형처럼 적습니다.");
     note("※ 내용: 세부 유형입니다 — 빈칸추론 · 어법성 판단 · 주제파악 · 글의 순서처럼 적습니다.");
     note("※ 난이도: 상 · 중 · 하 (A · B · C 도 됩니다). 비워 두면 실제 정답률에서 자동으로 매깁니다.");
+    if (essayCount > 0) {
+      note("※ 주관식 정답: 문장을 그대로 적습니다. 똑같이 맞다고 볼 답이 여럿이면 | 로 나눠 적으세요.");
+      note("     예: He is looking forward to seeing you. | He's looking forward to seeing you.");
+      note("     적어 두면 전사 결과가 이와 정확히 일치하는 답안만 자동으로 만점 처리됩니다.");
+    }
     note("※ 분석영역과 내용은 각각 성적표의 <영역별 분석>과 <내용별 분석>에 실립니다. 비워 두면 그 분석만 빠집니다.");
 
     const buf = makeXlsx("정답", rows);
@@ -121,7 +135,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const essayCount = essayCountOf(exam);
     const lastQuestion = exam.numQuestions + essayCount;
 
-    const answerKey: Record<string, MarkValue> = {};
+    const answerKey: Record<string, AnswerKeyValue> = {};
     const points: Record<string, number> = {};
     const questionMeta: Record<string, { area?: string; content?: string; difficulty?: string }> = {};
     const problems: string[] = [];
@@ -142,6 +156,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
             const packed = compactMark(parsed);
             if (packed != null) answerKey[String(q)] = packed;
           }
+        } else {
+          // 주관식 정답은 문장이므로 문자열 그대로 담는다. 여러 개면 | 로 나눠 적는다.
+          // 양식이 기본으로 넣던 '서술형' 자리표시자는 정답이 아니므로 버린다.
+          const raw = String(row?.[1] ?? "").trim();
+          if (raw && raw !== "서술형") answerKey[String(q)] = raw.slice(0, 2000);
         }
 
         const rawPoint = row?.[2];

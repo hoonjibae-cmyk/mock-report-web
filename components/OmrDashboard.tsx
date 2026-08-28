@@ -321,6 +321,12 @@ export default function OmrDashboard({
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/scans`}>
                           스캔 · 검수
                         </Link>
+                        {/* 주관식이 있는 시험에서만 — 없으면 눌러도 할 일이 없다 */}
+                        {(exam.omrConfig?.essay_count ?? 0) > 0 ? (
+                          <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/essay`}>
+                            주관식 채점
+                          </Link>
+                        ) : null}
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/reports`}>
                           성적표
                         </Link>

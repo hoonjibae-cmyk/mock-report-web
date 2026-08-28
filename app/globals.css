@@ -1077,6 +1077,87 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 
 /* --- 영역별 성취 --- */
+/* --- 주관식 묶음 채점 --- */
+.essay-groups { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.essay-group {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 11px 13px;
+  background: #fff;
+}
+.essay-group.match { border-color: #bfe3cd; background: #f6fdf9; }
+.essay-group.blank { background: #fafbfc; }
+
+.essay-group-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.essay-count {
+  flex: none;
+  min-width: 44px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--navy-deep);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.essay-text {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--navy-deep);
+  word-break: break-word;
+}
+.essay-text em { color: var(--muted); font-style: normal; }
+.essay-badge {
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.essay-score-chip {
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: #e8f1fd;
+  color: #1558b0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.essay-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line);
+}
+.essay-actions > .subtle { margin: 0; font-size: 12px; }
+.essay-score-input { width: 74px; margin: 0; font-size: 13px; }
+.essay-actions > .button:last-of-type { margin-left: auto; }
+
+.accepted { font-size: 12px; background: #eef3fa; padding: 1px 6px; border-radius: 5px; }
+
+.essay-crops { display: flex; flex-direction: column; gap: 12px; margin-top: 11px; }
+.essay-crop-row { padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: #fbfcfe; }
+.essay-crop-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  color: var(--navy-deep);
+}
+.essay-crop { display: block; width: 100%; border-radius: 6px; border: 1px solid var(--line); }
+.essay-crop-loading { height: 90px; border-radius: 6px; background: #eef1f6; }
+.essay-crop-empty { margin: 0; padding: 14px 0; text-align: center; font-size: 12.5px; color: var(--muted); }
+.essay-fix { display: flex; gap: 6px; margin-top: 7px; }
+.essay-fix > input { flex: 1; margin: 0; font-size: 13px; }
+
 /* --- 의견 작성 방식 고르기 --- */
 .style-picker-panel { display: flex; flex-direction: column; gap: 12px; }
 .style-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
