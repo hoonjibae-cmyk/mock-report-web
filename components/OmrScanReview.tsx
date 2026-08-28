@@ -66,8 +66,8 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   }
 
   async function upload() {
-    const files = fileRef.current?.files;
-    if (!files || files.length === 0) {
+    const picked = fileRef.current?.files;
+    if (!picked || picked.length === 0) {
       setError("업로드할 스캔 이미지를 선택해 주세요.");
       return;
     }
@@ -75,12 +75,63 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     setError("");
     setMessage("");
     try {
+      const all = Array.from(picked);
+      // Vercel 서버리스 함수는 요청 본문이 4.5MB로 제한된다.
+      // 큰 파일(또는 합계가 큰 묶음)은 보관함에 직접 올리고 경로만 서버에 넘긴다.
+      const LIMIT = 3.5 * 1024 * 1024;
+      const big: File[] = [];
+      const small: File[] = [];
+      let smallTotal = 0;
+      for (const file of all) {
+        if (file.size > LIMIT || smallTotal + file.size > LIMIT) {
+          big.push(file);
+        } else {
+          small.push(file);
+          smallTotal += file.size;
+        }
+      }
+
+      const storagePaths: Array<{ path: string; filename: string }> = [];
+      if (big.length > 0) {
+        setMessage(`큰 파일 ${big.length}개를 보관함으로 올리는 중…`);
+        const urlRes = await fetch(`/api/admin/omr/exams/${exam?.id}/scans/upload-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filenames: big.map((f) => f.name) }),
+        });
+        const urlData = await urlRes.json().catch(() => ({}));
+        if (!urlRes.ok) throw new Error(urlData.error || "업로드 준비에 실패했습니다.");
+
+        const uploads: Array<{ filename: string; path: string; signedUrl: string }> =
+          urlData.uploads ?? [];
+        for (const file of big) {
+          const target = uploads.find((u) => u.filename === file.name);
+          if (!target) throw new Error(`'${file.name}' 업로드 주소를 받지 못했습니다.`);
+          const put = await fetch(target.signedUrl, {
+            method: "PUT",
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+            body: file,
+          });
+          if (!put.ok) {
+            throw new Error(`'${file.name}' 업로드에 실패했습니다. 파일 크기와 연결을 확인해 주세요.`);
+          }
+          storagePaths.push({ path: target.path, filename: file.name });
+        }
+      }
+
+      setMessage("판독 중…");
       const form = new FormData();
-      for (const file of Array.from(files)) form.append("files", file);
+      for (const file of small) form.append("files", file);
+      if (storagePaths.length > 0) form.append("storagePaths", JSON.stringify(storagePaths));
       const res = await fetch(`/api/admin/omr/exams/${exam?.id}/scans`, {
         method: "POST",
         body: form,
       });
+      if (res.status === 413) {
+        throw new Error(
+          "파일이 너무 커서 서버가 받지 못했습니다. 스캔 해상도를 낮추거나 파일을 나눠 올려 주세요.",
+        );
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "판독하지 못했습니다.");
       setScans(data.scans ?? []);
@@ -202,7 +253,8 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
               <p className="subtle">
                 답안지를 스캔한 이미지(JPG·PNG) 또는 <strong>PDF</strong>를 한 번에 여러 개 올릴
                 수 있습니다. 여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동
-                분리됩니다. 업로드하면 바로 판독하며, 원본은 7일간 보관됩니다.
+                분리됩니다. 업로드하면 바로 판독하며, 원본은 7일간 보관됩니다. 큰 파일은
+                보관함으로 직접 올라가므로 용량 제한 없이 처리됩니다.
               </p>
             </div>
           </div>

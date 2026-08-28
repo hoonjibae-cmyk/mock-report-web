@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { readScans } from "@/lib/omr-api";
 import { getExam, sheetSpecFor } from "@/lib/omr-exams";
-import { listScans, upsertScans, uploadScanFile, type UpsertScanInput } from "@/lib/omr-scans";
+import {
+  downloadScanFile,
+  listScans,
+  upsertScans,
+  uploadScanFile,
+  type UpsertScanInput,
+} from "@/lib/omr-scans";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -11,8 +17,15 @@ const MAX_FILES = 60;
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 이미지 장당 15MB
 const MAX_PDF_BYTES = 60 * 1024 * 1024; // PDF는 여러 장이 들어가므로 60MB
 
-function isPdf(file: File): boolean {
+function isPdf(file: { name: string; type?: string }): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function contentTypeFor(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".png")) return "image/png";
+  return "image/jpeg";
 }
 
 /** PDF 페이지 결과("스캔.pdf#p3")를 업로드 원본 파일명("스캔.pdf")으로 되돌린다 */
@@ -86,7 +99,41 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const form = await request.formData();
-    const files = form.getAll("files").filter((entry): entry is File => entry instanceof File);
+    const direct = form.getAll("files").filter((entry): entry is File => entry instanceof File);
+
+    // 큰 파일은 브라우저가 Storage에 직접 올리고 경로만 전달한다(Vercel 4.5MB 우회).
+    let storagePaths: Array<{ path: string; filename: string }> = [];
+    const rawPaths = form.get("storagePaths");
+    if (typeof rawPaths === "string" && rawPaths.trim()) {
+      try {
+        const parsed = JSON.parse(rawPaths);
+        if (Array.isArray(parsed)) {
+          storagePaths = parsed
+            .filter((entry) => entry && typeof entry.path === "string" && typeof entry.filename === "string")
+            .slice(0, MAX_FILES);
+        }
+      } catch {
+        return NextResponse.json({ error: "업로드 정보를 읽지 못했습니다." }, { status: 400 });
+      }
+    }
+
+    const files: File[] = [...direct];
+    // 이미 Storage에 있는 파일은 서버가 내려받아 판독에 함께 넘긴다.
+    const preUploaded = new Map<string, string>();
+    for (const entry of storagePaths) {
+      const buffer = await downloadScanFile(entry.path);
+      if (!buffer) {
+        return NextResponse.json(
+          { error: `'${entry.filename}' 파일을 보관함에서 읽지 못했습니다. 다시 업로드해 주세요.` },
+          { status: 400 },
+        );
+      }
+      files.push(
+        new File([new Uint8Array(buffer)], entry.filename, { type: contentTypeFor(entry.filename) }),
+      );
+      preUploaded.set(entry.filename, entry.path);
+    }
+
     if (files.length === 0) {
       return NextResponse.json({ error: "업로드할 스캔 이미지를 선택해 주세요." }, { status: 400 });
     }
@@ -96,7 +143,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         { status: 400 },
       );
     }
-    const tooBig = files.find(
+    const tooBig = direct.find(
       (file) => file.size > (isPdf(file) ? MAX_PDF_BYTES : MAX_IMAGE_BYTES),
     );
     if (tooBig) {
@@ -109,13 +156,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     // 원본 보관 — 버킷이 없으면 경로 없이 진행(판독은 계속)
-    const paths = new Map<string, string | null>();
-    for (const file of files) {
+    const paths = new Map<string, string | null>(preUploaded);
+    for (const file of direct) {
       const path = await uploadScanFile(
         id,
         file.name,
         await file.arrayBuffer(),
-        file.type || (isPdf(file) ? "application/pdf" : "image/jpeg"),
+        file.type || contentTypeFor(file.name),
       );
       paths.set(file.name, path);
     }
