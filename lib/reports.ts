@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
 import type { ReportDbRow } from "@/lib/types";
 
 export interface AdminReportListItem {
@@ -16,6 +17,17 @@ export interface AdminReportListItem {
   lastViewedAt: string | null;
   createdAt: string;
   createdByName: string;
+  /**
+   * 이 성적표가 속한 OMR 시험의 유형. 전국 모의고사 엑셀로 만든 성적표는
+   * 연결된 시험이 없어(exam_id null) 국영수 모의고사로 본다.
+   */
+  examType: ExamType;
+}
+
+function examTypeOf(value: unknown): ExamType {
+  const row = Array.isArray(value) ? value[0] : value;
+  const key = (row as { exam_type?: unknown } | null | undefined)?.exam_type;
+  return typeof key === "string" && key in EXAM_TYPE_LABELS ? (key as ExamType) : "mock";
 }
 
 export async function listAdminReports(limit = 300): Promise<AdminReportListItem[]> {
@@ -23,7 +35,7 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
   const { data, error } = await supabase
     .from("student_reports")
     .select(
-      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name)",
+      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name),exams(exam_type)",
     )
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -45,6 +57,9 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
     lastViewedAt: row.last_viewed_at,
     createdAt: row.created_at,
     createdByName: row.report_batches?.created_by_name ?? "관리자",
+    // PostgREST는 관계를 객체 또는 배열로 돌려줄 수 있어 둘 다 받는다.
+    // 연결된 시험이 없는 성적표(전국 모의고사 엑셀)는 국영수로 본다.
+    examType: examTypeOf(row.exams),
   }));
 }
 
