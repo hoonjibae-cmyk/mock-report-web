@@ -5,6 +5,26 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const SCAN_BUCKET = "omr-scans";
 
+/**
+ * DB 스키마가 코드보다 뒤처졌을 때(마이그레이션 미실행) 나오는 원문 오류를
+ * 무엇을 해야 하는지 알 수 있는 문장으로 바꾼다. 데이터는 그대로 있고 조회만 막힌 상태다.
+ */
+function describeDbError(message: string): string {
+  const missingColumn = message.match(/column [\w.]*?(\w+) does not exist/i);
+  if (missingColumn) {
+    const column = missingColumn[1];
+    const guide: Record<string, string> = {
+      essay_scores: "supabase/migration_v4_essay_scores.sql",
+    };
+    const file = guide[column] ?? "supabase 폴더의 최신 migration 파일";
+    return `데이터베이스 업데이트가 필요합니다. Supabase → SQL Editor에서 ${file}을 실행해 주세요. (기존 판독 결과는 그대로 보관되어 있으며, 실행 후 바로 다시 보입니다. 누락된 항목: ${column})`;
+  }
+  if (/relation .* does not exist/i.test(message)) {
+    return `데이터베이스 표가 아직 없습니다. Supabase → SQL Editor에서 supabase/migration_v2_omr.sql, migration_v3_omr_scans.sql을 순서대로 실행해 주세요. (원문: ${message})`;
+  }
+  return message;
+}
+
 export type ScanStatus = "pending" | "reviewed";
 
 export interface OmrScan {
@@ -103,7 +123,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
       { onConflict: "exam_id,filename" },
     )
     .select(SELECT);
-  if (error) throw new Error(`판독 결과 저장 실패: ${error.message}`);
+  if (error) throw new Error(`판독 결과 저장 실패 — ${describeDbError(error.message)}`);
   return (data as ScanRow[]).map(mapScan);
 }
 
@@ -114,14 +134,14 @@ export async function listScans(examId: string): Promise<OmrScan[]> {
     .select(SELECT)
     .eq("exam_id", examId)
     .order("created_at", { ascending: true });
-  if (error) throw new Error(`판독 목록을 불러오지 못했습니다: ${error.message}`);
+  if (error) throw new Error(`판독 목록을 불러오지 못했습니다 — ${describeDbError(error.message)}`);
   return (data as ScanRow[]).map(mapScan);
 }
 
 export async function getScan(id: string): Promise<OmrScan | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("omr_scans").select(SELECT).eq("id", id).maybeSingle();
-  if (error) throw new Error(`판독 결과를 불러오지 못했습니다: ${error.message}`);
+  if (error) throw new Error(`판독 결과를 불러오지 못했습니다 — ${describeDbError(error.message)}`);
   return data ? mapScan(data as ScanRow) : null;
 }
 
@@ -151,7 +171,9 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
     .eq("id", id)
     .select(SELECT)
     .single();
-  if (error || !data) throw new Error(`검수 저장 실패: ${error?.message ?? "알 수 없는 오류"}`);
+  if (error || !data) {
+    throw new Error(`검수 저장 실패 — ${describeDbError(error?.message ?? "알 수 없는 오류")}`);
+  }
   return mapScan(data as ScanRow);
 }
 
