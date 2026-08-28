@@ -126,12 +126,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const supabase = getSupabaseAdmin();
 
     // 성장 추이: 같은 student_key + 같은 시험 유형의 이전 C_generic 성적표
+    // + 재생성 시 이전 성적표에 작성해 둔 담임 개별 코멘트 승계
     const keys = [...new Set(reviewed.map((scan) => scan.studentId as string))];
     const growthByKey = new Map<string, GrowthPoint[]>();
+    const commentByKey = new Map<string, unknown>();
     if (keys.length > 0) {
       const { data: prior } = await supabase
         .from("student_reports")
-        .select("student_key,exam_id,report_data,created_at")
+        .select("student_key,exam_id,report_data,teacher_comment,created_at")
         .in("student_key", keys)
         .not("exam_id", "is", null)
         .order("created_at", { ascending: true });
@@ -139,7 +141,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const data = row.report_data;
         if (!isGenericReport(data)) continue;
         if (data.examType !== exam.examType) continue;
-        if (row.exam_id === id) continue; // 재생성 시 같은 시험 중복 방지
+        if (row.exam_id === id) {
+          // 같은 시험의 이전 성적표: 성장추이에서는 제외하고, 담임 코멘트만 승계(최신 우선)
+          if (row.teacher_comment) commentByKey.set(row.student_key as string, row.teacher_comment);
+          continue;
+        }
         const key = row.student_key as string;
         const list = growthByKey.get(key) ?? [];
         // 같은 시험은 최신 생성본 하나만
@@ -244,6 +250,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         exam_id: id,
         student_key: key,
         scan_path: scan.scanPath,
+        teacher_comment: commentByKey.get(key) ?? null,
       };
     });
 

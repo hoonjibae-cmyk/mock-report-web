@@ -1,8 +1,9 @@
 import AcademyLogo from "@/components/AcademyLogo";
-import GenericReport from "@/components/GenericReport";
+import GenericReport, { type ReportComments } from "@/components/GenericReport";
 import PinGate from "@/components/PinGate";
 import ReportView from "@/components/ReportView";
 import { hasReportAccess } from "@/lib/auth";
+import { getExamOverview, parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { getReportByToken, recordReportView } from "@/lib/reports";
 
@@ -36,6 +37,18 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   }
 
   await recordReportView(row.id, row.view_count).catch(() => undefined);
-  if (isGenericReport(row.report_data)) return <GenericReport report={row.report_data} />;
+  if (isGenericReport(row.report_data)) {
+    // 담임 의견(총평·개별)은 성적표 생성 이후에도 수정되므로 열람 시점에 읽는다.
+    const personal = parseTeacherComment(row.teacher_comment);
+    const overview = row.exam_id
+      ? await getExamOverview(row.exam_id).catch(() => null)
+      : null;
+    const comments: ReportComments = {
+      overview: overview?.status === "final" ? overview.final : null,
+      personal: personal.status === "final" ? personal.personalFinal : null,
+      keywords: personal.status === "final" ? personal.displayKeywords : [],
+    };
+    return <GenericReport report={row.report_data} comments={comments} />;
+  }
   return <ReportView report={row.report_data} />;
 }
