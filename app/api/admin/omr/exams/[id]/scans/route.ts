@@ -8,7 +8,17 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_FILES = 60;
-const MAX_FILE_BYTES = 15 * 1024 * 1024; // 장당 15MB
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 이미지 장당 15MB
+const MAX_PDF_BYTES = 60 * 1024 * 1024; // PDF는 여러 장이 들어가므로 60MB
+
+function isPdf(file: File): boolean {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+/** PDF 페이지 결과("스캔.pdf#p3")를 업로드 원본 파일명("스캔.pdf")으로 되돌린다 */
+function baseFilename(name: string): string {
+  return name.replace(/#p\d+$/, "");
+}
 
 // 판독된 답안: {"1": 3, ...} 형태로 정규화(값은 1-base 보기번호 또는 null)
 function normalizeAnswers(raw: Record<string, number | null> | undefined, total: number) {
@@ -60,10 +70,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         { status: 400 },
       );
     }
-    const tooBig = files.find((file) => file.size > MAX_FILE_BYTES);
+    const tooBig = files.find(
+      (file) => file.size > (isPdf(file) ? MAX_PDF_BYTES : MAX_IMAGE_BYTES),
+    );
     if (tooBig) {
       return NextResponse.json(
-        { error: `'${tooBig.name}' 파일이 너무 큽니다(장당 15MB 이하).` },
+        {
+          error: `'${tooBig.name}' 파일이 너무 큽니다(이미지 15MB · PDF 60MB 이하).`,
+        },
         { status: 400 },
       );
     }
@@ -75,7 +89,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         id,
         file.name,
         await file.arrayBuffer(),
-        file.type || "image/jpeg",
+        file.type || (isPdf(file) ? "application/pdf" : "image/jpeg"),
       );
       paths.set(file.name, path);
     }
@@ -85,7 +99,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const rows: UpsertScanInput[] = read.results.map((result) => ({
       examId: id,
       filename: result.filename,
-      scanPath: paths.get(result.filename) ?? null,
+      // PDF 페이지 결과는 원본 PDF의 저장 경로를 공유한다
+      scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
       studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
       studentIdQr: result.student_id_qr ?? null,
       studentIdBubbles: result.student_id_bubbles ?? null,
@@ -99,7 +114,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       rows.push({
         examId: id,
         filename: problem.filename,
-        scanPath: paths.get(problem.filename) ?? null,
+        scanPath: paths.get(problem.filename) ?? paths.get(baseFilename(problem.filename)) ?? null,
         answers: normalizeAnswers(undefined, exam.numQuestions),
         reviewFlags: [],
         status: "pending",

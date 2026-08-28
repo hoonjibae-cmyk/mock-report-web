@@ -199,15 +199,22 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
               <p className="eyebrow">STEP 1</p>
               <h2>스캔 업로드</h2>
               <p className="subtle">
-                답안지를 스캔한 이미지(JPG·PNG)를 한 번에 여러 장 올릴 수 있습니다. 업로드하면 바로
-                판독합니다. 원본은 7일간 보관됩니다.
+                답안지를 스캔한 이미지(JPG·PNG) 또는 <strong>PDF</strong>를 한 번에 여러 개 올릴
+                수 있습니다. 여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동
+                분리됩니다. 업로드하면 바로 판독하며, 원본은 7일간 보관됩니다.
               </p>
             </div>
           </div>
           <div className="form-row">
             <label style={{ flex: 1 }}>
-              <span>스캔 이미지</span>
-              <input ref={fileRef} type="file" accept="image/*" multiple disabled={uploading} />
+              <span>스캔 파일 (이미지 · PDF)</span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,.pdf,application/pdf"
+                multiple
+                disabled={uploading}
+              />
             </label>
           </div>
           <button className="button primary" onClick={upload} disabled={uploading}>
