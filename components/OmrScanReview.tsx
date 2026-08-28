@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ScanPreview from "@/components/ScanPreview";
@@ -40,6 +40,60 @@ function hasIdFlag(scan: OmrScan): boolean {
   return (scan.reviewFlags ?? []).some((flag) => flag && flag.type === "id");
 }
 
+/**
+ * 한 번에 보낼 묶음 크기. 60장을 한 요청에 넣으면 판독에 1~2분이 걸리고, 그
+ * 사이 연결이 끊기면 처음부터 다시 해야 한다. 나눠 보내면 끊겨도 그 묶음만
+ * 다시 하면 되고 진행 상황도 보인다.
+ */
+const UPLOAD_BATCH = 20;
+
+/** Vercel 서버리스 함수 요청 본문 제한(4.5MB)에 여유를 둔 값 */
+const DIRECT_BODY_LIMIT = 3.5 * 1024 * 1024;
+
+/** 파일 목록을 묶음으로 나눈다(장수 상한 + 본문 용량 상한). */
+function chunkForUpload(files: File[]): File[][] {
+  const batches: File[][] = [];
+  let current: File[] = [];
+  let bytes = 0;
+  for (const file of files) {
+    // 큰 파일은 보관함을 거치므로 본문 용량에 잡히지 않는다
+    const counted = file.size > DIRECT_BODY_LIMIT ? 0 : file.size;
+    const wouldOverflow =
+      current.length >= UPLOAD_BATCH || (counted > 0 && bytes + counted > DIRECT_BODY_LIMIT);
+    if (current.length > 0 && wouldOverflow) {
+      batches.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(file);
+    bytes += counted;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/** 여러 장이 들어 있을 법한 PDF인지 — 안내 문구를 바꾸는 용도 */
+function looksLikeMultiPagePdf(files: File[]): boolean {
+  return files.some(
+    (f) => (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) && f.size > 2 * 1024 * 1024,
+  );
+}
+
+/** 서버가 판정한 '사람이 봐야 하는 이유' */
+interface ReviewReason {
+  code: string;
+  label: string;
+  questions?: number[];
+}
+
+interface ReviewSummary {
+  total: number;
+  reviewed: number;
+  autoReady: number;
+  needsPerson: Array<{ id: string; filename: string; reasons: ReviewReason[] }>;
+  directoryUsed: boolean;
+}
+
 export default function OmrScanReview({ exam, initialScans, setupError, canEdit }: Props) {
   const [scans, setScans] = useState<OmrScan[]>(initialScans);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
@@ -56,10 +110,70 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   const total = exam?.numQuestions ?? 0;
   const choices = exam?.numChoices ?? 5;
 
+  const [summary, setSummary] = useState<ReviewSummary | null>(null);
+  const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [approving, setApproving] = useState(false);
+
   const pendingCount = useMemo(
     () => scans.filter((scan) => scan.status !== "reviewed").length,
     [scans],
   );
+
+  /**
+   * 자동 통과 판정은 서버에서 받아 온다. 학생 명부 대조와 수험번호 중복 검사는
+   * 답안지 한 장만 봐서는 알 수 없어서, 화면에서 흉내 낼 수 없다.
+   */
+  const loadSummary = useCallback(async () => {
+    if (!exam?.id) return;
+    try {
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/scans/review`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setSummary(data as ReviewSummary);
+    } catch {
+      // 요약을 못 받아도 검수 자체는 그대로 할 수 있으므로 조용히 넘어간다
+    }
+  }, [exam?.id]);
+
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary, scans]);
+
+  /** {스캔ID: 사람이 봐야 하는 이유} */
+  const reasonsById = useMemo(() => {
+    const map = new Map<string, ReviewReason[]>();
+    for (const entry of summary?.needsPerson ?? []) map.set(entry.id, entry.reasons);
+    return map;
+  }, [summary]);
+
+  const visibleScans = useMemo(
+    () => (onlyFlagged ? scans.filter((scan) => reasonsById.has(scan.id)) : scans),
+    [scans, onlyFlagged, reasonsById],
+  );
+
+  /** 판독기가 확신한 답안지를 한 번에 확인 처리 */
+  async function approveAuto() {
+    if (!exam?.id) return;
+    setApproving(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/scans/review`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "자동 확인에 실패했습니다.");
+      if (data.scans) setScans(data.scans);
+      setMessage(
+        data.approved > 0
+          ? `${data.approved}장 자동 확인 완료.${data.remaining ? ` 남은 ${data.remaining}장은 직접 확인해 주세요.` : " 모두 확인되었습니다."}`
+          : (data.message ?? "자동으로 확인할 수 있는 답안지가 없습니다."),
+      );
+      if (data.remaining > 0) setOnlyFlagged(true);
+      await loadSummary();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "자동 확인 중 오류가 발생했습니다.");
+    } finally {
+      setApproving(false);
+    }
+  }
 
   function draftFor(scan: OmrScan): Draft {
     return drafts[scan.id] ?? { studentId: scan.studentId ?? "", answers: scan.answers ?? {} };
@@ -90,6 +204,68 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     });
   }
 
+  interface BatchResult {
+    scans?: OmrScan[];
+    read?: number;
+    failed?: number;
+    lowConfidence?: number;
+    storageSkipped?: boolean;
+  }
+
+  /** 묶음 하나를 올리고 판독한다. 큰 파일은 보관함을 거쳐 본문 제한을 피한다. */
+  async function uploadBatch(
+    files: File[],
+    onStage: (stage: string) => void,
+  ): Promise<BatchResult> {
+    const big = files.filter((f) => f.size > DIRECT_BODY_LIMIT);
+    const small = files.filter((f) => f.size <= DIRECT_BODY_LIMIT);
+
+    const storagePaths: Array<{ path: string; filename: string }> = [];
+    if (big.length > 0) {
+      onStage(`큰 파일 ${big.length}개를 보관함으로 올리는 중`);
+      const urlRes = await fetch(`/api/admin/omr/exams/${exam?.id}/scans/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filenames: big.map((f) => f.name) }),
+      });
+      const urlData = await urlRes.json().catch(() => ({}));
+      if (!urlRes.ok) throw new Error(urlData.error || "업로드 준비에 실패했습니다.");
+
+      const uploads: Array<{ filename: string; path: string; signedUrl: string }> =
+        urlData.uploads ?? [];
+      for (const file of big) {
+        const target = uploads.find((u) => u.filename === file.name);
+        if (!target) throw new Error(`'${file.name}' 업로드 주소를 받지 못했습니다.`);
+        const put = await fetch(target.signedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        if (!put.ok) {
+          throw new Error(`'${file.name}' 업로드에 실패했습니다. 파일 크기와 연결을 확인해 주세요.`);
+        }
+        storagePaths.push({ path: target.path, filename: file.name });
+      }
+    }
+
+    onStage("판독 중");
+    const form = new FormData();
+    for (const file of small) form.append("files", file);
+    if (storagePaths.length > 0) form.append("storagePaths", JSON.stringify(storagePaths));
+    const res = await fetch(`/api/admin/omr/exams/${exam?.id}/scans`, {
+      method: "POST",
+      body: form,
+    });
+    if (res.status === 413) {
+      throw new Error(
+        "파일이 너무 커서 서버가 받지 못했습니다. 스캔 해상도를 낮추거나 파일을 나눠 올려 주세요.",
+      );
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "판독하지 못했습니다.");
+    return data as BatchResult;
+  }
+
   async function upload() {
     if (picked.length === 0) {
       setError("업로드할 스캔 이미지를 선택해 주세요.");
@@ -99,74 +275,41 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     setError("");
     setMessage("");
     try {
-      const all = picked;
-      // Vercel 서버리스 함수는 요청 본문이 4.5MB로 제한된다.
-      // 큰 파일(또는 합계가 큰 묶음)은 보관함에 직접 올리고 경로만 서버에 넘긴다.
-      const LIMIT = 3.5 * 1024 * 1024;
-      const big: File[] = [];
-      const small: File[] = [];
-      let smallTotal = 0;
-      for (const file of all) {
-        if (file.size > LIMIT || smallTotal + file.size > LIMIT) {
-          big.push(file);
-        } else {
-          small.push(file);
-          smallTotal += file.size;
-        }
-      }
+      // 여러 장을 한 요청에 몰아 보내면 중간에 끊겼을 때 전부 다시 올려야 한다.
+      // 묶음으로 나눠 보내면 끊겨도 그 묶음만 다시 하면 되고, 진행 상황도 보인다.
+      // (60장이 한 PDF에 들어 있으면 파일이 1개라 나눌 수 없다 — 아래에서 안내한다)
+      const batches = chunkForUpload(picked);
+      const totalFiles = picked.length;
+      let done = 0;
+      let latest: { scans?: OmrScan[] } = {};
+      const tally = { read: 0, failed: 0, lowConfidence: 0, storageSkipped: true };
 
-      const storagePaths: Array<{ path: string; filename: string }> = [];
-      if (big.length > 0) {
-        setMessage(`큰 파일 ${big.length}개를 보관함으로 올리는 중…`);
-        const urlRes = await fetch(`/api/admin/omr/exams/${exam?.id}/scans/upload-url`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filenames: big.map((f) => f.name) }),
+      for (const [index, batch] of batches.entries()) {
+        const where = batches.length > 1 ? ` (${index + 1}/${batches.length}묶음)` : "";
+        const data = await uploadBatch(batch, (stage) => {
+          setMessage(
+            `${stage}${where} — ${done}/${totalFiles}개 완료` +
+              (looksLikeMultiPagePdf(batch) ? " · 여러 장이 든 PDF는 1~2분 걸릴 수 있습니다" : ""),
+          );
         });
-        const urlData = await urlRes.json().catch(() => ({}));
-        if (!urlRes.ok) throw new Error(urlData.error || "업로드 준비에 실패했습니다.");
-
-        const uploads: Array<{ filename: string; path: string; signedUrl: string }> =
-          urlData.uploads ?? [];
-        for (const file of big) {
-          const target = uploads.find((u) => u.filename === file.name);
-          if (!target) throw new Error(`'${file.name}' 업로드 주소를 받지 못했습니다.`);
-          const put = await fetch(target.signedUrl, {
-            method: "PUT",
-            headers: { "Content-Type": file.type || "application/octet-stream" },
-            body: file,
-          });
-          if (!put.ok) {
-            throw new Error(`'${file.name}' 업로드에 실패했습니다. 파일 크기와 연결을 확인해 주세요.`);
-          }
-          storagePaths.push({ path: target.path, filename: file.name });
-        }
+        latest = data;
+        tally.read += data.read ?? 0;
+        tally.failed += data.failed ?? 0;
+        tally.lowConfidence += data.lowConfidence ?? 0;
+        if (!data.storageSkipped) tally.storageSkipped = false;
+        done += batch.length;
       }
 
-      setMessage("판독 중…");
-      const form = new FormData();
-      for (const file of small) form.append("files", file);
-      if (storagePaths.length > 0) form.append("storagePaths", JSON.stringify(storagePaths));
-      const res = await fetch(`/api/admin/omr/exams/${exam?.id}/scans`, {
-        method: "POST",
-        body: form,
-      });
-      if (res.status === 413) {
-        throw new Error(
-          "파일이 너무 커서 서버가 받지 못했습니다. 스캔 해상도를 낮추거나 파일을 나눠 올려 주세요.",
-        );
-      }
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "판독하지 못했습니다.");
-      setScans(data.scans ?? []);
+      setScans(latest.scans ?? []);
       setDrafts({});
       setPicked([]);
       if (fileRef.current) fileRef.current.value = "";
-      const parts = [`${data.read ?? 0}장 판독 완료`];
-      if (data.failed) parts.push(`${data.failed}장 실패`);
-      if (data.lowConfidence) parts.push(`${data.lowConfidence}장 판독 확인 필요`);
-      if (data.storageSkipped) parts.push("원본 미보관(omr-scans 버킷 없음)");
+      const parts = [`${tally.read}장 판독 완료`];
+      if (tally.failed) parts.push(`${tally.failed}장 실패`);
+      if (tally.lowConfidence) parts.push(`${tally.lowConfidence}장 판독 확인 필요`);
+      if (tally.storageSkipped) parts.push("원본 미보관(omr-scans 버킷 없음)");
       setMessage(parts.join(" · "));
+      await loadSummary();
     } catch (err) {
       setError(err instanceof Error ? err.message : "판독 중 오류가 발생했습니다.");
     } finally {
@@ -386,14 +529,66 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
             <p className="eyebrow">STEP 2</p>
             <h2>검수</h2>
             <p className="subtle">
-              총 {scans.length}장 · 검수 필요 {pendingCount}장. 미표기·이중표기 문항은 아래에
-              표시됩니다. 확인 후 <strong>검수 확인</strong>을 누르면 성적표 생성에 사용됩니다.
+              총 {scans.length}장 · 검수 필요 {pendingCount}장. 판독기가 확신하지 못한 답안지만
+              사람이 확인하면 됩니다.
             </p>
           </div>
         </div>
 
+        {summary && pendingCount > 0 ? (
+          <div className="review-summary">
+            <div className="review-counts">
+              <span>
+                총 <strong>{summary.total}</strong>장
+              </span>
+              <span className="ok">
+                검수 완료 <strong>{summary.reviewed}</strong>장
+              </span>
+              <span className="auto">
+                자동 확인 가능 <strong>{summary.autoReady}</strong>장
+              </span>
+              <span className={summary.needsPerson.length > 0 ? "need" : ""}>
+                확인 필요 <strong>{summary.needsPerson.length}</strong>장
+              </span>
+            </div>
+
+            <div className="review-actions">
+              {summary.needsPerson.length > 0 ? (
+                <label className="review-toggle">
+                  <input
+                    type="checkbox"
+                    checked={onlyFlagged}
+                    onChange={(e) => setOnlyFlagged(e.target.checked)}
+                  />
+                  확인 필요만 보기
+                </label>
+              ) : null}
+              {canEdit && summary.autoReady > 0 ? (
+                <button className="button primary" disabled={approving} onClick={approveAuto}>
+                  {approving ? "확인 중…" : `${summary.autoReady}장 자동 확인`}
+                </button>
+              ) : null}
+            </div>
+
+            <p className="review-note">
+              자동 확인은 <strong>판독기가 확신한 답안지만</strong> 대상입니다 — 표기가 흐리거나
+              경계에 걸린 문항, 수험번호가 이상하거나 다른 답안지와 겹치는 경우는 제외됩니다.
+              {summary.directoryUsed
+                ? " 학생 명부에 없는 수험번호도 걸러냅니다."
+                : " (학생 정보 연동을 켜면 명부에 없는 수험번호도 걸러냅니다.)"}
+            </p>
+          </div>
+        ) : null}
+
         {scans.length === 0 ? (
           <p className="subtle">아직 업로드한 스캔이 없습니다.</p>
+        ) : visibleScans.length === 0 ? (
+          <p className="subtle">
+            확인이 필요한 답안지가 없습니다.{" "}
+            <button className="button tiny ghost" onClick={() => setOnlyFlagged(false)}>
+              전체 보기
+            </button>
+          </p>
         ) : (
           <div className="table-scroll">
             <table className="admin-table">
@@ -407,13 +602,14 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                 </tr>
               </thead>
               <tbody>
-                {scans.map((scan) => {
+                {visibleScans.map((scan) => {
                   const draft = draftFor(scan);
                   const flags = flaggedQuestions(scan);
                   const marked = markedCount(draft);
                   const idFlag = hasIdFlag(scan) || !draft.studentId;
                   const dirty = Boolean(drafts[scan.id]);
                   const isOpen = expanded === scan.id;
+                  const reasons = reasonsById.get(scan.id) ?? [];
 
                   return (
                     <tr key={scan.id}>
@@ -458,7 +654,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                                     : "판독 실패"}
                               </span>
                             ) : scan.status === "reviewed" && !dirty ? (
-                              <span className="status-chip active">검수 완료</span>
+                              <span className="status-chip active">
+                                {scan.reviewedBy === "auto" ? "자동 확인" : "검수 완료"}
+                              </span>
+                            ) : reasons.length > 0 ? (
+                              <span className="status-chip danger">확인 필요</span>
+                            ) : summary ? (
+                              <span className="status-chip auto-ready">자동 확인 가능</span>
                             ) : flags.size > 0 || idFlag ? (
                               <span className="status-chip danger">
                                 확인 필요{flags.size > 0 ? ` · ${flags.size}문항` : ""}
@@ -499,6 +701,24 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                             <p className="form-error" style={{ marginTop: 8 }}>
                               {scan.readError}
                             </p>
+                          ) : reasons.length > 0 ? (
+                            /* 왜 사람이 봐야 하는지를 그 자리에서 알려 준다 */
+                            <ul className="review-reasons">
+                              {reasons.map((reason, i) => (
+                                <li key={`${reason.code}-${i}`}>
+                                  {reason.label}
+                                  {reason.questions?.length ? (
+                                    <button
+                                      className="reason-jump"
+                                      onClick={() => setExpanded(scan.id)}
+                                    >
+                                      {reason.questions.slice(0, 12).join(", ")}번
+                                      {reason.questions.length > 12 ? " 외" : ""}
+                                    </button>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
                           ) : null}
 
                           {isOpen ? (

@@ -81,6 +81,18 @@ export interface ReadResultRow {
   /** 검수 화면용 미리보기(판독기가 실제로 본 이미지) JPEG base64 */
   preview_jpeg_base64?: string;
   review_flags: Array<Record<string, unknown>>;
+
+  // --- 판독 확신 정보(자동 검수 통과 판단용) ---
+  // 판정 자체와 별개다. 학생이 그냥 안 푼 문항은 여기 들어오지 않고, 연필이
+  // 흐려 경계에 걸친 문항만 들어온다. 구버전 API 응답에는 없다.
+  /** 사람이 눈으로 봐야 하는 문항 번호 */
+  uncertain_questions?: number[];
+  /** 둘 이상 칠해진 문항 — '모두 고르기'면 정상 */
+  multi_marked_questions?: number[];
+  /** 수험번호 자리 중 애매하게 읽힌 곳이 있는가 */
+  id_uncertain?: boolean;
+  /** QR과 마킹의 수험번호가 어긋나는가 */
+  id_conflict?: boolean;
 }
 
 export interface ReadScansResult {
