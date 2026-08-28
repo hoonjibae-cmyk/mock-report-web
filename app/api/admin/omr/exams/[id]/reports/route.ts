@@ -5,6 +5,11 @@ import { createPublicToken, hashPin } from "@/lib/crypto";
 import { getExam } from "@/lib/omr-exams";
 import { listScans } from "@/lib/omr-scans";
 import { scoreExam, maxScore, essayCountOf } from "@/lib/omr-scoring";
+import {
+  attachClassification,
+  classificationStats,
+  nationalComparison,
+} from "@/lib/mock-report";
 import { EXAM_TYPE_LABELS, ACADEMY_NAME } from "@/lib/omr-types";
 import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 import { isGenericReport } from "@/lib/omr-report-types";
@@ -91,6 +96,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const inputs: StudentInput[] = Array.isArray(body.students) ? body.students : [];
     const requestPin = body.pinRequired !== false;
 
+    // 국영수 모의고사는 전국 비교·문항 분류가 성적표의 핵심이라, 기준 자료 없이는
+    // 만들지 않는다(3단계 업로드를 건너뛴 채 성적표가 나가는 것을 막는다).
+    if (exam.examType === "mock" && !exam.mockReference) {
+      return NextResponse.json(
+        {
+          error:
+            "시험 기반 정보(문항분류표·전국비교기준)를 아직 올리지 않았습니다. 성적표를 만들기 전에 엑셀을 업로드해 주세요.",
+        },
+        { status: 400 },
+      );
+    }
+
     const allScans = await listScans(id);
     const reviewed = allScans.filter((scan) => scan.status === "reviewed" && scan.studentId);
     if (reviewed.length === 0) {
@@ -121,6 +138,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     // 채점(검수 완료 전체가 응시 집단)
     const { cohort, scored } = scoreExam(exam, reviewed);
+    // 국영수 모의고사 기준 자료 — 있으면 전국 비교·문항 분류를 얹는다
+    const reference = exam.examType === "mock" ? exam.mockReference : null;
     const scoredByScan = new Map(scored.map((s) => [s.scanId, s]));
     const examMax = maxScore(exam);
 
@@ -226,11 +245,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         rank: result.rank,
         topPercent: result.topPercent,
         grade: result.grade,
-        items: result.items,
+        items: reference ? attachClassification(result.items, reference) : result.items,
         areas: result.areas,
         weakItems: result.weakItems,
         growth,
         essayCount,
+        national: reference ? nationalComparison(reference, result.raw) : null,
+        classificationStats: reference
+          ? classificationStats(attachClassification(result.items, reference))
+          : undefined,
         teacherComment: null,
         appVersion: APP_VERSION,
         generatedAt,

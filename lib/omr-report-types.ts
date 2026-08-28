@@ -24,6 +24,29 @@ export interface GenericItemResult {
   difficulty: Difficulty;
   /** 문항 영역(미지정 시 null) */
   area: string | null;
+  /** 국영수 모의고사 기준 자료가 있을 때만 채워지는 분류 */
+  classification?: {
+    behavior: string;
+    area: string;
+    content: string;
+    detail: string;
+    difficulty: string;
+    gradeLevel: string;
+  };
+}
+
+/** 국영수 모의고사 전국 비교 (기준 자료를 올린 경우에만) */
+export interface NationalComparison {
+  subjectLabel: string;
+  /** 전국 등급(1~9) */
+  grade: number;
+  /** 전국 상위 추정 % — 공개 등급컷 구간을 선형 보간한 참고값 */
+  topPercent: number;
+  /** 전국 평균 원점수(자료에 없으면 null) */
+  average: number | null;
+  /** 이 학생 원점수 − 전국 평균 */
+  diffFromAverage: number | null;
+  note: string;
 }
 
 /** 영역별 성취 — 학생 성취율과 집단 평균 성취율 비교 */
@@ -98,6 +121,10 @@ export interface GenericReportData {
   growth: GrowthPoint[];
   /** 서술형 문항 수(손채점 별도 안내) */
   essayCount: number;
+  /** 국영수 모의고사에서 시험 기반 정보를 올린 경우의 전국 비교 */
+  national?: NationalComparison | null;
+  /** 분류 기준별 성취(행동영역·대영역·난이도·학년수준) */
+  classificationStats?: Array<{ kind: string; label: string; rows: AreaStat[] }>;
   /** Phase B에서 채움 */
   teacherComment: { text: string } | null;
   /** 성적표를 만든 시스템 버전 */

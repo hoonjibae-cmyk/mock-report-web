@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
-import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
+import { EXAM_TYPE_LABELS, mockSubjectOf, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
 
 interface Props {
@@ -41,9 +41,49 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
   const [loading, setLoading] = useState(false);
   const [essayUploading, setEssayUploading] = useState(false);
   const essayRef = useRef<HTMLInputElement>(null);
+  // 국영수 모의고사 3단계 — 시험 기반 정보(문항분류표·전국비교기준)
+  const [reference, setReference] = useState(exam?.mockReference ?? null);
+  const [refUploading, setRefUploading] = useState(false);
+  const refInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(setupError);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState("");
+
+  const isMock = exam?.examType === "mock";
+  const mockSubject = mockSubjectOf(exam?.subject);
+  const referenceReady = !isMock || Boolean(reference);
+
+  async function uploadReference(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !exam) return;
+    setRefUploading(true);
+    setError("");
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/reference`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "시험 기반 정보를 반영하지 못했습니다.");
+      setReference(data.exam?.mockReference ?? null);
+      const parts = [
+        `${data.reference.subjectLabel} 문항 ${data.reference.itemCount}개 · 등급컷 ${data.reference.gradeCutCount}단계 반영`,
+      ];
+      if (data.reference.nationalAverage !== null) {
+        parts.push(`전국 평균 ${data.reference.nationalAverage}점`);
+      }
+      if (data.appliedKey > 0) parts.push(`정답 ${data.appliedKey}문항도 함께 채움`);
+      setMessage(parts.join(" · "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "업로드 중 오류가 발생했습니다.");
+    } finally {
+      setRefUploading(false);
+      if (refInputRef.current) refInputRef.current.value = "";
+    }
+  }
 
   const essayCount =
     typeof exam?.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
@@ -209,6 +249,66 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
         </div>
       ) : null}
 
+      {isMock ? (
+        <div className="panel">
+          <div className="section-heading wrap">
+            <div>
+              <p className="eyebrow">STEP 3 · 국영수 모의고사</p>
+              <h2>시험 기반 정보</h2>
+              <p className="subtle">
+                학원 OMR 채점만으로는 전국 등급·상위 추정과 문항 분류별 분석을 만들 수 없습니다.
+                <strong> 문항분류표</strong>와 <strong>전국비교기준</strong> 탭이 든 엑셀을 올리면
+                성적표에 전국 비교가 실립니다.
+                {mockSubject ? ` 이 시험은 ${mockSubject.label} 과목이며, 파일에서 ${mockSubject.label} 행만 읽습니다.` : ""}
+              </p>
+            </div>
+            {canCreate ? (
+              <div className="toolbar" style={{ flexWrap: "wrap" }}>
+                <a className="button secondary" href={`/api/admin/omr/exams/${exam.id}/reference`}>
+                  양식 받기
+                </a>
+                <input
+                  ref={refInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  style={{ display: "none" }}
+                  onChange={uploadReference}
+                />
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={refUploading}
+                  onClick={() => refInputRef.current?.click()}
+                >
+                  {refUploading ? "반영 중…" : reference ? "다시 올리기" : "엑셀 업로드"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {reference ? (
+            <div className="info-box">
+              <strong>반영 완료 — {reference.subjectLabel}</strong>
+              <p>
+                문항 분류 {reference.items.length}개 · 전국 등급컷 {reference.gradeCuts.length}단계
+                {reference.nationalAverage !== null ? ` · 전국 평균 ${reference.nationalAverage}점` : ""}
+                <br />
+                {reference.filename} · {new Date(reference.uploadedAt).toLocaleString("ko-KR")}
+                {reference.uploadedBy ? ` · ${reference.uploadedBy}` : ""}
+              </p>
+            </div>
+          ) : (
+            <div className="permission-denied">
+              <strong>아직 올리지 않았습니다.</strong>
+              <p>
+                시험 기반 정보를 올려야 성적표를 만들 수 있습니다. 정답을 아직 입력하지 않았다면
+                이 파일의 정답·배점·영역으로 함께 채워집니다.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {essayCount > 0 && canCreate ? (
         <div className="panel">
           <div className="section-heading wrap">
@@ -263,7 +363,8 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
             <button
               className="button primary"
               onClick={generate}
-              disabled={loading || !keyReady || reviewed.length === 0}
+              disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
+              title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
             >
               {loading ? "채점·생성 중…" : "성적표 생성"}
             </button>

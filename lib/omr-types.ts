@@ -1,6 +1,7 @@
 // OMR 시험/성적표 공통 타입
 
 import type { MarkValue } from "@/lib/omr-answers";
+import type { MockReference } from "@/lib/mock-reference";
 
 export type ExamType = "mock" | "saturday" | "monthly" | "placement" | "inclass";
 export type ReportFamily = "A_rich" | "B_english" | "C_generic";
@@ -75,6 +76,11 @@ export interface OmrExam {
   points: Record<string, number>;
   /** {문항번호: {area}} — 문항별 영역(듣기·어법 등). 미설정 시 영역 분석 생략 */
   questionMeta: Record<string, { area?: string }>;
+  /**
+   * 국영수 모의고사 기준 자료(문항분류표 · 전국비교기준).
+   * 성적표 산출 전에 엑셀로 올린다. 다른 유형은 null.
+   */
+  mockReference: MockReference | null;
   /** 절대평가 등급컷 [{grade, min}] — min은 100점 환산 하한. 비어 있으면 등급 미표기 */
   gradeCuts: Array<{ grade: number; min: number }>;
   useTeacherComment: boolean;
