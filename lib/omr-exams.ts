@@ -24,6 +24,7 @@ interface ExamRow {
   omr_config: OmrConfig | null;
   answer_key: Record<string, number> | null;
   points: Record<string, number> | null;
+  question_meta: Record<string, { area?: string }> | null;
   grade_cuts: Array<{ grade: number; min: number }> | null;
   use_teacher_comment: boolean;
   created_by_name: string | null;
@@ -45,6 +46,7 @@ function mapExam(row: ExamRow): OmrExam {
     omrConfig: row.omr_config ?? {},
     answerKey: row.answer_key ?? {},
     points: row.points ?? {},
+    questionMeta: row.question_meta ?? {},
     gradeCuts: row.grade_cuts ?? [],
     useTeacherComment: row.use_teacher_comment,
     createdByName: row.created_by_name,
@@ -53,7 +55,7 @@ function mapExam(row: ExamRow): OmrExam {
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,points,grade_cuts,use_teacher_comment,created_by_name,created_at";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_at";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -113,15 +115,22 @@ export async function getExam(id: string): Promise<OmrExam | null> {
   return data ? mapExam(data as ExamRow) : null;
 }
 
-/** 정답키 저장 — {문항번호: 정답 보기번호} */
+/** 정답키·배점·영역 저장 (전달된 항목만 갱신) */
 export async function updateExamAnswerKey(
   id: string,
   answerKey: Record<string, number>,
+  extra?: {
+    points?: Record<string, number>;
+    questionMeta?: Record<string, { area?: string }>;
+  },
 ): Promise<OmrExam> {
   const supabase = getSupabaseAdmin();
+  const patch: Record<string, unknown> = { answer_key: answerKey };
+  if (extra?.points !== undefined) patch.points = extra.points;
+  if (extra?.questionMeta !== undefined) patch.question_meta = extra.questionMeta;
   const { data, error } = await supabase
     .from("exams")
-    .update({ answer_key: answerKey })
+    .update(patch)
     .eq("id", id)
     .select(SELECT)
     .single();

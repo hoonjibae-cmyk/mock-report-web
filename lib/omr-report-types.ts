@@ -3,16 +3,37 @@
 
 import type { ExamType } from "@/lib/omr-types";
 
+/** 집단 정답률로 자동 분류한 난이도 */
+export type Difficulty = "쉬움" | "보통" | "어려움";
+
 export interface GenericItemResult {
   no: number;
-  /** 정답 보기번호(1-base) */
+  /** 서술형(주관식) 문항 여부 — 손채점 점수를 사용 */
+  essay: boolean;
+  /** 정답 보기번호(1-base) — 서술형은 null */
   answer: number | null;
-  /** 학생 표기(1-base, 미표기는 null) */
+  /** 학생 표기(1-base, 미표기는 null) — 서술형은 null */
   marked: number | null;
   correct: boolean;
+  /** 이 문항에서 받은 점수 */
+  earned: number;
   point: number;
-  /** 응시 집단 정답률(%) */
+  /** 응시 집단 정답률(%) — 서술형은 평균 득점률 */
   correctRate: number;
+  difficulty: Difficulty;
+  /** 문항 영역(미지정 시 null) */
+  area: string | null;
+}
+
+/** 영역별 성취 — 학생 성취율과 집단 평균 성취율 비교 */
+export interface AreaStat {
+  area: string;
+  earned: number;
+  possible: number;
+  /** 학생 성취율(%) */
+  rate: number;
+  /** 응시 집단 평균 성취율(%) */
+  cohortRate: number;
 }
 
 export interface GrowthPoint {
@@ -41,8 +62,12 @@ export interface GenericReportData {
     school: string;
   };
   score: {
-    /** 100점 만점 환산 원점수 */
+    /** 100점 만점 환산 원점수(객관식+서술형) */
     raw: number;
+    /** 객관식 득점 */
+    objectiveRaw: number;
+    /** 서술형 득점 */
+    essayRaw: number;
     max: number;
     correctCount: number;
     wrongCount: number;
@@ -64,6 +89,8 @@ export interface GenericReportData {
   /** 등급컷이 설정된 경우에만 */
   grade: number | null;
   items: GenericItemResult[];
+  /** 영역별 성취(영역 미설정 시 빈 배열) */
+  areas: AreaStat[];
   /** 학생이 틀렸고 집단 정답률도 낮은 문항 번호(오답 우선 복습) */
   weakItems: number[];
   /** 같은 유형 시험의 표준점수 추이(이번 시험 포함, 날짜순) */
@@ -72,6 +99,8 @@ export interface GenericReportData {
   essayCount: number;
   /** Phase B에서 채움 */
   teacherComment: { text: string } | null;
+  /** 성적표를 만든 시스템 버전 */
+  appVersion?: string;
   generatedAt: string;
 }
 
