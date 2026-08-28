@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import { compactMark, formatChoices, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 
 interface Props {
@@ -12,11 +13,11 @@ interface Props {
 }
 
 export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
-  const [key, setKey] = useState<Record<string, number | null>>(() => {
-    const out: Record<string, number | null> = {};
+  // 문항별 정답을 항상 배열로 다룬다 — 원소가 2개 이상이면 '모두 고르기' 문항이다.
+  const [key, setKey] = useState<Record<string, number[]>>(() => {
+    const out: Record<string, number[]> = {};
     for (let q = 1; q <= (exam?.numQuestions ?? 0); q += 1) {
-      const value = exam?.answerKey?.[String(q)];
-      out[String(q)] = typeof value === "number" ? value : null;
+      out[String(q)] = toChoices(exam?.answerKey?.[String(q)]);
     }
     return out;
   });
@@ -48,8 +49,11 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
   const essayCount =
     typeof exam?.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
 
-  const filled = useMemo(
-    () => Object.values(key).filter((value) => typeof value === "number").length,
+  const filled = useMemo(() => Object.values(key).filter((value) => value.length > 0).length, [key]);
+
+  /** 정답이 둘 이상인 문항 = '모두 고르기' 문항 */
+  const multiCount = useMemo(
+    () => Object.values(key).filter((value) => value.length > 1).length,
     [key],
   );
 
@@ -90,26 +94,35 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
     [areas],
   );
 
-  /** "13524 21435…" / "1,3,5,2,4" 같은 문자열을 1번부터 순서대로 적용 */
+  /**
+   * 1번부터 순서대로 일괄 적용.
+   *  · 쉼표가 없으면 숫자 한 자 = 한 문항 ("13524 21435…", 공백은 보기 편하라고 무시)
+   *  · 쉼표가 있으면 쉼표 하나가 문항 경계 ("1,3,24,5" → 3번은 ②④ 복수 정답)
+   */
   function applyBulk() {
-    const digits = bulk.replace(/[^0-9]/g, "").split("");
-    if (digits.length === 0) {
-      setError("정답 숫자를 입력해 주세요. 예: 13524 21435 …");
+    const raw = bulk.replace(/\s+/g, "");
+    const tokens = raw.includes(",")
+      ? raw.split(",").map((t) => t.replace(/[^0-9]/g, ""))
+      : raw.replace(/[^0-9]/g, "").split("");
+    if (tokens.filter(Boolean).length === 0) {
+      setError("정답 숫자를 입력해 주세요. 예: 13524 21435 … (복수 정답은 1,3,24,5)");
       return;
     }
     setError("");
     const next = { ...key };
     let applied = 0;
-    for (let i = 0; i < Math.min(digits.length, total); i += 1) {
-      const choice = Number(digits[i]);
-      if (choice >= 1 && choice <= choices) {
-        next[String(i + 1)] = choice;
+    for (let i = 0; i < Math.min(tokens.length, total); i += 1) {
+      const picked = toChoices(
+        tokens[i].split("").map(Number).filter((c) => c >= 1 && c <= choices),
+      );
+      if (picked.length > 0) {
+        next[String(i + 1)] = picked;
         applied += 1;
       }
     }
     setKey(next);
     setMessage(
-      `1번부터 ${applied}문항에 일괄 적용했습니다.${digits.length > total ? ` (${digits.length - total}자 초과분은 무시)` : ""}`,
+      `1번부터 ${applied}문항에 일괄 적용했습니다.${tokens.length > total ? ` (${tokens.length - total}개 초과분은 무시)` : ""}`,
     );
   }
 
@@ -128,14 +141,12 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "엑셀을 처리하지 못했습니다.");
-      const uploaded: Record<string, number> = data.exam?.answerKey ?? {};
+      const uploaded: Record<string, MarkValue> = data.exam?.answerKey ?? {};
       const uploadedPoints: Record<string, number> = data.exam?.points ?? {};
       const uploadedMeta: Record<string, { area?: string }> = data.exam?.questionMeta ?? {};
       setKey(() => {
-        const next: Record<string, number | null> = {};
-        for (let q = 1; q <= total; q += 1) {
-          next[String(q)] = typeof uploaded[String(q)] === "number" ? uploaded[String(q)] : null;
-        }
+        const next: Record<string, number[]> = {};
+        for (let q = 1; q <= total; q += 1) next[String(q)] = toChoices(uploaded[String(q)]);
         return next;
       });
       setPoints(() => {
@@ -173,9 +184,10 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
     setError("");
     setMessage("");
     try {
-      const answerKey: Record<string, number> = {};
+      const answerKey: Record<string, MarkValue> = {};
       for (const [q, value] of Object.entries(key)) {
-        if (typeof value === "number") answerKey[q] = value;
+        const packed = compactMark(value);
+        if (packed != null) answerKey[q] = packed;
       }
       const pointsPayload: Record<string, number> = {};
       for (const q of allNumbers) {
@@ -254,6 +266,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
             <h2>정답 · 배점 · 영역</h2>
             <p className="subtle">
               정답 {filled}/{total}문항
+              {multiCount > 0 ? ` · 모두 고르기 ${multiCount}문항` : ""}
               {essayCount > 0 ? ` · 서술형 ${essayCount}문항(정답 없이 배점·영역만)` : ""} · 총점{" "}
               {pointTotal}점
               {autoPoint > 0 ? ` (배점 미입력 문항은 ${autoPoint}점씩 자동 배분)` : ""}
@@ -292,14 +305,20 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
             <strong>빠른 입력</strong>
             <p>
               1번부터 순서대로 정답 숫자를 붙여넣고 <strong>일괄 적용</strong>을 누르면 한 번에
-              채워집니다(공백·쉼표 무시). 또는 <strong>엑셀 양식 받기</strong>로 내려받아 정답을
+              채워집니다(공백은 무시). 또는 <strong>엑셀 양식 받기</strong>로 내려받아 정답을
               채운 뒤 <strong>엑셀 업로드</strong>를 눌러도 됩니다 — 업로드하면 바로 저장됩니다.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              <strong>‘모두 고르기’ 문항</strong>(정답이 둘 이상)은 아래에서 보기 번호를 여러 개
+              누르면 됩니다. 일괄 입력에서는 <strong>쉼표</strong>로 문항을 나눠 주세요 —
+              <code> 1,3,24,5</code>는 3번 정답이 ②④라는 뜻입니다. 학생이 정답 보기를 모두, 그리고
+              그것만 표기해야 정답 처리됩니다.
             </p>
             <div style={{ display: "flex", gap: 8, marginTop: 10, maxWidth: 560 }}>
               <input
                 value={bulk}
                 style={{ flex: 1 }}
-                placeholder={`예: ${Array.from({ length: Math.min(10, total) }, (_, i) => ((i % choices) + 1)).join("")} …`}
+                placeholder={`예: ${Array.from({ length: Math.min(10, total) }, (_, i) => ((i % choices) + 1)).join("")} … (복수 정답은 1,3,24,5)`}
                 onChange={(e) => setBulk(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") applyBulk();
@@ -364,8 +383,9 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
         >
           {allNumbers.map((q) => {
             const isEssay = q > total;
-            const value = key[String(q)];
-            const empty = !isEssay && value == null;
+            const picked = key[String(q)] ?? [];
+            const empty = !isEssay && picked.length === 0;
+            const isMulti = picked.length > 1;
             return (
               <div
                 key={q}
@@ -375,12 +395,14 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                   gap: 8,
                   padding: "8px 10px",
                   borderRadius: 10,
-                  background: isEssay ? "#fffdf5" : empty ? "#fff" : "#eef4fb",
+                  background: isEssay ? "#fffdf5" : empty ? "#fff" : isMulti ? "#eaf6ee" : "#eef4fb",
                   border: isEssay
                     ? "1px solid #e6d9a8"
                     : empty
                       ? "1px dashed #d9a8a8"
-                      : "1px solid #cfdcee",
+                      : isMulti
+                        ? "1px solid #a9d3b8"
+                        : "1px solid #cfdcee",
                   breakInside: "avoid",
                   marginBottom: 10,
                 }}
@@ -413,31 +435,60 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                       서술형 · 손채점
                     </span>
                   ) : (
-                    <div style={{ display: "flex", gap: 5 }}>
-                      {Array.from({ length: choices }, (_, c) => c + 1).map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          disabled={!canEdit}
-                          onClick={() => setKey((prev) => ({ ...prev, [String(q)]: prev[String(q)] === c ? null : c }))}
+                    <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                      {Array.from({ length: choices }, (_, c) => c + 1).map((c) => {
+                        const on = picked.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            disabled={!canEdit}
+                            title={on ? `${c}번 정답 해제` : `${c}번을 정답에 추가 (여러 개 선택 = 모두 고르기 문항)`}
+                            // 여러 개를 눌러 두면 '모두 고르기' 문항이 된다(다시 누르면 해제).
+                            onClick={() =>
+                              setKey((prev) => {
+                                const current = prev[String(q)] ?? [];
+                                const next = current.includes(c)
+                                  ? current.filter((v) => v !== c)
+                                  : [...current, c].sort((a, b) => a - b);
+                                return { ...prev, [String(q)]: next };
+                              })
+                            }
+                            style={{
+                              width: 27,
+                              height: 27,
+                              flex: "0 0 auto",
+                              borderRadius: "50%",
+                              border: on ? "2px solid #183c73" : "1px solid #b8c0cc",
+                              background: on ? "#183c73" : "white",
+                              color: on ? "white" : "#5a6472",
+                              fontSize: 12.5,
+                              fontWeight: 700,
+                              cursor: canEdit ? "pointer" : "default",
+                              lineHeight: 1,
+                              padding: 0,
+                            }}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                      {isMulti ? (
+                        <span
                           style={{
-                            width: 27,
-                            height: 27,
-                            flex: "0 0 auto",
-                            borderRadius: "50%",
-                            border: value === c ? "2px solid #183c73" : "1px solid #b8c0cc",
-                            background: value === c ? "#183c73" : "white",
-                            color: value === c ? "white" : "#5a6472",
-                            fontSize: 12.5,
+                            fontSize: 11,
                             fontWeight: 700,
-                            cursor: canEdit ? "pointer" : "default",
-                            lineHeight: 1,
-                            padding: 0,
+                            color: "#1d6b3f",
+                            background: "#d7f0e0",
+                            borderRadius: 6,
+                            padding: "3px 6px",
+                            whiteSpace: "nowrap",
                           }}
+                          title={`정답 ${formatChoices(picked)} — 학생이 이 보기를 모두 표기해야 정답`}
                         >
-                          {c}
-                        </button>
-                      ))}
+                          모두 고르기
+                        </span>
+                      ) : null}
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 5 }}>

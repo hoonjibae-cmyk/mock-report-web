@@ -46,7 +46,10 @@ export interface ReadResultRow {
   sheet_layout?: string | null;
   /** 이번 판독에 사용한 시험 설정의 레이아웃 지문 */
   expected_layout?: string | null;
+  /** 단일 선택 기준 판독값(중복 표기는 null) */
   answers: Record<string, number | null>;
+  /** 칠해진 보기 전부 — '모두 고르기' 문항 채점에 쓴다(구버전 API는 없음) */
+  selections?: Record<string, number[]>;
   review_flags: Array<Record<string, unknown>>;
 }
 

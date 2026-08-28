@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
+import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { readScans } from "@/lib/omr-api";
 import { getExam, sheetSpecFor } from "@/lib/omr-exams";
 import {
@@ -34,9 +35,9 @@ function baseFilename(name: string): string {
 }
 
 /** 표기된 문항 수 */
-function markedCount(answers: Record<string, number | null> | undefined): number {
+function markedCount(answers: Record<string, MarkValue> | undefined): number {
   if (!answers) return 0;
-  return Object.values(answers).filter((v) => typeof v === "number").length;
+  return Object.values(answers).filter((v) => toChoices(v).length > 0).length;
 }
 
 /**
@@ -52,7 +53,7 @@ function readFailureReason(
     exam_id: string | null;
     sheet_layout?: string | null;
     expected_layout?: string | null;
-    answers: Record<string, number | null>;
+    answers: Record<string, MarkValue>;
   },
   numQuestions: number,
 ): string | null {
@@ -61,7 +62,7 @@ function readFailureReason(
 
   // 지문이 둘 다 있고 다르면, 배치가 달라 판독을 신뢰할 수 없다.
   if (sheet && expected && sheet !== expected) {
-    return "이 답안지는 지금 시험과 다른 설정(문항 수·보기 수·서술형 문항 수 등)으로 출력된 것입니다. 설정을 출력 당시와 같게 맞추거나, 이 시험의 답안지를 새로 출력해 사용해 주세요.";
+    return "이 답안지는 지금 시험과 다른 배치로 출력된 것입니다. 설정(문항 수·보기 수·서술형 문항 수 등)이 달라졌거나, 프로그램의 답안지 배치가 갱신된 뒤 출력한 답안지입니다. 이 시험의 답안지를 새로 출력해 사용해 주세요.";
   }
 
   const marked = markedCount(result.answers);
@@ -72,12 +73,23 @@ function readFailureReason(
   return null;
 }
 
-// 판독된 답안: {"1": 3, ...} 형태로 정규화(값은 1-base 보기번호 또는 null)
-function normalizeAnswers(raw: Record<string, number | null> | undefined, total: number) {
-  const out: Record<string, number | null> = {};
+/**
+ * 판독된 답안을 {"1": 3, "2": [2,4], ...} 형태로 정규화한다.
+ *
+ * OMR API의 `selections`(칠해진 보기 전부)를 우선 쓴다 — '모두 고르기' 문항에서
+ * 학생이 여러 개를 칠한 경우가 그대로 보존된다. 구버전 API 응답이면 단일
+ * 선택값(`answers`)으로 대체한다.
+ */
+function normalizeAnswers(
+  answers: Record<string, number | null> | undefined,
+  selections: Record<string, number[]> | undefined,
+  total: number,
+) {
+  const out: Record<string, MarkValue> = {};
   for (let q = 1; q <= total; q += 1) {
-    const value = raw?.[String(q)];
-    out[String(q)] = typeof value === "number" ? value : null;
+    const key = String(q);
+    const picked = selections?.[key];
+    out[key] = picked ? compactMark(picked) : compactMark(toChoices(answers?.[key] ?? null));
   }
   return out;
 }
@@ -184,7 +196,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     let failedReadCount = 0;
     const rows: UpsertScanInput[] = read.results.map((result) => {
-      const answers = normalizeAnswers(result.answers, exam.numQuestions);
+      const answers = normalizeAnswers(result.answers, result.selections, exam.numQuestions);
       const reason = readFailureReason(
         {
           exam_id: result.exam_id ?? null,
@@ -216,7 +228,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         examId: id,
         filename: problem.filename,
         scanPath: paths.get(problem.filename) ?? paths.get(baseFilename(problem.filename)) ?? null,
-        answers: normalizeAnswers(undefined, exam.numQuestions),
+        answers: normalizeAnswers(undefined, undefined, exam.numQuestions),
         reviewFlags: [],
         status: "pending",
         readError: problem.error,

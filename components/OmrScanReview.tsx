@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
 
@@ -15,7 +16,8 @@ interface Props {
 
 interface Draft {
   studentId: string;
-  answers: Record<string, number | null>;
+  /** 값은 보기 하나(숫자) 또는 여러 개(배열) — '모두 고르기' 문항 대응 */
+  answers: Record<string, MarkValue>;
 }
 
 /** 판독기가 남긴 검수 대상 문항 번호 */
@@ -60,7 +62,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   function markedCount(draft: Draft): number {
     let count = 0;
     for (let q = 1; q <= total; q += 1) {
-      if (typeof draft.answers[String(q)] === "number") count += 1;
+      if (toChoices(draft.answers[String(q)]).length > 0) count += 1;
     }
     return count;
   }
@@ -402,25 +404,33 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                               style={{
                                 marginTop: 12,
                                 display: "grid",
-                                gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))",
+                                gridTemplateColumns: `repeat(auto-fill, minmax(${64 + choices * 26}px, 1fr))`,
                                 gap: 8,
                               }}
                             >
                               {Array.from({ length: total }, (_, i) => i + 1).map((q) => {
-                                const value = draft.answers[String(q)];
-                                const needsCheck = flags.has(q) || value == null;
+                                const picked = toChoices(draft.answers[String(q)]);
+                                // 정답이 둘 이상인 문항은 학생도 여러 개 표기하는 게 정상이다.
+                                const expectMulti = isMultiAnswer(exam?.answerKey?.[String(q)]);
+                                const needsCheck = flags.has(q) || picked.length === 0;
                                 return (
-                                  <label
+                                  <div
                                     key={q}
                                     style={{
                                       margin: 0,
                                       display: "flex",
                                       alignItems: "center",
-                                      gap: 6,
+                                      gap: 5,
                                       padding: "4px 6px",
                                       borderRadius: 6,
                                       background: needsCheck ? "#fdecea" : "transparent",
+                                      border: expectMulti ? "1px solid #a9d3b8" : "1px solid transparent",
                                     }}
+                                    title={
+                                      expectMulti
+                                        ? `${q}번 — '모두 고르기' 문항입니다. 학생이 칠한 보기를 모두 선택하세요.`
+                                        : `${q}번`
+                                    }
                                   >
                                     <span
                                       style={{
@@ -432,28 +442,48 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                                     >
                                       {q}
                                     </span>
-                                    <select
-                                      value={value == null ? "" : String(value)}
-                                      disabled={!canEdit}
-                                      style={{ flex: 1, padding: "2px 4px" }}
-                                      onChange={(e) =>
-                                        setDraft(scan, {
-                                          answers: {
-                                            ...draft.answers,
-                                            [String(q)]:
-                                              e.target.value === "" ? null : Number(e.target.value),
-                                          },
-                                        })
-                                      }
-                                    >
-                                      <option value="">–</option>
-                                      {Array.from({ length: choices }, (_, c) => c + 1).map((c) => (
-                                        <option key={c} value={c}>
-                                          {c}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </label>
+                                    <div style={{ display: "flex", gap: 3 }}>
+                                      {Array.from({ length: choices }, (_, c) => c + 1).map((c) => {
+                                        const on = picked.includes(c);
+                                        return (
+                                          <button
+                                            key={c}
+                                            type="button"
+                                            disabled={!canEdit}
+                                            // 누를 때마다 켜고 끈다 — 여러 개를 켜면 복수 표기로 저장된다.
+                                            onClick={() =>
+                                              setDraft(scan, {
+                                                answers: {
+                                                  ...draft.answers,
+                                                  [String(q)]: compactMark(
+                                                    on
+                                                      ? picked.filter((v) => v !== c)
+                                                      : [...picked, c],
+                                                  ),
+                                                },
+                                              })
+                                            }
+                                            style={{
+                                              width: 22,
+                                              height: 22,
+                                              flex: "0 0 auto",
+                                              borderRadius: "50%",
+                                              border: on ? "2px solid #183c73" : "1px solid #c3cad4",
+                                              background: on ? "#183c73" : "white",
+                                              color: on ? "white" : "#6b7480",
+                                              fontSize: 11,
+                                              fontWeight: 700,
+                                              lineHeight: 1,
+                                              padding: 0,
+                                              cursor: canEdit ? "pointer" : "default",
+                                            }}
+                                          >
+                                            {c}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>
