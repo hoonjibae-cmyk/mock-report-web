@@ -180,5 +180,47 @@ export async function uploadScanFile(
   }
 }
 
+/**
+ * 브라우저가 Storage로 직접 올릴 수 있는 서명 URL을 발급한다.
+ * Vercel 서버리스 함수의 요청 본문 제한(4.5MB)을 우회하기 위한 경로다.
+ */
+export async function createSignedScanUpload(
+  examId: string,
+  filename: string,
+): Promise<{ path: string; signedUrl: string; token: string } | null> {
+  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
+  const path = `${examId}/${safe}`;
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage
+      .from(SCAN_BUCKET)
+      .createSignedUploadUrl(path, { upsert: true });
+    if (error || !data) {
+      console.warn(`서명 업로드 URL 발급 실패(${filename}): ${error?.message}`);
+      return null;
+    }
+    return { path, signedUrl: data.signedUrl, token: data.token };
+  } catch (error) {
+    console.warn(`서명 업로드 URL 발급 실패(${filename})`, error);
+    return null;
+  }
+}
+
+/** Storage에 올라간 스캔 원본을 서버로 내려받는다(판독 전달용). */
+export async function downloadScanFile(path: string): Promise<Buffer | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage.from(SCAN_BUCKET).download(path);
+    if (error || !data) {
+      console.warn(`스캔 원본 다운로드 실패(${path}): ${error?.message}`);
+      return null;
+    }
+    return Buffer.from(await data.arrayBuffer());
+  } catch (error) {
+    console.warn(`스캔 원본 다운로드 실패(${path})`, error);
+    return null;
+  }
+}
+
 /** 보관 기간(일) 지난 스캔 원본 정리용 — Phase D 크론에서 사용. */
 export const SCAN_RETENTION_DAYS = 7;
