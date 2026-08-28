@@ -1,6 +1,7 @@
 // 범용(C 계열) OMR 성적표 데이터 스키마 — student_reports.report_data에 저장
 // 기존 국영수 성적표(schemaVersion 1)와 family 필드로 구분한다.
 
+import type { MarkValue } from "@/lib/omr-answers";
 import type { ExamType } from "@/lib/omr-types";
 
 /** 집단 정답률로 자동 분류한 난이도 */
@@ -10,10 +11,10 @@ export interface GenericItemResult {
   no: number;
   /** 서술형(주관식) 문항 여부 — 손채점 점수를 사용 */
   essay: boolean;
-  /** 정답 보기번호(1-base) — 서술형은 null */
-  answer: number | null;
-  /** 학생 표기(1-base, 미표기는 null) — 서술형은 null */
-  marked: number | null;
+  /** 정답 — 숫자면 보기 하나, 배열이면 '모두 고르기' 문항. 서술형은 null */
+  answer: MarkValue;
+  /** 학생 표기 — 숫자/배열/미표기(null). 서술형은 null */
+  marked: MarkValue;
   correct: boolean;
   /** 이 문항에서 받은 점수 */
   earned: number;

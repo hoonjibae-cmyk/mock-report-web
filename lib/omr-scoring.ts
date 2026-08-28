@@ -1,6 +1,7 @@
 // OMR 채점 엔진 — 검수 완료 스캔 + 정답키 → 점수·집단 통계·표준점수
 // 서술형(주관식) 점수, 문항별 영역 집계, 집단 정답률 기반 자동 난이도 포함
 
+import { sameChoices, toChoices, type MarkValue } from "@/lib/omr-answers";
 import type { OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
 import type { AreaStat, Difficulty, GenericItemResult } from "@/lib/omr-report-types";
@@ -137,7 +138,7 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
     correctCount: number;
     wrongCount: number;
     blankCount: number;
-    marks: Array<number | null>;
+    marks: MarkValue[];
     essay: Record<number, number>;
   }
   const partials: Partial0[] = [];
@@ -148,18 +149,19 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
     let correctCount = 0;
     let wrongCount = 0;
     let blankCount = 0;
-    const marks: Array<number | null> = [];
+    const marks: MarkValue[] = [];
     const essay: Record<number, number> = {};
 
     for (let q = 1; q <= objectiveCount; q += 1) {
       const marked = scan.answers?.[String(q)] ?? null;
       const answer = exam.answerKey?.[String(q)] ?? null;
-      marks.push(typeof marked === "number" ? marked : null);
-      if (marked == null) {
+      marks.push(marked);
+      if (toChoices(marked).length === 0) {
         blankCount += 1;
         continue;
       }
-      if (answer != null && marked === answer) {
+      // '모두 고르기' 문항은 표기 집합이 정답 집합과 완전히 같아야 정답이다.
+      if (sameChoices(marked, answer)) {
         objectiveRaw += pointFor(exam, q);
         correctCount += 1;
         itemCorrect[q] += 1;
@@ -237,14 +239,15 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
       const essayQ = q > objectiveCount;
       const point = round1(pointFor(exam, q));
       const answer = essayQ ? null : (exam.answerKey?.[String(q)] ?? null);
-      const marked = essayQ ? null : p.marks[q - 1];
-      const earned = essayQ ? round1(p.essay[q] ?? 0) : answer != null && marked === answer ? point : 0;
+      const marked = essayQ ? null : (p.marks[q - 1] ?? null);
+      const isCorrect = essayQ ? false : sameChoices(marked, answer);
+      const earned = essayQ ? round1(p.essay[q] ?? 0) : isCorrect ? point : 0;
       items.push({
         no: q,
         essay: essayQ,
         answer,
         marked,
-        correct: essayQ ? point > 0 && earned >= point - 1e-9 : answer != null && marked === answer,
+        correct: essayQ ? point > 0 && earned >= point - 1e-9 : isCorrect,
         earned,
         point,
         correctRate: itemRates[q],

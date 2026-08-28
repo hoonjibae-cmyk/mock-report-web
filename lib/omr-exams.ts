@@ -1,6 +1,7 @@
 // 시험(exams) 저장소 — Supabase service-role 경유
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import type { MarkValue } from "@/lib/omr-answers";
 import {
   ACADEMY_NAME,
   reportFamilyFor,
@@ -22,7 +23,7 @@ interface ExamRow {
   id_digits: number;
   omr_style: "exam" | "basic";
   omr_config: OmrConfig | null;
-  answer_key: Record<string, number> | null;
+  answer_key: Record<string, MarkValue> | null;
   points: Record<string, number> | null;
   question_meta: Record<string, { area?: string }> | null;
   grade_cuts: Array<{ grade: number; min: number }> | null;
@@ -118,7 +119,7 @@ export async function getExam(id: string): Promise<OmrExam | null> {
 /** 정답키·배점·영역 저장 (전달된 항목만 갱신) */
 export async function updateExamAnswerKey(
   id: string,
-  answerKey: Record<string, number>,
+  answerKey: Record<string, MarkValue>,
   extra?: {
     points?: Record<string, number>;
     questionMeta?: Record<string, { area?: string }>;

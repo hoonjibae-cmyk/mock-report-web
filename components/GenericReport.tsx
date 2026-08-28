@@ -1,5 +1,6 @@
 import AcademyLogo from "@/components/AcademyLogo";
 import ReportActions from "@/components/ReportActions";
+import { formatChoices, toChoices } from "@/lib/omr-answers";
 import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 
 /** 열람 시점에 주입되는 담임 의견(성적표 생성 후에도 수정 가능) */
@@ -288,7 +289,7 @@ export default function GenericReport({
             {report.items.map((item) => (
               <div
                 key={item.no}
-                className={`omr-item-cell ${item.correct ? "ok" : item.essay ? "partial" : item.marked == null ? "blank" : "wrong"}${weakSet.has(item.no) ? " weak" : ""}`}
+                className={`omr-item-cell ${item.correct ? "ok" : item.essay ? "partial" : toChoices(item.marked).length === 0 ? "blank" : "wrong"}${weakSet.has(item.no) ? " weak" : ""}`}
                 title={`${item.no}번${item.area ? ` · ${item.area}` : ""} · 배점 ${item.point}점 · 반 정답률 ${item.correctRate}% (${item.difficulty})`}
               >
                 <span className="no">{item.no}</span>
@@ -297,16 +298,16 @@ export default function GenericReport({
                     ? `${item.earned}/${item.point}`
                     : item.correct
                       ? "○"
-                      : item.marked == null
+                      : toChoices(item.marked).length === 0
                         ? "–"
-                        : `${item.marked}→${item.answer ?? "?"}`}
+                        : `${formatChoices(item.marked)}→${formatChoices(item.answer, "?")}`}
                 </span>
                 <span className={`rate d-${item.difficulty}`}>{item.correctRate}%</span>
               </div>
             ))}
           </div>
           <p className="subtle" style={{ marginTop: 8 }}>
-            ○ 정답 · 숫자→숫자 오답(내 표기→정답) · – 미표기 · 서술형은 득점/배점 · 붉은 테두리는
+            ○ 정답 · ①→② 오답(내 표기→정답) · – 미표기 · 서술형은 득점/배점 · 붉은 테두리는
             우선 복습 문항. 아래 정답률 색은 반 전체 결과로 자동 분류한 난이도입니다 —{" "}
             <b className="d-쉬움">쉬움</b> · <b className="d-보통">보통</b> ·{" "}
             <b className="d-어려움">어려움</b>.
@@ -332,8 +333,8 @@ export default function GenericReport({
                     <tr key={item.no}>
                       <td><strong>{item.no}번</strong>{item.essay ? <span>서술형</span> : null}</td>
                       <td>{item.area ?? "–"}</td>
-                      <td>{item.essay ? `${item.earned}점` : (item.marked ?? "미표기")}</td>
-                      <td>{item.essay ? "–" : item.answer}</td>
+                      <td>{item.essay ? `${item.earned}점` : formatChoices(item.marked, "미표기")}</td>
+                      <td>{item.essay ? "–" : formatChoices(item.answer)}</td>
                       <td>{item.point}점</td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

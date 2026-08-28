@@ -1,5 +1,6 @@
 // OMR 스캔 판독 결과(omr_scans) 저장소 — Supabase service-role 경유
 
+import type { MarkValue } from "@/lib/omr-answers";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const SCAN_BUCKET = "omr-scans";
@@ -14,8 +15,11 @@ export interface OmrScan {
   studentId: string | null;
   studentIdQr: string | null;
   studentIdBubbles: string | null;
-  /** {문항번호: 보기번호 | null} — 키는 문자열(jsonb) */
-  answers: Record<string, number | null>;
+  /**
+   * {문항번호: 표기} — 키는 문자열(jsonb).
+   * 숫자면 보기 하나, 배열이면 여러 개 표기('모두 고르기' 문항 또는 중복 표기).
+   */
+  answers: Record<string, MarkValue>;
   /** 서술형 문항 점수 {문항번호: 점수} — 채점자가 입력 */
   essayScores: Record<string, number>;
   reviewFlags: Array<Record<string, unknown>>;
@@ -33,7 +37,7 @@ interface ScanRow {
   student_id: string | null;
   student_id_qr: string | null;
   student_id_bubbles: string | null;
-  answers: Record<string, number | null> | null;
+  answers: Record<string, MarkValue> | null;
   essay_scores: Record<string, number> | null;
   review_flags: Array<Record<string, unknown>> | null;
   status: ScanStatus;
@@ -71,7 +75,7 @@ export interface UpsertScanInput {
   studentId?: string | null;
   studentIdQr?: string | null;
   studentIdBubbles?: string | null;
-  answers?: Record<string, number | null>;
+  answers?: Record<string, MarkValue>;
   reviewFlags?: Array<Record<string, unknown>>;
   status?: ScanStatus;
   readError?: string | null;
@@ -123,7 +127,7 @@ export async function getScan(id: string): Promise<OmrScan | null> {
 
 export interface UpdateScanInput {
   studentId?: string | null;
-  answers?: Record<string, number | null>;
+  answers?: Record<string, MarkValue>;
   essayScores?: Record<string, number>;
   status?: ScanStatus;
   readError?: string | null;

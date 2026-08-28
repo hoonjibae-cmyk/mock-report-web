@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
+import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
 import { essayCountOf } from "@/lib/omr-scoring";
 
 export const runtime = "nodejs";
 
-/** 정답키 저장: {answerKey: {"1": 3, ...}} — 값은 1~보기수, 빈 값은 키 생략 */
+/**
+ * 정답키 저장: {answerKey: {"1": 3, "2": [2, 4], ...}}
+ * 값은 보기번호(1~보기수) 하나 또는 배열('모두 고르기' 문항). 빈 값은 키 생략.
+ */
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await authorizeApi("createReports");
   if (auth.response) return auth.response;
@@ -23,7 +27,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
     const lastQuestion = exam.numQuestions + essayCountOf(exam);
 
-    const answerKey: Record<string, number> = {};
+    const answerKey: Record<string, MarkValue> = {};
     for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
       const q = Number(key);
       if (!Number.isInteger(q) || q < 1 || q > exam.numQuestions) {
@@ -33,14 +37,18 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
         );
       }
       if (value === null || value === undefined || value === "") continue;
-      const choice = Number(value);
-      if (!Number.isInteger(choice) || choice < 1 || choice > exam.numChoices) {
-        return NextResponse.json(
-          { error: `${q}번 정답은 1~${exam.numChoices} 사이여야 합니다.` },
-          { status: 400 },
-        );
+      const raws = Array.isArray(value) ? value : [value];
+      for (const entry of raws) {
+        const choice = Number(entry);
+        if (!Number.isInteger(choice) || choice < 1 || choice > exam.numChoices) {
+          return NextResponse.json(
+            { error: `${q}번 정답은 1~${exam.numChoices} 사이여야 합니다.` },
+            { status: 400 },
+          );
+        }
       }
-      answerKey[String(q)] = choice;
+      const packed = compactMark(toChoices(raws.map(Number)));
+      if (packed != null) answerKey[String(q)] = packed;
     }
 
     // 배점(선택) — 0보다 큰 숫자만, 비우면 자동 균등 배분

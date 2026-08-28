@@ -23,6 +23,9 @@ export default async function OmrExamsPage() {
     <OmrDashboard
       initialExams={exams}
       setupError={setupError}
+      // 답안지 생성·스캔 판독은 Render의 OMR 서비스를 호출한다. 주소가 없으면
+      // 버튼을 눌러야 알 수 있으므로, 목록 화면에서 미리 알려 준다.
+      omrServiceReady={Boolean(process.env.OMR_API_URL)}
       canCreate={hasPermission(user, "createReports")}
       canDelete={hasPermission(user, "deleteReports")}
       currentUser={{

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
+import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { getExam } from "@/lib/omr-exams";
 import { deleteScan, getScan, updateScan } from "@/lib/omr-scans";
 
@@ -32,21 +33,25 @@ export async function PATCH(request: Request, context: { params: Promise<{ scanI
       if (typeof body.answers !== "object" || body.answers === null) {
         return NextResponse.json({ error: "답안 형식이 올바르지 않습니다." }, { status: 400 });
       }
-      const answers: Record<string, number | null> = {};
+      const answers: Record<string, MarkValue> = {};
       for (let q = 1; q <= exam.numQuestions; q += 1) {
         const raw = (body.answers as Record<string, unknown>)[String(q)];
         if (raw === null || raw === undefined || raw === "") {
           answers[String(q)] = null;
           continue;
         }
-        const choice = Number(raw);
-        if (!Number.isInteger(choice) || choice < 1 || choice > exam.numChoices) {
-          return NextResponse.json(
-            { error: `${q}번 답안은 1~${exam.numChoices} 사이여야 합니다.` },
-            { status: 400 },
-          );
+        // '모두 고르기' 문항은 배열로 온다 — 각 값이 보기 범위 안인지 확인한다.
+        const list = Array.isArray(raw) ? raw : [raw];
+        for (const entry of list) {
+          const choice = Number(entry);
+          if (!Number.isInteger(choice) || choice < 1 || choice > exam.numChoices) {
+            return NextResponse.json(
+              { error: `${q}번 답안은 1~${exam.numChoices} 사이여야 합니다.` },
+              { status: 400 },
+            );
+          }
         }
-        answers[String(q)] = choice;
+        answers[String(q)] = compactMark(toChoices(list.map(Number)));
       }
       patch.answers = answers;
     }

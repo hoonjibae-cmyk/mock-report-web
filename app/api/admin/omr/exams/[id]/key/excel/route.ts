@@ -1,23 +1,25 @@
 import { NextResponse } from "next/server";
 import readXlsxFile from "read-excel-file/node";
 import { authorizeApi } from "@/lib/api-auth";
+import { compactMark, parseChoices, serializeChoices, type MarkValue } from "@/lib/omr-answers";
 import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
 import { makeXlsx } from "@/lib/xlsx-lite";
 
 export const runtime = "nodejs";
 
-const CIRCLED = "①②③④⑤⑥⑦⑧⑨";
-
-function parseChoice(value: unknown, numChoices: number): number | null | "invalid" {
+/**
+ * 엑셀의 '정답' 칸 한 개를 읽는다.
+ * "3" / "③" 은 물론 "2,4" · "2 4" · "②④" 처럼 여러 개도 받는다('모두 고르기' 문항).
+ * 비었으면 null, 보기 범위를 벗어난 값이 섞였으면 "invalid".
+ */
+function parseAnswerCell(value: unknown, numChoices: number): number[] | null | "invalid" {
   if (value === null || value === undefined || value === "") return null;
-  let text = String(value).trim();
+  const text = String(value).trim();
   if (!text) return null;
-  const circled = CIRCLED.indexOf(text);
-  if (circled >= 0) text = String(circled + 1);
-  const choice = Number(text);
-  if (!Number.isInteger(choice) || choice < 1 || choice > numChoices) return "invalid";
-  return choice;
+  const picked = parseChoices(text, numChoices);
+  if (picked.length === 0) return "invalid";
+  return picked;
 }
 
 /** 정답 입력용 엑셀 양식 다운로드 (기존 입력값이 있으면 채워서 제공) */
@@ -35,12 +37,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const rows: Array<Array<string | number | null>> = [["문항", "정답", "배점", "영역"]];
 
     for (let q = 1; q <= exam.numQuestions; q += 1) {
-      const answer = exam.answerKey?.[String(q)];
+      const answer = serializeChoices(exam.answerKey?.[String(q)]);
       const point = exam.points?.[String(q)];
       const area = exam.questionMeta?.[String(q)]?.area;
       rows.push([
         q,
-        typeof answer === "number" ? answer : null,
+        answer || null,
         // 배점을 직접 지정한 적이 없으면 빈칸으로 두어 '자동 배분'임을 드러낸다
         hasCustomPoints && typeof point === "number" ? point : null,
         typeof area === "string" && area ? area : null,
@@ -60,6 +62,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     rows.push([null, null, null, null]);
     rows.push([`※ 정답: 1~${exam.numChoices} 또는 ①~⑤ (서술형 행은 정답을 비워 두세요)`, null, null, null]);
+    rows.push(["※ ‘모두 고르기’ 문항은 정답을 쉼표로 나열하세요 — 예: 2,4 (학생이 둘 다 표기해야 정답)", null, null, null]);
     rows.push(["※ 배점: 비워 두면 전체 문항에 100점을 자동으로 균등 배분합니다.", null, null, null]);
     rows.push(["※ 영역: 듣기 · 어법 · 독해처럼 자유롭게 입력하면 성적표에 영역별 분석이 실립니다.", null, null, null]);
 
@@ -112,7 +115,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const essayCount = essayCountOf(exam);
     const lastQuestion = exam.numQuestions + essayCount;
 
-    const answerKey: Record<string, number> = {};
+    const answerKey: Record<string, MarkValue> = {};
     const points: Record<string, number> = {};
     const questionMeta: Record<string, { area?: string }> = {};
     const problems: string[] = [];
@@ -125,11 +128,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const isEssay = q > exam.numQuestions;
 
         if (!isEssay) {
-          const parsed = parseChoice(row?.[1], exam.numChoices);
+          const parsed = parseAnswerCell(row?.[1], exam.numChoices);
           if (parsed === "invalid") {
             problems.push(`${q}번: '${row?.[1]}'`);
           } else if (parsed != null) {
-            answerKey[String(q)] = parsed;
+            const packed = compactMark(parsed);
+            if (packed != null) answerKey[String(q)] = packed;
           }
         }
 
@@ -161,7 +165,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (problems.length > 0) {
       return NextResponse.json(
         {
-          error: `정답 범위(1~${exam.numChoices})를 벗어난 값이 있습니다 — ${problems.slice(0, 5).join(", ")}${problems.length > 5 ? " 외" : ""}`,
+          error: `정답 범위(1~${exam.numChoices})를 벗어난 값이 있습니다 — ${problems.slice(0, 5).join(", ")}${problems.length > 5 ? " 외" : ""}. 복수 정답은 쉼표로 구분해 주세요(예: 2,4).`,
         },
         { status: 400 },
       );

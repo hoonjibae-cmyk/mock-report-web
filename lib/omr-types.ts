@@ -1,5 +1,7 @@
 // OMR 시험/성적표 공통 타입
 
+import type { MarkValue } from "@/lib/omr-answers";
+
 export type ExamType = "mock" | "saturday" | "monthly" | "placement" | "inclass";
 export type ReportFamily = "A_rich" | "B_english" | "C_generic";
 
@@ -46,8 +48,11 @@ export interface OmrExam {
   idDigits: number;
   omrStyle: "exam" | "basic";
   omrConfig: OmrConfig;
-  /** {문항번호: 정답 보기번호(1-base)} — 키는 문자열(jsonb) */
-  answerKey: Record<string, number>;
+  /**
+   * {문항번호: 정답} — 키는 문자열(jsonb).
+   * 값이 숫자면 보기 하나, 배열이면 '모두 고르기' 문항(전부 맞혀야 정답).
+   */
+  answerKey: Record<string, MarkValue>;
   /** {문항번호: 배점} — 비어 있으면 100점 만점 균등 배점 */
   points: Record<string, number>;
   /** {문항번호: {area}} — 문항별 영역(듣기·어법 등). 미설정 시 영역 분석 생략 */
