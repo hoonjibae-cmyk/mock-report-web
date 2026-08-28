@@ -88,6 +88,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
       if (fileRef.current) fileRef.current.value = "";
       const parts = [`${data.read ?? 0}장 판독 완료`];
       if (data.failed) parts.push(`${data.failed}장 실패`);
+      if (data.mismatched) parts.push(`${data.mismatched}장 설정 불일치 의심`);
       if (data.storageSkipped) parts.push("원본 미보관(omr-scans 버킷 없음)");
       setMessage(parts.join(" · "));
     } catch (err) {
@@ -293,7 +294,11 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                             </span>
 
                             {scan.readError ? (
-                              <span className="status-chip danger">판독 실패</span>
+                              <span className="status-chip danger">
+                                {scan.readError.includes("다른 시험") || scan.readError.includes("어긋")
+                                  ? "설정 불일치"
+                                  : "판독 실패"}
+                              </span>
                             ) : scan.status === "reviewed" && !dirty ? (
                               <span className="status-chip active">검수 완료</span>
                             ) : flags.size > 0 || idFlag ? (
@@ -334,7 +339,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
 
                           {scan.readError ? (
                             <p className="form-error" style={{ marginTop: 8 }}>
-                              {scan.readError} — 스캔을 다시 찍어 같은 파일명으로 올리면 갱신됩니다.
+                              {scan.readError}
                             </p>
                           ) : null}
 
