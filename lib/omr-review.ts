@@ -43,7 +43,11 @@ export interface ReviewVerdict {
 export interface ReviewContext {
   /** 시험의 총 문항 수 */
   numQuestions: number;
-  /** 수험번호 자리수 — 자리수가 안 맞으면 마킹을 흘려 읽은 것이다 */
+  /**
+   * 수험번호 **최대** 자리수(시험 설정값). 고정 길이가 아니다 — 학원 수험번호는
+   * 보통 4자리이고, 번호가 겹치는 학생만 5자리를 쓴다. 그래서 설정값보다 짧은
+   * 것은 정상이고, 아래 MIN_ID_DIGITS보다 짧을 때만 잘못 읽은 것으로 본다.
+   */
   idDigits?: number;
   /** 정답표 — '모두 고르기' 문항을 알아야 복수 표기가 정상인지 판단할 수 있다 */
   answerKey?: Record<string, MarkValue>;
@@ -55,6 +59,15 @@ export interface ReviewContext {
    */
   knownIds?: Set<string> | null;
 }
+
+/**
+ * 정상으로 인정하는 수험번호 최소 자리수.
+ *
+ * 학원 수험번호는 4자리가 기본이고 겹치는 학생만 5자리를 쓴다. 그래서 시험
+ * 설정의 자리수는 '최대'이지 '반드시 그만큼'이 아니다. 이보다 짧게 읽혔다면
+ * 마킹이 흐려 자리가 빠졌을 가능성이 높으므로 사람이 확인한다.
+ */
+const MIN_ID_DIGITS = 4;
 
 /** 표기된 문항 수 */
 function markedCount(answers: Record<string, MarkValue>): number {
@@ -109,8 +122,13 @@ export function reviewVerdict(scan: OmrScan, ctx: ReviewContext): ReviewVerdict 
   if (!id) {
     add("noStudentId", "수험번호를 읽지 못했습니다.");
   } else {
-    if (ctx.idDigits && id.length !== ctx.idDigits && !id.includes("?")) {
-      add("idLength", `수험번호가 ${id.length}자리로 읽혔습니다(설정은 ${ctx.idDigits}자리).`);
+    // 설정 자리수는 최대치라 그보다 짧은 건 정상이다. 너무 짧을 때만 붙잡는다.
+    const minDigits = Math.min(MIN_ID_DIGITS, ctx.idDigits ?? MIN_ID_DIGITS);
+    if (id.length < minDigits && !id.includes("?")) {
+      add(
+        "idLength",
+        `수험번호가 ${id.length}자리로 읽혔습니다. 최소 ${minDigits}자리여야 하므로 마킹이 흐려 자리가 빠졌을 수 있습니다.`,
+      );
     }
     if (id.includes("?")) add("idUncertain", "수험번호에 읽지 못한 자리가 있습니다.");
     if (ctx.duplicateIds?.has(normalizeId(id))) {
