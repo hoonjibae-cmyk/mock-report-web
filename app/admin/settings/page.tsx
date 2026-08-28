@@ -17,6 +17,7 @@ export default async function SettingsPage() {
   return (
     <SettingsPanel
       initialAiModel={settings.aiModel}
+      initialCommentStyle={settings.commentStyle}
       storageReady={settings.storageReady}
       directoryConfigured={directoryConfigured()}
       canEdit

@@ -6,7 +6,9 @@ import AcademyLogo from "@/components/AcademyLogo";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import {
   AREA_RATINGS,
+  COMMENT_STYLE_LABELS,
   suggestRating,
+  type CommentStyle,
   type AreaFeedback,
   type AreaRating,
   type CommentStudentRow,
@@ -241,6 +243,9 @@ export default function OmrCommentsEditor({
   const [overviewText, setOverviewText] = useState(initialOverview.final ?? initialOverview.aiDraft ?? "");
   const [overviewMemo, setOverviewMemo] = useState("");
   const [areaNotes, setAreaNotes] = useState(initialOverview.areaNotes ?? []);
+  // 시험마다 고르는 작성 방식. 선생님마다 쓰는 방식이 다르므로 강제하지 않는다.
+  const [style, setStyle] = useState<CommentStyle>(initialOverview.style);
+  const structured = style === "structured";
   const [students, setStudents] = useState<StudentRow[]>(initialStudents);
   const [drafts, setDrafts] = useState<Record<string, TeacherComment>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -312,9 +317,11 @@ export default function OmrCommentsEditor({
             ...overview,
             final: overviewText.trim() || null,
             areaNotes: areaNotes.filter((entry) => entry.text.trim()),
+            style,
             // 총평이나 영역별 안내 중 하나라도 쓰였으면 성적표에 내보낸다
             status:
-              overviewText.trim() || areaNotes.some((entry) => entry.text.trim())
+              overviewText.trim() ||
+              (structured && areaNotes.some((entry) => entry.text.trim()))
                 ? "final"
                 : "draft",
           },
@@ -453,6 +460,41 @@ export default function OmrCommentsEditor({
         <p className="subtle">OPENAI_API_KEY가 없어 AI 초안 버튼은 동작하지 않습니다. 직접 작성해 저장할 수 있습니다.</p>
       ) : null}
 
+      {/* 작성 방식 — 선생님마다 쓰는 방식이 다르므로 시험마다 고른다 */}
+      <section className="panel style-picker-panel">
+        <div>
+          <p className="eyebrow">작성 방식</p>
+          <h2>이 시험의 의견을 어떻게 쓸까요?</h2>
+          <p className="subtle">
+            시험마다 따로 고를 수 있습니다. 방식을 바꿔도 이미 쓴 글은 지워지지 않습니다.
+          </p>
+        </div>
+        <div className="style-options">
+          {(["free", "structured"] as CommentStyle[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={`style-option${style === option ? " on" : ""}`}
+              disabled={!canEdit}
+              onClick={() => setStyle(option)}
+            >
+              <strong>{COMMENT_STYLE_LABELS[option]}</strong>
+              <span>
+                {option === "free"
+                  ? "총평 한 칸과 학생별 의견 한 칸에 자유롭게 씁니다."
+                  : "위에 더해 영역별 출제 안내와 영역별 평가(등급 + 서술)까지 적습니다."}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="subtle style-note">
+          고른 방식은 <strong>총평 저장</strong>을 누를 때 함께 저장됩니다.
+          {structured
+            ? " 영역별 항목은 문항에 분석영역이 있어야 만들어집니다."
+            : " 영역별 항목은 성적표에 실리지 않습니다."}
+        </p>
+      </section>
+
       <section className="panel">
         <div className="section-heading wrap">
           <div>
@@ -503,7 +545,7 @@ export default function OmrCommentsEditor({
         />
 
         {/* 영역별 출제 안내 — 무엇을 확인하려 한 시험인지 영역마다 한 단락씩 */}
-        <div style={{ marginTop: 18 }}>
+        <div style={{ marginTop: 18, display: structured ? undefined : "none" }}>
           <div className="card-title-row">
             <h4 style={{ margin: 0, fontSize: 14 }}>영역별 출제 안내</h4>
             {canEdit && aiEnabled ? (
@@ -626,7 +668,7 @@ export default function OmrCommentsEditor({
                   </label>
 
                   {/* 영역별 평가 — 등급은 성취율에서 제안하고 선생님이 고친다 */}
-                  <div style={{ marginTop: 14 }}>
+                  <div style={{ marginTop: 14, display: structured ? undefined : "none" }}>
                     <span style={{ display: "block", marginBottom: 4, fontSize: 12, fontWeight: 700, color: "#667085" }}>
                       영역별 평가 — 등급은 성취율로 제안했습니다. 필요하면 바꿔 주세요.
                     </span>

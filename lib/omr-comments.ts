@@ -8,6 +8,26 @@ import { isGenericReport, type GenericReportData } from "@/lib/omr-report-types"
 export type CommentStatus = "draft" | "final";
 
 /**
+ * 의견 작성 방식 — 선생님마다 쓰는 방식이 다르므로 시험별로 고른다.
+ *
+ *   free       총평 한 칸 + 학생별 의견 한 칸 (처음부터 있던 방식)
+ *   structured 위에 더해 영역별 출제 안내와 영역별 평가(등급 + 서술)까지
+ *
+ * structured는 free의 확장이다 — 총평과 학생별 의견은 같은 칸을 쓰고, 영역별
+ * 항목만 더 붙는다. 그래서 방식을 바꿔도 이미 쓴 글이 사라지지 않는다.
+ */
+export type CommentStyle = "free" | "structured";
+
+export const COMMENT_STYLE_LABELS: Record<CommentStyle, string> = {
+  free: "자유 서술",
+  structured: "영역별 구조",
+};
+
+export function normalizeCommentStyle(value: unknown): CommentStyle | null {
+  return value === "free" || value === "structured" ? value : null;
+}
+
+/**
  * 영역별 성취 등급.
  *
  * 성취율에서 자동으로 제안하고 선생님이 고칠 수 있다. 절대 기준(성취율)으로
@@ -78,6 +98,11 @@ export interface OverviewComment {
    * 응시생 전원의 성적표에 똑같이 실리므로 시험당 한 번만 쓴다.
    */
   areaNotes: AreaNote[];
+  /**
+   * 이 시험의 의견 작성 방식. 저장된 값이 없으면 이미 쓴 내용에서 미루어 본다
+   * (영역별 항목이 있으면 structured). 그래야 기존 시험의 표시가 바뀌지 않는다.
+   */
+  style: CommentStyle;
   status: CommentStatus;
   updatedAt: string | null;
 }
@@ -99,7 +124,7 @@ export interface TeacherComment {
 }
 
 export function emptyOverview(): OverviewComment {
-  return { aiDraft: null, final: null, areaNotes: [], status: "draft", updatedAt: null };
+  return { aiDraft: null, final: null, areaNotes: [], style: "free", status: "draft", updatedAt: null };
 }
 
 export function emptyTeacherComment(): TeacherComment {
@@ -123,10 +148,13 @@ function asStringArray(value: unknown): string[] {
 export function parseOverview(raw: unknown): OverviewComment {
   if (typeof raw !== "object" || raw === null) return emptyOverview();
   const value = raw as Record<string, unknown>;
+  const areaNotes = parseAreaNotes(value.areaNotes);
   return {
     aiDraft: typeof value.aiDraft === "string" ? value.aiDraft : null,
     final: typeof value.final === "string" ? value.final : null,
-    areaNotes: parseAreaNotes(value.areaNotes),
+    areaNotes,
+    // 저장된 값이 없는 예전 시험은 쓴 내용으로 판단한다
+    style: normalizeCommentStyle(value.style) ?? (areaNotes.length > 0 ? "structured" : "free"),
     status: value.status === "final" ? "final" : "draft",
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
   };

@@ -1077,6 +1077,29 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 
 /* --- 영역별 성취 --- */
+/* --- 의견 작성 방식 고르기 --- */
+.style-picker-panel { display: flex; flex-direction: column; gap: 12px; }
+.style-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.style-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 15px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.style-option:hover:not(:disabled) { border-color: #bcd0e8; }
+.style-option.on { border-color: var(--blue); background: #f2f7fe; }
+.style-option > strong { font-size: 14px; color: var(--navy-deep); }
+.style-option.on > strong::after { content: " ✓"; color: var(--blue); }
+.style-option > span { font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.style-option:disabled { cursor: default; opacity: 0.7; }
+.style-note { margin: 0; font-size: 12.5px; }
+
 /* --- 의견 편집기: 영역별 입력 --- */
 .fb-editor { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .fb-row {

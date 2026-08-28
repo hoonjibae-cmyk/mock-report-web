@@ -48,6 +48,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
     const personalFinal = personal.status === "final";
     const comments: ReportComments = {
       overview: overviewFinal ? overview.final : null,
+      style: overview?.style ?? "free",
       areaNotes: overviewFinal ? overview.areaNotes : [],
       personal: personalFinal ? personal.personalFinal : null,
       areaFeedback: personalFinal ? personal.areaFeedback : [],

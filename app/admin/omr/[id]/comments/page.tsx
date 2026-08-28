@@ -8,6 +8,7 @@ import {
   type CommentStudentRow,
   type OverviewComment,
 } from "@/lib/omr-comments";
+import { getCommentStyle } from "@/lib/app-settings";
 import OmrCommentsEditor from "@/components/OmrCommentsEditor";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +32,15 @@ export default async function OmrCommentsPage(context: { params: Promise<{ id: s
 
   if (exam) {
     try {
-      const [ov, rows] = await Promise.all([getExamOverview(id), listCommentStudents(id)]);
-      overview = ov;
+      const [ov, rows, defaultStyle] = await Promise.all([
+        getExamOverview(id),
+        listCommentStudents(id),
+        getCommentStyle(),
+      ]);
+      // 아직 아무것도 쓰지 않은 시험이면 설정의 기본 방식에서 출발한다.
+      // 이미 쓴 시험은 저장된 방식을 그대로 지킨다 — 화면이 멋대로 바뀌면 안 된다.
+      const untouched = !ov.final && ov.areaNotes.length === 0 && ov.status !== "final";
+      overview = untouched ? { ...ov, style: defaultStyle } : ov;
       students = rows.map(({ reportData: _omit, ...rest }) => rest);
     } catch (error) {
       setupError = error instanceof Error ? error.message : "담임 의견을 불러오지 못했습니다.";

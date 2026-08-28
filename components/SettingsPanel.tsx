@@ -3,10 +3,13 @@
 import { useState } from "react";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import { AI_MODEL_OPTIONS, type AiModelId } from "@/lib/ai-models";
+import { COMMENT_STYLE_LABELS, type CommentStyle } from "@/lib/omr-comments";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
 interface Props {
   initialAiModel: AiModelId;
+  /** 새 시험에 기본으로 잡을 담임 의견 작성 방식 */
+  initialCommentStyle: CommentStyle;
   /** 설정 저장소(app_settings 테이블)가 준비되어 있는가 */
   storageReady: boolean;
   /** 학생 관리 프로그램 연동(STUDENT_API_URL)이 설정되어 있는가 */
@@ -17,12 +20,14 @@ interface Props {
 
 export default function SettingsPanel({
   initialAiModel,
+  initialCommentStyle,
   storageReady,
   directoryConfigured,
   canEdit,
   currentUser,
 }: Props) {
   const [aiModel, setAiModel] = useState<AiModelId>(initialAiModel);
+  const [commentStyle, setCommentStyle] = useState<CommentStyle>(initialCommentStyle);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -41,6 +46,32 @@ export default function SettingsPanel({
       setDirectoryStatus("확인 중 오류가 발생했습니다.");
     } finally {
       setDirectoryChecking(false);
+    }
+  }
+
+  /** 새 시험의 기본 작성 방식 저장 — 이미 만든 시험에는 영향이 없다 */
+  async function saveCommentStyle(next: CommentStyle) {
+    const previous = commentStyle;
+    setCommentStyle(next);
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentStyle: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "설정을 저장하지 못했습니다.");
+      setMessage(
+        `새 시험의 담임 의견 방식을 '${COMMENT_STYLE_LABELS[next]}'로 저장했습니다. 이미 만든 시험은 그대로입니다.`,
+      );
+    } catch (err) {
+      setCommentStyle(previous); // 저장 실패 — 화면을 되돌린다
+      setError(err instanceof Error ? err.message : "설정 저장 중 오류가 발생했습니다.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -123,6 +154,44 @@ export default function SettingsPanel({
             AI 모델 변경은 관리자만 할 수 있습니다.
           </p>
         ) : null}
+      </div>
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <div className="section-heading wrap">
+          <div>
+            <p className="eyebrow">담임 의견</p>
+            <h2>기본 작성 방식</h2>
+            <p className="subtle">
+              <strong>새로 만드는 시험</strong>에 기본으로 잡히는 방식입니다. 선생님마다 쓰는
+              방식이 다를 수 있으므로, 시험마다 담임 의견 화면에서 바꿀 수 있습니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="style-options">
+          {(["free", "structured"] as CommentStyle[]).map((option) => {
+            const on = commentStyle === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                className={`style-option${on ? " on" : ""}`}
+                disabled={!canEdit || saving}
+                aria-pressed={on}
+                onClick={() => {
+                  if (!on) void saveCommentStyle(option);
+                }}
+              >
+                <strong>{COMMENT_STYLE_LABELS[option]}</strong>
+                <span>
+                  {option === "free"
+                    ? "총평 한 칸과 학생별 의견 한 칸에 자유롭게 씁니다."
+                    : "위에 더해 영역별 출제 안내와 영역별 평가(등급 + 서술)까지 적습니다."}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="panel" style={{ marginTop: 20 }}>
