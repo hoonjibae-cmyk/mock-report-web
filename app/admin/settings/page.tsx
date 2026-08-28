@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { readSettings } from "@/lib/app-settings";
+import { directoryConfigured } from "@/lib/student-directory";
 import SettingsPanel from "@/components/SettingsPanel";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function SettingsPage() {
     <SettingsPanel
       initialAiModel={settings.aiModel}
       storageReady={settings.storageReady}
+      directoryConfigured={directoryConfigured()}
       canEdit
       currentUser={{
         username: user.username,

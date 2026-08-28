@@ -45,6 +45,9 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
   const [reference, setReference] = useState(exam?.mockReference ?? null);
   const [refUploading, setRefUploading] = useState(false);
   const refInputRef = useRef<HTMLInputElement>(null);
+  // 학생 관리 프로그램(Student-Card) 연동 — 수험번호로 이름·학교·연락처를 불러온다
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryConfigured, setDirectoryConfigured] = useState<boolean | null>(null);
   const [error, setError] = useState(setupError);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState("");
@@ -52,6 +55,67 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
   const isMock = exam?.examType === "mock";
   const mockSubject = mockSubjectOf(exam?.subject);
   const referenceReady = !isMock || Boolean(reference);
+
+  /** 검수 완료된 수험번호를 모두 조회해 이름·학교·연락처를 채운다 */
+  async function loadStudents() {
+    const numbers = reviewed.map((scan) => scan.studentId).filter((v): v is string => Boolean(v));
+    if (numbers.length === 0) return;
+    setDirectoryLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/students/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examNumbers: numbers }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "학생 정보를 불러오지 못했습니다.");
+      setDirectoryConfigured(data.configured);
+      if (!data.configured) {
+        setError(
+          "학생 관리 프로그램 연동이 설정되어 있지 않습니다. Vercel 환경변수 STUDENT_API_URL·STUDENT_API_KEY를 추가해 주세요.",
+        );
+        return;
+      }
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+
+      const found = data.students as Record<string, { name: string; school: string; grade: string; parentPhone: string }>;
+      let filled = 0;
+      setDrafts((prev) => {
+        const next = { ...prev };
+        for (const scan of reviewed) {
+          const info = scan.studentId ? found[scan.studentId] : undefined;
+          if (!info) continue;
+          const current = next[scan.id] ?? draftFor(scan);
+          next[scan.id] = {
+            // 이미 손으로 고쳐 둔 값이 있으면 덮어쓰지 않는다
+            name: current.name.trim() || info.name,
+            school: current.school.trim() || [info.school, info.grade].filter(Boolean).join(" "),
+            phone: current.phone.trim() || info.parentPhone,
+          };
+          filled += 1;
+        }
+        return next;
+      });
+
+      const missing: string[] = data.missing ?? [];
+      const parts = [`${filled}명 정보를 불러왔습니다.`];
+      if (missing.length > 0) {
+        parts.push(
+          `학생 관리 프로그램에서 찾지 못한 수험번호 ${missing.length}개: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? " 외" : ""}`,
+        );
+      }
+      setMessage(parts.join(" "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "학생 정보 조회 중 오류가 발생했습니다.");
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }
 
   async function uploadReference(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -348,7 +412,7 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
       <div className="panel">
         <div className="section-heading wrap">
           <div>
-            <p className="eyebrow">STEP 3</p>
+            <p className="eyebrow">{isMock ? "STEP 4" : "STEP 3"}</p>
             <h2>학생 확인 · 성적표 생성</h2>
             <p className="subtle">
               검수 완료 {reviewed.length}건이 채점 대상입니다
@@ -358,16 +422,33 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
                 ? ` · 이 시험으로 이미 만든 성적표 ${existingReports}건 (다시 생성하면 새 링크가 추가됩니다. 이전 묶음은 웹 리포트 탭에서 삭제)`
                 : ""}
             </p>
+            <p className="subtle">
+              답안지에서 읽히는 학생 정보는 <strong>수험번호</strong> 하나뿐입니다.{" "}
+              <strong>학생 정보 불러오기</strong>를 누르면 학생 관리 프로그램에서 이름·학교·학부모
+              연락처를 가져와 채웁니다(직접 고쳐 둔 칸은 그대로 둡니다).
+              {directoryConfigured === false ? " — 아직 연동이 설정되지 않았습니다." : ""}
+            </p>
           </div>
           {canCreate ? (
-            <button
-              className="button primary"
-              onClick={generate}
-              disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
-              title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
-            >
-              {loading ? "채점·생성 중…" : "성적표 생성"}
-            </button>
+            <div className="toolbar" style={{ flexWrap: "wrap" }}>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={loadStudents}
+                disabled={directoryLoading || reviewed.length === 0}
+                title="수험번호로 학생 관리 프로그램에서 이름·학교·연락처를 불러옵니다"
+              >
+                {directoryLoading ? "불러오는 중…" : "학생 정보 불러오기"}
+              </button>
+              <button
+                className="button primary"
+                onClick={generate}
+                disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
+                title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
+              >
+                {loading ? "채점·생성 중…" : "성적표 생성"}
+              </button>
+            </div>
           ) : null}
         </div>
 

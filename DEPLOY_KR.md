@@ -63,6 +63,8 @@ Vercel의 **Environment Variables**에 다음을 입력합니다.
 | `REPORT_PIN_REQUIRED` | `true` |
 | `OMR_API_URL` | OMR 판독 서비스 주소(예: `https://omr-api-xxxx.onrender.com`) |
 | `OMR_API_KEY` | OMR 서비스와 공유하는 비밀 키(서비스 배포 시 정한 값) |
+| `STUDENT_API_URL` | 학생 관리 프로그램(Student-Card) 주소 — 수험번호로 학생 정보를 불러올 때 사용 |
+| `STUDENT_API_KEY` | Student-Card의 `API_KEY`와 같은 값 |
 
 `NEXT_PUBLIC_SITE_URL`은 비워도 됩니다. 커스텀 도메인을 쓰고 링크 주소를 고정하고 싶을 때만 `https://도메인`을 입력합니다.
 
@@ -117,6 +119,22 @@ Vercel 환경변수가 빠졌거나 오타가 있습니다. 수정 후 **Redeplo
 
 Vercel의 **Settings → Build and Deployment**에서 Install Command를 따로 입력해 둔 적이 있다면 지우고 기본값으로 두어도 됩니다. 이 프로젝트의 `vercel.json`이 `npm ci --no-audit --no-fund`를 자동 적용합니다.
 
+
+## 학생 정보 연동 (v1.9)
+
+OMR 답안지가 읽을 수 있는 학생 정보는 **수험번호 하나뿐**입니다. 이름·학교·학년·학부모 연락처는 이 시스템에 두지 않고, **학생 관리 프로그램(Student-Card)** 에서 수험번호로 불러옵니다.
+
+> **OMR 리포트의 수험번호 = Student-Card의 카드번호**입니다.
+
+- 성적표 화면의 **학생 정보 불러오기** 버튼 → 검수 완료된 수험번호를 한 번에 조회해 채웁니다
+- 직접 고쳐 둔 칸은 덮어쓰지 않습니다
+- 학부모 연락처 뒤 4자리가 성적표 열람 PIN이 됩니다
+- API 키는 브라우저로 나가지 않습니다(서버가 대신 호출)
+- 연동이 없거나 실패해도 성적표 생성은 막지 않습니다 — 이름을 직접 입력해 진행하면 됩니다
+
+연결 상태는 **설정 → 학생 정보 연동 → 연결 확인**에서 볼 수 있습니다.
+
+> Student-Card 쪽에 추가해야 할 엔드포인트 규약은 [`docs/STUDENT_CARD_API.md`](docs/STUDENT_CARD_API.md) 에 정리해 두었습니다.
 
 ## 국영수 모의고사 진행 절차 (v1.8)
 

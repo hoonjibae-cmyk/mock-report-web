@@ -9,6 +9,8 @@ interface Props {
   initialAiModel: AiModelId;
   /** 설정 저장소(app_settings 테이블)가 준비되어 있는가 */
   storageReady: boolean;
+  /** 학생 관리 프로그램 연동(STUDENT_API_URL)이 설정되어 있는가 */
+  directoryConfigured: boolean;
   canEdit: boolean;
   currentUser: NavUser;
 }
@@ -16,6 +18,7 @@ interface Props {
 export default function SettingsPanel({
   initialAiModel,
   storageReady,
+  directoryConfigured,
   canEdit,
   currentUser,
 }: Props) {
@@ -23,6 +26,23 @@ export default function SettingsPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [directoryStatus, setDirectoryStatus] = useState("");
+  const [directoryChecking, setDirectoryChecking] = useState(false);
+
+  async function checkDirectory() {
+    setDirectoryChecking(true);
+    setDirectoryStatus("");
+    try {
+      const res = await fetch("/api/admin/students/lookup");
+      const data = await res.json().catch(() => ({}));
+      if (!data.configured) setDirectoryStatus("STUDENT_API_URL이 설정되어 있지 않습니다.");
+      else setDirectoryStatus(data.message || (data.reachable ? "연결됨" : "연결 실패"));
+    } catch {
+      setDirectoryStatus("확인 중 오류가 발생했습니다.");
+    } finally {
+      setDirectoryChecking(false);
+    }
+  }
 
   async function save(next: AiModelId) {
     const previous = aiModel;
@@ -103,6 +123,48 @@ export default function SettingsPanel({
             AI 모델 변경은 관리자만 할 수 있습니다.
           </p>
         ) : null}
+      </div>
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        <div className="section-heading wrap">
+          <div>
+            <p className="eyebrow">INTEGRATION</p>
+            <h2>학생 정보 연동</h2>
+            <p className="subtle">
+              답안지에서 읽히는 학생 정보는 <strong>수험번호</strong> 하나뿐입니다. 이름·학교·
+              학부모 연락처는 <strong>학생 관리 프로그램(Student-Card)</strong>에서 불러옵니다 —
+              OMR의 수험번호가 곧 <strong>Student-Card의 카드번호</strong>입니다. 이 시스템에는
+              학생 명부를 따로 두지 않습니다.
+            </p>
+          </div>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={checkDirectory}
+            disabled={directoryChecking}
+          >
+            {directoryChecking ? "확인 중…" : "연결 확인"}
+          </button>
+        </div>
+        {directoryConfigured ? (
+          <div className="info-box">
+            <strong>연동 설정됨</strong>
+            <p>
+              성적표 화면의 <strong>학생 정보 불러오기</strong>로 가져옵니다.
+              {directoryStatus ? ` — ${directoryStatus}` : ""}
+            </p>
+          </div>
+        ) : (
+          <div className="permission-denied">
+            <strong>아직 연동되지 않았습니다.</strong>
+            <p>
+              Vercel → Settings → Environment Variables 에 <code>STUDENT_API_URL</code>(학생 관리
+              프로그램 주소)과 <code>STUDENT_API_KEY</code>(상대 쪽 <code>API_KEY</code>와 같은 값)를
+              추가한 뒤 다시 배포해 주세요. 연동 전에는 성적표 화면에서 이름을 직접 입력하면 됩니다.
+              {directoryStatus ? ` — ${directoryStatus}` : ""}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="panel" style={{ marginTop: 20 }}>
