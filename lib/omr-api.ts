@@ -36,6 +36,22 @@ export interface GenerateSheetResult {
   preview_png_base64?: string;
 }
 
+/**
+ * OMR 서비스가 돌려준 오류에서 사람이 읽을 문장만 뽑는다.
+ * FastAPI는 {"detail": "..."} 형태로 안내문을 주므로 그것을 그대로 쓰고,
+ * 아니면 원문을 짧게 잘라 붙인다.
+ */
+async function apiErrorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.text().catch(() => "");
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) return parsed.detail;
+  } catch {
+    // JSON이 아니면 아래에서 원문을 쓴다
+  }
+  return `${fallback} (${res.status}) ${body.slice(0, 200)}`.trim();
+}
+
 export async function generateSheet(spec: OmrSheetSpec): Promise<GenerateSheetResult> {
   const res = await fetch(`${apiBase()}/generate`, {
     method: "POST",
@@ -43,7 +59,7 @@ export async function generateSheet(spec: OmrSheetSpec): Promise<GenerateSheetRe
     body: JSON.stringify(spec),
   });
   if (!res.ok) {
-    throw new Error(`OMR 답안지 생성 실패 (${res.status}): ${await res.text().catch(() => "")}`);
+    throw new Error(await apiErrorMessage(res, "OMR 답안지 생성 실패"));
   }
   return (await res.json()) as GenerateSheetResult;
 }
@@ -81,7 +97,7 @@ export async function readScans(spec: OmrSheetSpec, files: File[]): Promise<Read
     body: form,
   });
   if (!res.ok) {
-    throw new Error(`OMR 판독 실패 (${res.status}): ${await res.text().catch(() => "")}`);
+    throw new Error(await apiErrorMessage(res, "OMR 판독 실패"));
   }
   return (await res.json()) as ReadScansResult;
 }
