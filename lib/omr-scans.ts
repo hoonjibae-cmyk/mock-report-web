@@ -15,6 +15,9 @@ function describeDbError(message: string): string {
     const column = missingColumn[1];
     const guide: Record<string, string> = {
       essay_scores: "supabase/migration_v4_essay_scores.sql",
+      preview_path: "supabase/migration_v7_scan_preview.sql",
+      read_confidence: "supabase/migration_v8_read_confidence.sql",
+      reviewed_by: "supabase/migration_v8_read_confidence.sql",
     };
     const file = guide[column] ?? "supabase 폴더의 최신 migration 파일";
     return `데이터베이스 업데이트가 필요합니다. Supabase → SQL Editor에서 ${file}을 실행해 주세요. (기존 판독 결과는 그대로 보관되어 있으며, 실행 후 바로 다시 보입니다. 누락된 항목: ${column})`;
@@ -26,6 +29,23 @@ function describeDbError(message: string): string {
 }
 
 export type ScanStatus = "pending" | "reviewed";
+
+/**
+ * 판독기가 남긴 '얼마나 확실한가' 정보.
+ *
+ * 판정 자체(answers)와는 별개다. 같은 미표기라도 학생이 안 푼 문항과 연필이
+ * 흐려 못 읽은 문항은 다르게 다뤄야 하고, 그 구분이 여기 담긴다.
+ */
+export interface ReadConfidence {
+  /** 판정이 경계에 걸쳐 사람이 눈으로 봐야 하는 문항 번호 */
+  uncertain: number[];
+  /** 둘 이상 칠해진 문항 — '모두 고르기'면 정상이라 정답과 대조해 판단한다 */
+  multiMarked: number[];
+  /** 수험번호 자리 중 애매하게 읽힌 곳이 있는가 */
+  idUncertain: boolean;
+  /** QR과 마킹의 수험번호가 어긋나는가(학생별 답안지에서만 발생) */
+  idConflict: boolean;
+}
 
 export interface OmrScan {
   id: string;
@@ -45,7 +65,11 @@ export interface OmrScan {
   /** 서술형 문항 점수 {문항번호: 점수} — 채점자가 입력 */
   essayScores: Record<string, number>;
   reviewFlags: Array<Record<string, unknown>>;
+  /** 판독 확신 정보 — 자동 검수 통과 판단용. 이전에 올린 답안지는 null. */
+  readConfidence: ReadConfidence | null;
   status: ScanStatus;
+  /** 'auto' = 시스템 자동 통과, 그 외에는 확인한 사용자 ID */
+  reviewedBy: string | null;
   readError: string | null;
   createdAt: string;
   updatedAt: string;
@@ -63,14 +87,16 @@ interface ScanRow {
   answers: Record<string, MarkValue> | null;
   essay_scores: Record<string, number> | null;
   review_flags: Array<Record<string, unknown>> | null;
+  read_confidence: ReadConfidence | null;
   status: ScanStatus;
+  reviewed_by: string | null;
   read_error: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,review_flags,status,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,review_flags,read_confidence,status,reviewed_by,read_error,created_at,updated_at";
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -85,7 +111,9 @@ function mapScan(row: ScanRow): OmrScan {
     answers: row.answers ?? {},
     essayScores: row.essay_scores ?? {},
     reviewFlags: row.review_flags ?? [],
+    readConfidence: row.read_confidence ?? null,
     status: row.status,
+    reviewedBy: row.reviewed_by ?? null,
     readError: row.read_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -102,6 +130,7 @@ export interface UpsertScanInput {
   studentIdBubbles?: string | null;
   answers?: Record<string, MarkValue>;
   reviewFlags?: Array<Record<string, unknown>>;
+  readConfidence?: ReadConfidence | null;
   status?: ScanStatus;
   readError?: string | null;
 }
@@ -123,6 +152,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
         student_id_bubbles: input.studentIdBubbles ?? null,
         answers: input.answers ?? {},
         review_flags: input.reviewFlags ?? [],
+        read_confidence: input.readConfidence ?? null,
         status: input.status ?? "pending",
         read_error: input.readError ?? null,
       })),
@@ -156,6 +186,7 @@ export interface UpdateScanInput {
   answers?: Record<string, MarkValue>;
   essayScores?: Record<string, number>;
   status?: ScanStatus;
+  reviewedBy?: string | null;
   readError?: string | null;
 }
 
@@ -167,6 +198,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.reviewedBy !== undefined) patch.reviewed_by = input.reviewedBy;
   if (input.readError !== undefined) patch.read_error = input.readError;
   // 사람이 검수해 확인했으면 판독 단계의 경고는 더 이상 표시하지 않는다.
   if (input.status === "reviewed" && input.readError === undefined) patch.read_error = null;

@@ -61,6 +61,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ scanI
         return NextResponse.json({ error: "알 수 없는 검수 상태입니다." }, { status: 400 });
       }
       patch.status = body.status;
+      // 자동 통과('auto')와 구분해 누가 눈으로 확인했는지 남긴다.
+      patch.reviewedBy = body.status === "reviewed" ? auth.user.id : null;
     }
 
     return NextResponse.json({ ok: true, scan: await updateScan(scanId, patch) });

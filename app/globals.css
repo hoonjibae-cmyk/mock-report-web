@@ -331,6 +331,8 @@ button { cursor: pointer; }
 .status-chip { display: inline-flex !important; width: fit-content; padding: 3px 8px; border-radius: 99px; font-size: 11px !important; font-weight: 800; margin: 0 0 2px !important; }
 .status-chip.active { color: var(--success); background: var(--success-soft); }
 .status-chip.inactive { color: var(--danger); background: var(--danger-soft); }
+/* 검수 화면에서 쓰던 변형 — 정의가 없어 그동안 맨 글자로 나왔다 */
+.status-chip.danger { color: var(--danger); background: var(--danger-soft); }
 .row-actions { display: flex; gap: 5px; flex-wrap: wrap; }
 .empty-cell { text-align: center; color: var(--muted); padding: 32px !important; }
 
@@ -1314,6 +1316,84 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
   letter-spacing: .06em;
   color: var(--blue);
 }
+
+/* --- 검수 요약: 60~100장을 한 장씩 누르지 않게 해 주는 부분 --- */
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin: 14px 0 4px;
+  padding: 13px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f7f9fc;
+}
+.review-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.review-counts strong { font-size: 15px; color: var(--navy-deep); }
+.review-counts .ok strong { color: #1a7f4b; }
+.review-counts .auto strong { color: #1558b0; }
+.review-counts .need strong { color: #b3261e; }
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.review-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy-deep);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.review-toggle input { width: auto; margin: 0; }
+.review-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.status-chip.auto-ready { color: #1558b0; background: #e8f1fd; }
+
+/* 왜 사람이 봐야 하는지 — 답안지 행에 바로 붙인다 */
+.review-reasons {
+  margin: 8px 0 0;
+  padding: 9px 12px 9px 26px;
+  border-radius: 9px;
+  background: #fdf3f2;
+  border: 1px solid #f2d5d2;
+  font-size: 13px;
+  line-height: 1.75;
+  color: #8c2f26;
+}
+.review-reasons li + li { margin-top: 2px; }
+.reason-jump {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid #e3b7b2;
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8c2f26;
+  cursor: pointer;
+}
+.reason-jump:hover { background: #fbeae8; }
 
 /* --- 검수: 답안 격자 + 스캔 미리보기 좌우 배치 --- */
 .review-split {

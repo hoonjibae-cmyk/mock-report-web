@@ -234,6 +234,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         studentIdBubbles: result.student_id_bubbles ?? null,
         answers,
         reviewFlags: result.review_flags ?? [],
+        // 구버전 판독 API는 확신 정보를 주지 않는다. 그럴 땐 null로 두어
+        // 자동 통과 대상에서 빠지게 한다 — 모르면 사람이 본다.
+        readConfidence: result.uncertain_questions
+          ? {
+              uncertain: result.uncertain_questions,
+              multiMarked: result.multi_marked_questions ?? [],
+              idUncertain: Boolean(result.id_uncertain),
+              idConflict: Boolean(result.id_conflict),
+            }
+          : null,
         status: "pending",
         readError: reason,
       };
