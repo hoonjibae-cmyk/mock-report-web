@@ -126,6 +126,7 @@ export interface UpdateScanInput {
   answers?: Record<string, number | null>;
   essayScores?: Record<string, number>;
   status?: ScanStatus;
+  readError?: string | null;
 }
 
 /** 검수 결과 반영(수험번호·답안 수정, 확인 처리). */
@@ -136,6 +137,9 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
   if (input.status !== undefined) patch.status = input.status;
+  if (input.readError !== undefined) patch.read_error = input.readError;
+  // 사람이 검수해 확인했으면 판독 단계의 경고는 더 이상 표시하지 않는다.
+  if (input.status === "reviewed" && input.readError === undefined) patch.read_error = null;
 
   const { data, error } = await supabase
     .from("omr_scans")

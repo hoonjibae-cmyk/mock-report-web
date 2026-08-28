@@ -139,7 +139,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
       if (fileRef.current) fileRef.current.value = "";
       const parts = [`${data.read ?? 0}장 판독 완료`];
       if (data.failed) parts.push(`${data.failed}장 실패`);
-      if (data.mismatched) parts.push(`${data.mismatched}장 설정 불일치 의심`);
+      if (data.lowConfidence) parts.push(`${data.lowConfidence}장 판독 확인 필요`);
       if (data.storageSkipped) parts.push("원본 미보관(omr-scans 버킷 없음)");
       setMessage(parts.join(" · "));
     } catch (err) {
@@ -347,9 +347,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
 
                             {scan.readError ? (
                               <span className="status-chip danger">
-                                {scan.readError.includes("다른 시험") || scan.readError.includes("어긋")
-                                  ? "설정 불일치"
-                                  : "판독 실패"}
+                                {scan.readError.includes("만 읽었습니다") ? "판독 확인 필요" : "판독 실패"}
                               </span>
                             ) : scan.status === "reviewed" && !dirty ? (
                               <span className="status-chip active">검수 완료</span>
