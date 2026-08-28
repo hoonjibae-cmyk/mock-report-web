@@ -51,11 +51,18 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
         </div>
       </header>
 
-      <nav className="admin-tabs">
+      {/* 좌측 세로 메뉴. 좁은 화면에서는 CSS가 다시 가로 탭으로 되돌린다. */}
+      <nav className="admin-side" aria-label="관리자 메뉴">
+        <p className="eyebrow">MENU</p>
         {TABS.filter((tab) => !tab.adminOnly || user.role === "admin").map((tab) => {
           const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
           return (
-            <Link key={tab.href} href={tab.href} className={active ? "active" : ""}>
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={active ? "active" : ""}
+              aria-current={active ? "page" : undefined}
+            >
               {tab.label}
             </Link>
           );

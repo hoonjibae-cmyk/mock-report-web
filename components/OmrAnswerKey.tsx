@@ -419,7 +419,8 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                 >
                   {q}
                 </span>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+                {/* minWidth:0 — 없으면 flex 항목의 min-width:auto가 카드 폭을 넘긴다 */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 0 }}>
                   {isEssay ? (
                     <span
                       style={{
@@ -435,7 +436,9 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                       서술형 · 손채점
                     </span>
                   ) : (
-                    <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                    <div
+                      style={{ display: "flex", gap: 5, rowGap: 4, alignItems: "center", flexWrap: "wrap" }}
+                    >
                       {Array.from({ length: choices }, (_, c) => c + 1).map((c) => {
                         const on = picked.includes(c);
                         return (
@@ -491,24 +494,26 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                       ) : null}
                     </div>
                   )}
-                  <div style={{ display: "flex", gap: 5 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "58px minmax(0, 1fr)", gap: 5 }}>
                     <input
+                      className="qk-input"
                       value={points[String(q)] ?? ""}
                       disabled={!canEdit}
                       inputMode="decimal"
                       placeholder={`${autoPoint || ""}`}
                       title="배점 — 비우면 자동 배분"
-                      style={{ width: 56, padding: "3px 6px", fontSize: 12 }}
+                      aria-label={`${q}번 배점`}
                       onChange={(e) =>
                         setPoints((prev) => ({ ...prev, [String(q)]: e.target.value.replace(/[^0-9.]/g, "") }))
                       }
                     />
                     <input
+                      className="qk-input"
                       value={areas[String(q)] ?? ""}
                       disabled={!canEdit}
                       placeholder="영역"
                       title="영역 — 예: 듣기, 어법"
-                      style={{ flex: 1, minWidth: 54, padding: "3px 6px", fontSize: 12 }}
+                      aria-label={`${q}번 영역`}
                       onChange={(e) => setAreas((prev) => ({ ...prev, [String(q)]: e.target.value }))}
                     />
                   </div>
