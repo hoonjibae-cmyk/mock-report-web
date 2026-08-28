@@ -1289,3 +1289,28 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 .date-range input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,103,177,.12); }
 .date-range > span:not(.filter-label) { color: var(--muted); }
+
+/* --- 국영수 모의고사: 전국 비교 · 분류 기준별 성취 --- */
+.national-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.national-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+.national-grid span { font-size: 12px; color: var(--muted); font-weight: 700; }
+.national-grid strong { font-size: 21px; color: var(--navy-deep); letter-spacing: -0.02em; }
+.national-grid strong.up { color: var(--success); }
+.national-grid strong.down { color: var(--danger); }
+
+.classification-group + .classification-group { margin-top: 16px; }
+.classification-label {
+  margin: 0 0 7px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  color: var(--blue);
+}

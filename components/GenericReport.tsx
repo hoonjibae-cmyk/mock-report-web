@@ -252,6 +252,60 @@ export default function GenericReport({
           </section>
         </section>
 
+        {report.national ? (
+          <section className="analysis-card">
+            <div className="card-title-row">
+              <h4>전국 비교</h4>
+              <span>{report.national.subjectLabel} · 전국연합학력평가 기준</span>
+            </div>
+            <div className="national-grid">
+              <div>
+                <span>전국 등급</span>
+                <strong>{report.national.grade}등급</strong>
+              </div>
+              <div>
+                <span>전국 상위 추정</span>
+                <strong>{report.national.topPercent}%</strong>
+              </div>
+              {report.national.average !== null ? (
+                <>
+                  <div>
+                    <span>전국 평균</span>
+                    <strong>{report.national.average}점</strong>
+                  </div>
+                  <div>
+                    <span>전국 평균 대비</span>
+                    <strong className={(report.national.diffFromAverage ?? 0) >= 0 ? "up" : "down"}>
+                      {(report.national.diffFromAverage ?? 0) >= 0 ? "+" : ""}
+                      {report.national.diffFromAverage}점
+                    </strong>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <p className="subtle" style={{ marginTop: 10 }}>{report.national.note}</p>
+          </section>
+        ) : null}
+
+        {report.classificationStats && report.classificationStats.length > 0 ? (
+          <section className="analysis-card">
+            <div className="card-title-row">
+              <h4>분류 기준별 성취</h4>
+              <span>막대 = 내 성취율 · 세로선 = 반 평균</span>
+            </div>
+            {report.classificationStats.map((group) => (
+              <div key={group.kind} className="classification-group">
+                <p className="classification-label">{group.label}</p>
+                <AreaBars areas={group.rows} />
+              </div>
+            ))}
+            <p className="subtle" style={{ marginTop: 10 }}>
+              행동영역·내용영역·난이도·학년 수준은 공식 정답·해설의 출제 의도를 바탕으로 학원
+              진단용으로 재분류한 기준입니다.
+            </p>
+          </section>
+        ) : null}
+
         {report.areas.length > 0 ? (
           <section className="analysis-card">
             <div className="card-title-row">
@@ -332,7 +386,10 @@ export default function GenericReport({
                   .map((item) => (
                     <tr key={item.no}>
                       <td><strong>{item.no}번</strong>{item.essay ? <span>서술형</span> : null}</td>
-                      <td>{item.area ?? "–"}</td>
+                      <td>
+                        {item.area ?? "–"}
+                        {item.classification?.detail ? <span>{item.classification.detail}</span> : null}
+                      </td>
                       <td>{item.essay ? `${item.earned}점` : formatChoices(item.marked, "미표기")}</td>
                       <td>{item.essay ? "–" : formatChoices(item.answer)}</td>
                       <td>{item.point}점</td>

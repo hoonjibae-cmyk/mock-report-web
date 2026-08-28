@@ -2,6 +2,7 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import type { MarkValue } from "@/lib/omr-answers";
+import type { MockReference } from "@/lib/mock-reference";
 import {
   ACADEMY_NAME,
   reportFamilyFor,
@@ -24,6 +25,7 @@ interface ExamRow {
   omr_style: "exam" | "basic";
   omr_config: OmrConfig | null;
   answer_key: Record<string, MarkValue> | null;
+  mock_reference: MockReference | null;
   points: Record<string, number> | null;
   question_meta: Record<string, { area?: string }> | null;
   grade_cuts: Array<{ grade: number; min: number }> | null;
@@ -46,6 +48,7 @@ function mapExam(row: ExamRow): OmrExam {
     omrStyle: row.omr_style,
     omrConfig: row.omr_config ?? {},
     answerKey: row.answer_key ?? {},
+    mockReference: row.mock_reference ?? null,
     points: row.points ?? {},
     questionMeta: row.question_meta ?? {},
     gradeCuts: row.grade_cuts ?? [],
@@ -56,7 +59,7 @@ function mapExam(row: ExamRow): OmrExam {
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_at";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_at";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -136,6 +139,29 @@ export async function updateExamAnswerKey(
     .select(SELECT)
     .single();
   if (error || !data) throw new Error(`정답 저장 실패: ${error?.message ?? "알 수 없는 오류"}`);
+  return mapExam(data as ExamRow);
+}
+
+/** 국영수 모의고사 기준 자료(문항분류표·전국비교기준) 저장 */
+export async function updateMockReference(
+  id: string,
+  reference: MockReference | null,
+): Promise<OmrExam> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("exams")
+    .update({ mock_reference: reference })
+    .eq("id", id)
+    .select(SELECT)
+    .single();
+  if (error || !data) {
+    const message = error?.message ?? "알 수 없는 오류";
+    throw new Error(
+      /mock_reference|column .* does not exist|schema cache/i.test(message)
+        ? "시험 기반 정보 저장 공간이 아직 없습니다. Supabase → SQL Editor 에서 supabase/migration_v6_mock_reference.sql 을 실행해 주세요."
+        : `시험 기반 정보 저장 실패: ${message}`,
+    );
+  }
   return mapExam(data as ExamRow);
 }
 
