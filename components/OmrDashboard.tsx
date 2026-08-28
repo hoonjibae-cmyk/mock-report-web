@@ -77,6 +77,7 @@ export default function OmrDashboard({ initialExams, setupError, canCreate, canD
                     <td>
                       <strong>{exam.title}</strong>
                       {exam.examDate ? <span>{exam.examDate}</span> : null}
+                      <span title={`시험 ID ${exam.id}`}>ID {exam.id.slice(0, 8)}</span>
                     </td>
                     <td>
                       {exam.numQuestions}문항 · {exam.numChoices}지 ·{" "}

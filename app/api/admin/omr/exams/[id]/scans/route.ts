@@ -20,6 +20,32 @@ function baseFilename(name: string): string {
   return name.replace(/#p\d+$/, "");
 }
 
+/** 표기된 문항 수 */
+function markedCount(answers: Record<string, number | null> | undefined): number {
+  if (!answers) return 0;
+  return Object.values(answers).filter((v) => typeof v === "number").length;
+}
+
+/**
+ * 답안지와 시험 설정이 어긋나면 판독 좌표가 통째로 밀린다.
+ * QR에 새겨진 시험 ID로 먼저 잡고, ID가 없으면 표기율로 의심 신호를 준다.
+ */
+function mismatchReason(
+  result: { exam_id: string | null; answers: Record<string, number | null> },
+  examId: string,
+  numQuestions: number,
+): string | null {
+  const qrExam = (result.exam_id ?? "").trim();
+  if (qrExam && qrExam !== examId) {
+    return `다른 시험의 답안지입니다(답안지에 새겨진 시험 ID: ${qrExam}). 이 답안지를 만든 시험에서 업로드하거나, 이 시험의 답안지를 새로 출력해 사용해 주세요.`;
+  }
+  const marked = markedCount(result.answers);
+  if (numQuestions >= 10 && marked > 0 && marked < numQuestions * 0.5) {
+    return `표기가 ${marked}/${numQuestions}문항만 인식되었습니다. 답안지를 출력한 뒤 시험 설정(문항 수·보기 수·서술형 문항 수)을 바꾸면 판독 위치가 어긋납니다. 설정을 확인하고 답안지를 새로 출력해 주세요.`;
+  }
+  return null;
+}
+
 // 판독된 답안: {"1": 3, ...} 형태로 정규화(값은 1-base 보기번호 또는 null)
 function normalizeAnswers(raw: Record<string, number | null> | undefined, total: number) {
   const out: Record<string, number | null> = {};
@@ -96,18 +122,29 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const read = await readScans(sheetSpecFor(exam), files);
 
-    const rows: UpsertScanInput[] = read.results.map((result) => ({
-      examId: id,
-      filename: result.filename,
-      // PDF 페이지 결과는 원본 PDF의 저장 경로를 공유한다
-      scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
-      studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
-      studentIdQr: result.student_id_qr ?? null,
-      studentIdBubbles: result.student_id_bubbles ?? null,
-      answers: normalizeAnswers(result.answers, exam.numQuestions),
-      reviewFlags: result.review_flags ?? [],
-      status: "pending",
-    }));
+    let mismatchCount = 0;
+    const rows: UpsertScanInput[] = read.results.map((result) => {
+      const answers = normalizeAnswers(result.answers, exam.numQuestions);
+      const reason = mismatchReason(
+        { exam_id: result.exam_id ?? null, answers },
+        id,
+        exam.numQuestions,
+      );
+      if (reason) mismatchCount += 1;
+      return {
+        examId: id,
+        filename: result.filename,
+        // PDF 페이지 결과는 원본 PDF의 저장 경로를 공유한다
+        scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
+        studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
+        studentIdQr: result.student_id_qr ?? null,
+        studentIdBubbles: result.student_id_bubbles ?? null,
+        answers,
+        reviewFlags: result.review_flags ?? [],
+        status: "pending",
+        readError: reason,
+      };
+    });
 
     // 판독 자체가 실패한 파일도 검수 화면에 남겨 다시 올릴 수 있게 한다.
     for (const problem of read.problems ?? []) {
@@ -131,6 +168,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       scans,
       read: read.results.length,
       failed: read.problems?.length ?? 0,
+      mismatched: mismatchCount,
       storageSkipped,
     });
   } catch (error) {
