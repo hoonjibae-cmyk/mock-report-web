@@ -235,11 +235,11 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
           </div>
         ) : null}
 
+        {/* CSS 다단(columns): 1번부터 위→아래로 채우고 다음 열로 넘어간다 */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(auto-fill, minmax(${64 + choices * 32}px, 1fr))`,
-            gap: 10,
+            columns: `${64 + choices * 32}px`,
+            columnGap: 10,
             marginTop: 14,
           }}
         >
@@ -257,6 +257,8 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                   borderRadius: 10,
                   background: empty ? "#fff" : "#eef4fb",
                   border: empty ? "1px dashed #d9a8a8" : "1px solid #cfdcee",
+                  breakInside: "avoid",
+                  marginBottom: 10,
                 }}
               >
                 <span
