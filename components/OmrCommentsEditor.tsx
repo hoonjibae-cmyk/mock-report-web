@@ -4,7 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
-import type { CommentStudentRow, OverviewComment, TeacherComment } from "@/lib/omr-comments";
+import {
+  AREA_RATINGS,
+  suggestRating,
+  type AreaFeedback,
+  type AreaRating,
+  type CommentStudentRow,
+  type OverviewComment,
+  type TeacherComment,
+} from "@/lib/omr-comments";
 
 type StudentRow = Omit<CommentStudentRow, "reportData">;
 
@@ -15,6 +23,122 @@ interface Props {
   setupError: string;
   canEdit: boolean;
   aiEnabled: boolean;
+}
+
+/**
+ * 영역별 평가 편집기 — 등급은 성취율에서 제안하고 선생님이 고친다.
+ *
+ * 아직 작성하지 않은 영역도 성취율과 함께 미리 띄운다. 빈 칸이 보여야
+ * 어느 영역을 아직 안 썼는지 알 수 있다.
+ */
+function AreaFeedbackEditor({
+  areas,
+  value,
+  disabled,
+  onChange,
+}: {
+  areas: Array<{ area: string; earned: number; possible: number; rate: number; cohortRate: number }>;
+  value: AreaFeedback[];
+  disabled: boolean;
+  onChange: (next: AreaFeedback[]) => void;
+}) {
+  if (areas.length === 0) {
+    return (
+      <p className="subtle" style={{ margin: "6px 0 0" }}>
+        문항별 분석영역이 없어 영역별 평가를 만들 수 없습니다. 정답 입력 엑셀의 ‘분석영역’ 칸을
+        채워 올리면 여기에 영역이 나타납니다.
+      </p>
+    );
+  }
+
+  const byArea = new Map(value.map((entry) => [entry.area, entry]));
+  const update = (area: string, patch: Partial<AreaFeedback>) => {
+    const current = byArea.get(area);
+    const base: AreaFeedback =
+      current ?? {
+        area,
+        rating: suggestRating(areas.find((a) => a.area === area)?.rate ?? 0),
+        text: "",
+      };
+    const merged = { ...base, ...patch };
+    const next = areas
+      .map((a) => (a.area === area ? merged : byArea.get(a.area)))
+      .filter((entry): entry is AreaFeedback => Boolean(entry));
+    onChange(next);
+  };
+
+  return (
+    <div className="fb-editor">
+      {areas.map((stat) => {
+        const entry = byArea.get(stat.area);
+        const rating = entry?.rating ?? suggestRating(stat.rate);
+        return (
+          <div className="fb-row" key={stat.area}>
+            <div className="fb-head">
+              <strong>{stat.area}</strong>
+              <span className="subtle">
+                {stat.earned}/{stat.possible}점 · 성취율 {stat.rate}% (반 평균 {stat.cohortRate}%)
+              </span>
+              <select
+                value={rating}
+                disabled={disabled}
+                onChange={(e) => update(stat.area, { rating: e.target.value as AreaRating })}
+              >
+                {AREA_RATINGS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                    {option === suggestRating(stat.rate) ? " (제안)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <textarea
+              rows={3}
+              disabled={disabled}
+              placeholder={`${stat.area} 영역에 대한 평가를 적어 주세요. 비워 두면 등급만 실립니다.`}
+              value={entry?.text ?? ""}
+              onChange={(e) => update(stat.area, { text: e.target.value })}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 영역별 출제 안내 편집기 — 응시생 전원에게 똑같이 실린다 */
+function AreaNotesEditor({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: Array<{ area: string; text: string }>;
+  disabled: boolean;
+  onChange: (next: Array<{ area: string; text: string }>) => void;
+}) {
+  if (value.length === 0) return null;
+  return (
+    <div className="fb-editor" style={{ marginTop: 12 }}>
+      {value.map((entry, index) => (
+        <div className="fb-row" key={entry.area}>
+          <div className="fb-head">
+            <strong>{entry.area}</strong>
+          </div>
+          <textarea
+            rows={3}
+            disabled={disabled}
+            placeholder={`${entry.area} 영역에서 무엇을 확인했는지 적어 주세요.`}
+            value={entry.text}
+            onChange={(e) => {
+              const next = [...value];
+              next[index] = { ...entry, text: e.target.value };
+              onChange(next);
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** 쉼표·Enter로 추가하는 키워드 칩 입력 */
@@ -116,6 +240,7 @@ export default function OmrCommentsEditor({
   const [overview, setOverview] = useState<OverviewComment>(initialOverview);
   const [overviewText, setOverviewText] = useState(initialOverview.final ?? initialOverview.aiDraft ?? "");
   const [overviewMemo, setOverviewMemo] = useState("");
+  const [areaNotes, setAreaNotes] = useState(initialOverview.areaNotes ?? []);
   const [students, setStudents] = useState<StudentRow[]>(initialStudents);
   const [drafts, setDrafts] = useState<Record<string, TeacherComment>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -152,6 +277,28 @@ export default function OmrCommentsEditor({
     }
   }
 
+  /** 영역별 출제 안내 초안 — 정답표의 분석영역·내용을 근거로 만든다 */
+  async function draftAreaNotesFor() {
+    setBusy("area-notes-draft");
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`/api/admin/omr/exams/${exam?.id}/comments/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "areaNotes", memo: overviewMemo }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "초안을 만들지 못했습니다.");
+      setAreaNotes(data.areas ?? []);
+      setMessage("영역별 안내 초안을 만들었습니다. 확인 후 저장해 주세요.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "초안 생성 중 오류가 발생했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveOverview() {
     setBusy("overview-save");
     setError("");
@@ -164,13 +311,19 @@ export default function OmrCommentsEditor({
           overview: {
             ...overview,
             final: overviewText.trim() || null,
-            status: overviewText.trim() ? "final" : "draft",
+            areaNotes: areaNotes.filter((entry) => entry.text.trim()),
+            // 총평이나 영역별 안내 중 하나라도 쓰였으면 성적표에 내보낸다
+            status:
+              overviewText.trim() || areaNotes.some((entry) => entry.text.trim())
+                ? "final"
+                : "draft",
           },
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "총평을 저장하지 못했습니다.");
       setOverview(data.overview);
+      setAreaNotes(data.overview?.areaNotes ?? []);
       setMessage("총평이 저장되었습니다. 이 시험의 모든 성적표에 공통으로 표시됩니다.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "총평 저장 중 오류가 발생했습니다.");
@@ -197,7 +350,19 @@ export default function OmrCommentsEditor({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "초안을 만들지 못했습니다.");
-      setComment(row, { aiDraft: data.draft, personalFinal: data.draft });
+      // 영역별 서술은 AI가 준 것과 성취율에서 제안한 등급을 합쳐 채운다
+      const areaDrafts: Array<{ area: string; text: string }> = data.areaDrafts ?? [];
+      const stats = row.summary?.areas ?? [];
+      const areaFeedback = stats.map((stat) => {
+        const draft = areaDrafts.find((entry) => entry.area === stat.area);
+        const existing = comment.areaFeedback.find((entry) => entry.area === stat.area);
+        return {
+          area: stat.area,
+          rating: existing?.rating ?? suggestRating(stat.rate),
+          text: draft?.text ?? existing?.text ?? "",
+        };
+      });
+      setComment(row, { aiDraft: data.draft, personalFinal: data.draft, areaFeedback });
       setMessage(`${row.studentName} 학생의 초안이 생성되었습니다. 다듬은 뒤 저장하세요.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "초안 생성 중 오류가 발생했습니다.");
@@ -336,6 +501,34 @@ export default function OmrCommentsEditor({
           placeholder="이번 시험의 성격, 응시 집단의 전반적 성취, 함께 챙길 학습 방향을 적어 주세요."
           onChange={(e) => setOverviewText(e.target.value)}
         />
+
+        {/* 영역별 출제 안내 — 무엇을 확인하려 한 시험인지 영역마다 한 단락씩 */}
+        <div style={{ marginTop: 18 }}>
+          <div className="card-title-row">
+            <h4 style={{ margin: 0, fontSize: 14 }}>영역별 출제 안내</h4>
+            {canEdit && aiEnabled ? (
+              <button
+                className="button tiny ghost"
+                disabled={busy === "area-notes-draft"}
+                onClick={draftAreaNotesFor}
+              >
+                {busy === "area-notes-draft" ? "만드는 중…" : "AI 초안"}
+              </button>
+            ) : null}
+          </div>
+          <p className="subtle" style={{ margin: "4px 0 0" }}>
+            듣기·문법·독해처럼 영역마다 <strong>이번 시험에서 무엇을 확인했는지</strong> 적습니다.
+            응시생 전원의 성적표에 똑같이 실립니다.
+          </p>
+          {areaNotes.length === 0 ? (
+            <p className="subtle" style={{ margin: "8px 0 0" }}>
+              아직 없습니다. {aiEnabled ? "‘AI 초안’을 누르면" : "정답 입력 엑셀의 ‘분석영역’을 채우면"}{" "}
+              영역별로 칸이 만들어집니다.
+            </p>
+          ) : (
+            <AreaNotesEditor value={areaNotes} disabled={!canEdit} onChange={setAreaNotes} />
+          )}
+        </div>
       </section>
 
       <section className="panel">
@@ -418,14 +611,32 @@ export default function OmrCommentsEditor({
                     />
                   </div>
 
-                  <textarea
-                    value={comment.personalFinal ?? ""}
-                    disabled={!canEdit}
-                    rows={5}
-                    style={{ width: "100%", resize: "vertical", lineHeight: 1.7 }}
-                    placeholder="AI 초안을 만들어 다듬거나, 직접 작성해 주세요. 저장하면 성적표에 바로 반영됩니다."
-                    onChange={(e) => setComment(row, { personalFinal: e.target.value })}
-                  />
+                  <label style={{ display: "block" }}>
+                    <span style={{ display: "block", marginBottom: 4, fontSize: 12, fontWeight: 700, color: "#667085" }}>
+                      종합 평가
+                    </span>
+                    <textarea
+                      value={comment.personalFinal ?? ""}
+                      disabled={!canEdit}
+                      rows={5}
+                      style={{ width: "100%", resize: "vertical", lineHeight: 1.7 }}
+                      placeholder="AI 초안을 만들어 다듬거나, 직접 작성해 주세요. 저장하면 성적표에 바로 반영됩니다."
+                      onChange={(e) => setComment(row, { personalFinal: e.target.value })}
+                    />
+                  </label>
+
+                  {/* 영역별 평가 — 등급은 성취율에서 제안하고 선생님이 고친다 */}
+                  <div style={{ marginTop: 14 }}>
+                    <span style={{ display: "block", marginBottom: 4, fontSize: 12, fontWeight: 700, color: "#667085" }}>
+                      영역별 평가 — 등급은 성취율로 제안했습니다. 필요하면 바꿔 주세요.
+                    </span>
+                    <AreaFeedbackEditor
+                      areas={row.summary?.areas ?? []}
+                      value={comment.areaFeedback}
+                      disabled={!canEdit}
+                      onChange={(next) => setComment(row, { areaFeedback: next })}
+                    />
+                  </div>
                 </article>
               );
             })}

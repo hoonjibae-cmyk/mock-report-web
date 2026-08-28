@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getExam } from "@/lib/omr-exams";
-import { draftOverviewComment, draftStudentComment } from "@/lib/omr-ai";
+import { draftAreaNotes, draftOverviewComment, draftStudentComment } from "@/lib/omr-ai";
 import { isGenericReport } from "@/lib/omr-report-types";
+import { pointFor } from "@/lib/omr-scoring";
 import { getAiModel } from "@/lib/app-settings";
 
 export const runtime = "nodejs";
@@ -73,16 +74,54 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!data || data.exam_id !== id || !isGenericReport(data.report_data)) {
         return NextResponse.json({ error: "이 시험의 성적표가 아닙니다." }, { status: 404 });
       }
-      const draft = await draftStudentComment(
+      const result = await draftStudentComment(
         exam,
         data.report_data,
         { display: asKeywords(body.displayKeywords), weave: asKeywords(body.weaveKeywords) },
         model,
       );
-      return NextResponse.json({ ok: true, draft });
+      // 화면은 종합 평가와 영역별 서술을 따로 다룬다(등급은 성취율에서 이미 제안됨)
+      return NextResponse.json({ ok: true, draft: result.overall, areaDrafts: result.areas });
     }
 
-    return NextResponse.json({ error: "target은 overview 또는 student여야 합니다." }, { status: 400 });
+    if (body.target === "areaNotes") {
+      // 영역별 출제 안내 — 시험에 어떤 영역·유형이 나왔는지는 정답표에서 읽는다
+      const groups = new Map<string, { contents: Set<string>; possible: number }>();
+      for (const [no, meta] of Object.entries(exam.questionMeta ?? {})) {
+        const area = String(meta?.area ?? "").trim();
+        if (!area) continue;
+        const entry = groups.get(area) ?? { contents: new Set<string>(), possible: 0 };
+        const content = String(meta?.content ?? "").trim();
+        if (content) entry.contents.add(content);
+        entry.possible += pointFor(exam, Number(no));
+        groups.set(area, entry);
+      }
+      if (groups.size === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "문항별 분석영역이 아직 없습니다. 정답 입력 엑셀의 '분석영역' 칸을 채워 올린 뒤 다시 시도해 주세요.",
+          },
+          { status: 400 },
+        );
+      }
+      const areas = await draftAreaNotes(
+        exam,
+        [...groups.entries()].map(([area, entry]) => ({
+          area,
+          contents: [...entry.contents],
+          possible: Math.round(entry.possible * 10) / 10,
+        })),
+        String(body.memo ?? "").slice(0, 1000),
+        model,
+      );
+      return NextResponse.json({ ok: true, areas });
+    }
+
+    return NextResponse.json(
+      { error: "target은 overview · student · areaNotes 중 하나여야 합니다." },
+      { status: 400 },
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json(
