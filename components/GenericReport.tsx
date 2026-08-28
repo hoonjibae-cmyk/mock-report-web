@@ -7,6 +7,11 @@ import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-
 export interface ReportComments {
   /** 시험 공통 총평 */
   overview: string | null;
+  /**
+   * 의견 작성 방식. 'free'면 영역별 항목을 싣지 않는다 — 선생님이 자유 서술로
+   * 쓰기로 한 시험이므로, 예전에 잠깐 채워 둔 영역별 글이 있어도 내보내지 않는다.
+   */
+  style?: "free" | "structured";
   /** 영역별 출제 안내 — 응시생 전원에게 똑같이 실린다 */
   areaNotes?: Array<{ area: string; text: string }>;
   /** 학생별 개별 의견(종합 평가) */
@@ -258,10 +263,13 @@ export default function GenericReport({
   const overviewText = comments?.overview ?? null;
   const personalText = comments?.personal ?? report.teacherComment?.text ?? null;
   const keywordChips = comments?.keywords ?? [];
-  const areaNotes = (comments?.areaNotes ?? []).filter((entry) => entry.text.trim());
-  const areaFeedback = (comments?.areaFeedback ?? []).filter(
-    (entry) => entry.text.trim() || entry.rating,
-  );
+  const structured = comments?.style !== "free";
+  const areaNotes = structured
+    ? (comments?.areaNotes ?? []).filter((entry) => entry.text.trim())
+    : [];
+  const areaFeedback = structured
+    ? (comments?.areaFeedback ?? []).filter((entry) => entry.text.trim() || entry.rating)
+    : [];
 
   return (
     <main className="report-shell">
