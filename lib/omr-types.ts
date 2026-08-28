@@ -74,8 +74,23 @@ export interface OmrExam {
   answerKey: Record<string, MarkValue>;
   /** {문항번호: 배점} — 비어 있으면 100점 만점 균등 배점 */
   points: Record<string, number>;
-  /** {문항번호: {area}} — 문항별 영역(듣기·어법 등). 미설정 시 영역 분석 생략 */
-  questionMeta: Record<string, { area?: string }>;
+  /**
+   * {문항번호: 분류} — 문항별 분석 정보. 미설정 시 해당 분석만 생략한다.
+   *
+   * 두 계층으로 나눈 것은 성적표에서 서로 다른 질문에 답하기 때문이다.
+   *   area    분석영역 — '어느 갈래가 약한가'(듣기·문법·독해)
+   *   content 내용     — '어떤 유형에서 막히는가'(빈칸추론·어법성 판단…)
+   * 같은 문항이 '독해' 영역이면서 '빈칸추론' 유형일 수 있다.
+   */
+  questionMeta: Record<
+    string,
+    {
+      area?: string;
+      content?: string;
+      /** 출제자가 지정한 난이도. 없으면 집단 정답률에서 도출한다 */
+      difficulty?: string;
+    }
+  >;
   /**
    * 국영수 모의고사 기준 자료(문항분류표 · 전국비교기준).
    * 성적표 산출 전에 엑셀로 올린다. 다른 유형은 null.

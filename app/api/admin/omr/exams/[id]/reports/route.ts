@@ -247,6 +247,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         grade: result.grade,
         items: reference ? attachClassification(result.items, reference) : result.items,
         areas: result.areas,
+        contents: result.contents,
         weakItems: result.weakItems,
         growth,
         essayCount,

@@ -79,6 +79,8 @@ export function classificationStats(
         rate: entry.possible > 0 ? ROUND1((entry.earned / entry.possible) * 100) : 0,
         // 반 평균 성취율 = 이 묶음 문항들의 집단 정답률 평균
         cohortRate: entry.n > 0 ? ROUND1(entry.rateSum / entry.n) : 0,
+        // 그 성취율을 배점에 되돌린 평균 득점(원점수)
+        cohortEarned: entry.n > 0 ? ROUND1((entry.rateSum / entry.n / 100) * entry.possible) : 0,
       }))
       .sort((a, b) => a.rate - b.rate);
 

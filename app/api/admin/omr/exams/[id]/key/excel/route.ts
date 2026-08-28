@@ -3,7 +3,7 @@ import readXlsxFile from "read-excel-file/node";
 import { authorizeApi } from "@/lib/api-auth";
 import { compactMark, parseChoices, serializeChoices, type MarkValue } from "@/lib/omr-answers";
 import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
-import { essayCountOf, pointFor } from "@/lib/omr-scoring";
+import { essayCountOf, normalizeDifficulty, pointFor } from "@/lib/omr-scoring";
 import { makeXlsx } from "@/lib/xlsx-lite";
 
 export const runtime = "nodejs";
@@ -34,37 +34,43 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     const essayCount = essayCountOf(exam);
     const hasCustomPoints = Object.keys(exam.points ?? {}).length > 0;
-    const rows: Array<Array<string | number | null>> = [["문항", "정답", "배점", "영역"]];
+    // 분석영역과 내용을 나눈 것은 성적표에서 서로 다른 질문에 답하기 때문이다.
+    // 분석영역 = 어느 갈래가 약한가 / 내용 = 어떤 유형에서 막히는가
+    const rows: Array<Array<string | number | null>> = [
+      ["문항", "정답", "배점", "분석영역", "내용", "난이도"],
+    ];
 
-    for (let q = 1; q <= exam.numQuestions; q += 1) {
-      const answer = serializeChoices(exam.answerKey?.[String(q)]);
+    const metaRow = (q: number, answer: string | null): Array<string | number | null> => {
       const point = exam.points?.[String(q)];
-      const area = exam.questionMeta?.[String(q)]?.area;
-      rows.push([
+      const meta = exam.questionMeta?.[String(q)] ?? {};
+      const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+      return [
         q,
-        answer || null,
+        answer,
         // 배점을 직접 지정한 적이 없으면 빈칸으로 두어 '자동 배분'임을 드러낸다
         hasCustomPoints && typeof point === "number" ? point : null,
-        typeof area === "string" && area ? area : null,
-      ]);
+        text(meta.area),
+        text(meta.content),
+        text(meta.difficulty),
+      ];
+    };
+
+    for (let q = 1; q <= exam.numQuestions; q += 1) {
+      rows.push(metaRow(q, serializeChoices(exam.answerKey?.[String(q)]) || null));
     }
     for (let k = 1; k <= essayCount; k += 1) {
-      const q = exam.numQuestions + k;
-      const point = exam.points?.[String(q)];
-      const area = exam.questionMeta?.[String(q)]?.area;
-      rows.push([
-        q,
-        "서술형",
-        hasCustomPoints && typeof point === "number" ? point : null,
-        typeof area === "string" && area ? area : null,
-      ]);
+      rows.push(metaRow(exam.numQuestions + k, "서술형"));
     }
 
-    rows.push([null, null, null, null]);
-    rows.push([`※ 정답: 1~${exam.numChoices} 또는 ①~⑤ (서술형 행은 정답을 비워 두세요)`, null, null, null]);
-    rows.push(["※ ‘모두 고르기’ 문항은 정답을 쉼표로 나열하세요 — 예: 2,4 (학생이 둘 다 표기해야 정답)", null, null, null]);
-    rows.push(["※ 배점: 비워 두면 전체 문항에 100점을 자동으로 균등 배분합니다.", null, null, null]);
-    rows.push(["※ 영역: 듣기 · 어법 · 독해처럼 자유롭게 입력하면 성적표에 영역별 분석이 실립니다.", null, null, null]);
+    const note = (text: string) => rows.push([text, null, null, null, null, null]);
+    rows.push([null, null, null, null, null, null]);
+    note(`※ 정답: 1~${exam.numChoices} 또는 ①~⑤ (서술형 행은 정답을 비워 두세요)`);
+    note("※ ‘모두 고르기’ 문항은 정답을 쉼표로 나열하세요 — 예: 2,4 (학생이 둘 다 표기해야 정답)");
+    note("※ 배점: 비워 두면 전체 문항에 100점을 자동으로 균등 배분합니다.");
+    note("※ 분석영역: 큰 갈래입니다 — 듣기 · 문법 · 독해 · 어휘 · 서술형처럼 적습니다.");
+    note("※ 내용: 세부 유형입니다 — 빈칸추론 · 어법성 판단 · 주제파악 · 글의 순서처럼 적습니다.");
+    note("※ 난이도: 상 · 중 · 하 (A · B · C 도 됩니다). 비워 두면 실제 정답률에서 자동으로 매깁니다.");
+    note("※ 분석영역과 내용은 각각 성적표의 <영역별 분석>과 <내용별 분석>에 실립니다. 비워 두면 그 분석만 빠집니다.");
 
     const buf = makeXlsx("정답", rows);
     const filename = `${exam.title.replace(/[^\w가-힣.-]+/g, "_")}_정답입력.xlsx`;
@@ -117,9 +123,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const answerKey: Record<string, MarkValue> = {};
     const points: Record<string, number> = {};
-    const questionMeta: Record<string, { area?: string }> = {};
+    const questionMeta: Record<string, { area?: string; content?: string; difficulty?: string }> = {};
     const problems: string[] = [];
     const pointProblems: string[] = [];
+    const difficultyProblems: string[] = [];
 
     for (const sheet of sheets as unknown as Array<{ sheet: string; data: unknown[][] }>) {
       for (const row of sheet.data ?? []) {
@@ -147,10 +154,35 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           }
         }
 
-        const rawArea = row?.[3];
-        const area = rawArea === null || rawArea === undefined ? "" : String(rawArea).trim();
-        if (area) questionMeta[String(q)] = { area: area.slice(0, 30) };
+        // 분석영역 · 내용 · 난이도 — 셋 다 선택이고, 적힌 것만 반영한다
+        const cell = (index: number) => {
+          const raw = row?.[index];
+          return raw === null || raw === undefined ? "" : String(raw).trim();
+        };
+        const meta: { area?: string; content?: string; difficulty?: string } = {};
+        const area = cell(3);
+        const content = cell(4);
+        const difficulty = cell(5);
+        if (area) meta.area = area.slice(0, 30);
+        if (content) meta.content = content.slice(0, 40);
+        if (difficulty) {
+          if (normalizeDifficulty(difficulty) === null) {
+            difficultyProblems.push(`${q}번: '${difficulty}'`);
+          } else {
+            meta.difficulty = difficulty.slice(0, 10);
+          }
+        }
+        if (Object.keys(meta).length > 0) questionMeta[String(q)] = meta;
       }
+    }
+
+    if (difficultyProblems.length > 0) {
+      return NextResponse.json(
+        {
+          error: `난이도는 상·중·하(또는 A·B·C)로 적어 주세요 — ${difficultyProblems.slice(0, 5).join(", ")}${difficultyProblems.length > 5 ? " 외" : ""}. 비워 두면 실제 정답률에서 자동으로 매깁니다.`,
+        },
+        { status: 400 },
+      );
     }
 
     if (pointProblems.length > 0) {

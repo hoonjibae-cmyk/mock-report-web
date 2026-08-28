@@ -9,7 +9,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findDuplicateIds, normalizeId, reviewVerdict, summarizeReview } from "../lib/omr-review";
+import {
+  findDuplicateIds,
+  normalizeId,
+  reviewVerdict,
+  summarizeReview,
+  type ReviewContext,
+} from "../lib/omr-review";
 import type { OmrScan } from "../lib/omr-scans";
 
 function scan(over: Partial<OmrScan> = {}): OmrScan {
@@ -35,8 +41,9 @@ function scan(over: Partial<OmrScan> = {}): OmrScan {
   };
 }
 
-const ctx = { numQuestions: 10, idDigits: 5 };
-const codes = (s: OmrScan, c = ctx) => reviewVerdict(s, c).reasons.map((r) => r.code);
+const ctx: ReviewContext = { numQuestions: 10, idDigits: 5 };
+const codes = (s: OmrScan, c: ReviewContext = ctx) =>
+  reviewVerdict(s, c).reasons.map((r) => String(r.code));
 
 test("깨끗하게 읽힌 답안지는 자동 통과한다", () => {
   const v = reviewVerdict(scan(), ctx);

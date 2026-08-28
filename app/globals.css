@@ -1077,6 +1077,55 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 
 /* --- 영역별 성취 --- */
+/* --- 갈래별 성취 표(영역별·내용별 공용) --- */
+.area-table-wrap { margin-top: 14px; overflow-x: auto; }
+.area-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.area-table th, .area-table td {
+  padding: 6px 9px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.area-table th {
+  background: #f4f7fb;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--muted);
+  border-bottom-width: 1.5px;
+}
+.area-table th:first-child, .area-table td.name { text-align: left; }
+.area-table td.name { font-weight: 700; color: var(--navy-deep); white-space: normal; }
+.area-table td strong { font-size: 13.5px; color: var(--navy-deep); }
+.area-table td.up { color: var(--success); font-weight: 800; }
+.area-table td.down { color: var(--danger); font-weight: 800; }
+
+/* --- 문항별 상세 표 --- */
+.item-detail { margin-top: 12px; }
+.item-detail > summary {
+  cursor: pointer;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7f9fc;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--navy-deep);
+  list-style: none;
+}
+.item-detail > summary::-webkit-details-marker { display: none; }
+.item-detail > summary::before { content: "▸ "; }
+.item-detail[open] > summary::before { content: "▾ "; }
+.item-table td { text-align: center; }
+.item-table td:first-child { font-weight: 700; }
+.item-table tr.weak td { background: #fdf3f2; }
+.item-table .ok-mark { color: var(--success); font-weight: 800; }
+.item-table .x-mark { color: var(--danger); font-weight: 800; }
+.item-table .of-point { font-style: normal; font-size: 11px; color: var(--muted); }
+
 .area-bars { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
 .area-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 5px; }
 .area-head strong { font-size: 13.5px; color: var(--navy-deep); }

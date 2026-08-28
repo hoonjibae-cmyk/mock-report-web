@@ -21,7 +21,10 @@ export interface ScoredScan {
   grade: number | null;
   items: GenericItemResult[];
   weakItems: number[];
+  /** 분석영역(대분류)별 성취 — '어느 갈래가 약한가' */
   areas: AreaStat[];
+  /** 내용(세부 유형)별 성취 — '어떤 유형에서 막히는가' */
+  contents: AreaStat[];
 }
 
 export interface CohortStats {
@@ -99,18 +102,48 @@ export function gradeFor(exam: OmrExam, raw: number, max: number): number | null
   return sorted[sorted.length - 1].grade + 1 <= 9 ? sorted[sorted.length - 1].grade + 1 : 9;
 }
 
-/** 집단 정답률로 난이도 자동 분류 — 교사가 지정하지 않고 결과에서 도출한다 */
+/** 집단 정답률로 난이도 자동 분류 — 출제자가 지정하지 않았을 때의 대안 */
 export function difficultyOf(correctRate: number): Difficulty {
   if (correctRate >= 80) return "쉬움";
   if (correctRate >= 50) return "보통";
   return "어려움";
 }
 
-/** 문항 영역 (미지정이면 null) */
+/**
+ * 출제자가 적어 넣은 난이도를 내부 표기로 맞춘다.
+ *
+ * 학원마다 '상/중/하', 'A/B/C', '어려움/보통/쉬움'을 섞어 쓰므로 다 받아 준다.
+ * 알아볼 수 없는 값은 null을 돌려 자동 분류로 넘긴다.
+ */
+export function normalizeDifficulty(value: unknown): Difficulty | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const table: Record<string, Difficulty> = {
+    상: "어려움", 중: "보통", 하: "쉬움",
+    A: "어려움", B: "보통", C: "쉬움",
+    어려움: "어려움", 보통: "보통", 쉬움: "쉬움",
+    어려운: "어려움", 쉬운: "쉬움",
+  };
+  return table[text] ?? table[text.toUpperCase()] ?? null;
+}
+
+/** 문항 분석영역 (미지정이면 null) */
 export function areaOf(exam: OmrExam, questionNo: number): string | null {
   const area = exam.questionMeta?.[String(questionNo)]?.area;
   const text = typeof area === "string" ? area.trim() : "";
   return text || null;
+}
+
+/** 문항 내용(세부 유형) (미지정이면 null) */
+export function contentOf(exam: OmrExam, questionNo: number): string | null {
+  const content = exam.questionMeta?.[String(questionNo)]?.content;
+  const text = typeof content === "string" ? content.trim() : "";
+  return text || null;
+}
+
+/** 출제자가 지정한 난이도 (미지정·해석 불가면 null) */
+export function specifiedDifficultyOf(exam: OmrExam, questionNo: number): Difficulty | null {
+  return normalizeDifficulty(exam.questionMeta?.[String(questionNo)]?.difficulty);
 }
 
 /**
@@ -230,8 +263,10 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
 
   const examMax = maxScore(exam);
 
-  // 영역별 집단 평균 성취율 계산을 위해 먼저 학생별 영역 득점을 모은다
+  // 갈래별 집단 평균 성취율 계산을 위해 먼저 학생별 갈래 득점을 모은다.
+  // 분석영역(대분류)과 내용(세부 유형)은 계산이 같아 한 벌로 처리한다.
   const areaTotals = new Map<string, { earnedSum: number; possible: number }>();
+  const contentTotals = new Map<string, { earnedSum: number; possible: number }>();
 
   const scoredBase = partials.map((p) => {
     const items: GenericItemResult[] = [];
@@ -242,6 +277,7 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
       const marked = essayQ ? null : (p.marks[q - 1] ?? null);
       const isCorrect = essayQ ? false : sameChoices(marked, answer);
       const earned = essayQ ? round1(p.essay[q] ?? 0) : isCorrect ? point : 0;
+      const specified = specifiedDifficultyOf(exam, q);
       items.push({
         no: q,
         essay: essayQ,
@@ -251,50 +287,78 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
         earned,
         point,
         correctRate: itemRates[q],
-        difficulty: difficultyOf(itemRates[q]),
+        // 출제자가 정한 난이도가 있으면 그것을 쓴다. 쉽게 낸 문항을 반이 많이
+        // 틀렸다는 사실 자체가 지도에 필요한 정보라, 결과로 덮어쓰지 않는다.
+        difficulty: specified ?? difficultyOf(itemRates[q]),
+        difficultySpecified: specified !== null,
         area: areaOf(exam, q),
+        content: contentOf(exam, q),
       });
     }
 
-    // 영역별 집계
-    const byArea = new Map<string, { earned: number; possible: number }>();
-    for (const item of items) {
-      if (!item.area) continue;
-      const entry = byArea.get(item.area) ?? { earned: 0, possible: 0 };
-      entry.earned += item.earned;
-      entry.possible += item.point;
-      byArea.set(item.area, entry);
-    }
-    for (const [area, entry] of byArea) {
-      const totals = areaTotals.get(area) ?? { earnedSum: 0, possible: entry.possible };
-      totals.earnedSum += entry.earned;
-      totals.possible = entry.possible;
-      areaTotals.set(area, totals);
-    }
+    // 갈래별 집계 — 분석영역과 내용을 같은 방식으로 한 번씩 돌린다
+    const group = (pick: (item: GenericItemResult) => string | null) => {
+      const out = new Map<string, { earned: number; possible: number }>();
+      for (const item of items) {
+        const key = pick(item);
+        if (!key) continue;
+        const entry = out.get(key) ?? { earned: 0, possible: 0 };
+        entry.earned += item.earned;
+        entry.possible += item.point;
+        out.set(key, entry);
+      }
+      return out;
+    };
+    const accumulate = (
+      groups: Map<string, { earned: number; possible: number }>,
+      totals: Map<string, { earnedSum: number; possible: number }>,
+    ) => {
+      for (const [key, entry] of groups) {
+        const t = totals.get(key) ?? { earnedSum: 0, possible: entry.possible };
+        t.earnedSum += entry.earned;
+        t.possible = entry.possible;
+        totals.set(key, t);
+      }
+    };
 
-    return { p, items, byArea };
+    const byArea = group((item) => item.area);
+    const byContent = group((item) => item.content);
+    accumulate(byArea, areaTotals);
+    accumulate(byContent, contentTotals);
+
+    return { p, items, byArea, byContent };
   });
 
-  const scored: ScoredScan[] = scoredBase.map(({ p, items, byArea }) => {
+  const scored: ScoredScan[] = scoredBase.map(({ p, items, byArea, byContent }) => {
     const rank = rankOf(p.raw);
     const standardScore = stdev > 0 ? round1(20 * ((p.raw - mean) / stdev) + 100) : 100;
 
-    const areas: AreaStat[] = [...byArea.entries()].map(([area, entry]) => {
-      const totals = areaTotals.get(area);
-      const cohortRate =
-        totals && count > 0 && totals.possible > 0
-          ? Math.round((totals.earnedSum / count / totals.possible) * 1000) / 10
-          : 0;
-      return {
-        area,
-        earned: round1(entry.earned),
-        possible: round1(entry.possible),
-        rate: entry.possible > 0 ? Math.round((entry.earned / entry.possible) * 1000) / 10 : 0,
-        cohortRate,
-      };
-    });
-    // 성취율이 낮은 영역이 먼저 보이도록
-    areas.sort((a, b) => a.rate - b.rate);
+    const statsFor = (
+      groups: Map<string, { earned: number; possible: number }>,
+      totals: Map<string, { earnedSum: number; possible: number }>,
+    ): AreaStat[] => {
+      const out = [...groups.entries()].map(([area, entry]) => {
+        const t = totals.get(area);
+        const cohortEarned = t && count > 0 ? t.earnedSum / count : 0;
+        return {
+          area,
+          earned: round1(entry.earned),
+          possible: round1(entry.possible),
+          rate: entry.possible > 0 ? Math.round((entry.earned / entry.possible) * 1000) / 10 : 0,
+          cohortRate:
+            t && count > 0 && t.possible > 0
+              ? Math.round((cohortEarned / t.possible) * 1000) / 10
+              : 0,
+          cohortEarned: round1(cohortEarned),
+        };
+      });
+      // 성취율이 낮은 갈래가 먼저 보이도록 — 약한 곳부터 눈에 들어와야 한다
+      out.sort((a, b) => a.rate - b.rate);
+      return out;
+    };
+
+    const areas = statsFor(byArea, areaTotals);
+    const contents = statsFor(byContent, contentTotals);
 
     // 오답(서술형은 만점 미달) 중 집단 정답률이 낮은 순 → 우선 복습 (최대 5문항)
     const weakItems = items
@@ -319,6 +383,7 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
       items,
       weakItems,
       areas,
+      contents,
     };
   });
 
