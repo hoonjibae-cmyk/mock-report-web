@@ -8,7 +8,7 @@ import {
   parseAcceptedAnswers,
   type EssayAnswer,
 } from "@/lib/essay-grading";
-import { getExam } from "@/lib/omr-exams";
+import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
 import { downloadEssayCrop, listScans, updateScan, type OmrScan } from "@/lib/omr-scans";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
 import { transcribeMany, TranscribeNotConfiguredError } from "@/lib/omr-transcribe";
@@ -270,8 +270,27 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       });
     }
 
+    // --- 정답 입력: 채점 화면에서 바로 넣는다(엑셀을 다시 올리러 가지 않아도 되게) ---
+    if (body.action === "setAnswer") {
+      const no = Number(body.questionNo);
+      if (!numbers.includes(no)) {
+        return NextResponse.json({ error: "주관식 문항이 아닙니다." }, { status: 400 });
+      }
+      const text = String(body.text ?? "").trim().slice(0, 2000);
+      const answerKey = { ...(exam.answerKey ?? {}) };
+      if (text) answerKey[String(no)] = text;
+      else delete answerKey[String(no)];
+      await updateExamAnswerKey(id, answerKey);
+
+      const fresh = await getExam(id);
+      return NextResponse.json({
+        ok: true,
+        questions: serialize(buildGroups(fresh, scans), scans),
+      });
+    }
+
     return NextResponse.json(
-      { error: "action은 transcribe · autoGrade · gradeGroup · fixText 중 하나여야 합니다." },
+      { error: "action은 transcribe · autoGrade · gradeGroup · fixText · setAnswer 중 하나여야 합니다." },
       { status: 400 },
     );
   } catch (error) {

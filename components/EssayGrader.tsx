@@ -42,6 +42,11 @@ interface Props {
   canEdit: boolean;
 }
 
+/** 배점 표시 — 균등 배분이면 100/45 같은 값이 나오므로 소수점을 정리한다 */
+function fmtPoint(value: number): string {
+  return String(Math.round(value * 10) / 10);
+}
+
 export default function EssayGrader({ exam, setupError, canEdit }: Props) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [studentCount, setStudentCount] = useState(0);
@@ -52,6 +57,14 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
   const [loading, setLoading] = useState(true);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [editingKey, setEditingKey] = useState<number | null>(null);
+  const [keyDraft, setKeyDraft] = useState("");
+
+  /** 정답을 이 화면에서 바로 저장한다 — 엑셀을 다시 올리러 가지 않아도 되게 */
+  async function saveAnswerKey(questionNo: number) {
+    await post("setAnswer", { questionNo, text: keyDraft }, `key-${questionNo}`);
+    setEditingKey(null);
+  }
 
   const load = useCallback(async () => {
     if (!exam?.id) return;
@@ -102,6 +115,8 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
         );
       } else if (action === "gradeGroup") {
         setMessage(`${data.graded}명에게 점수를 매겼습니다.`);
+      } else if (action === "setAnswer") {
+        setMessage("정답을 저장했습니다. ‘정답 일치분 자동 채점’을 누르면 반영됩니다.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "처리 중 오류가 발생했습니다.");
@@ -207,19 +222,71 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
               <div className="section-heading wrap">
                 <div>
                   <h3 style={{ margin: 0, fontSize: 16 }}>
-                    {q.no}번 <span className="subtle">· 배점 {q.point}점</span>
+                    {q.no}번 <span className="subtle">· 배점 {fmtPoint(q.point)}점</span>
                   </h3>
                   <p className="subtle" style={{ margin: "4px 0 0" }}>
                     {total}명 → <strong>{q.groups.length}개 묶음</strong> · 채점 {graded}/{total}
-                    {q.accepted.length > 0 ? (
-                      <>
-                        {" · "}정답 <code className="accepted">{q.accepted.join(" | ")}</code>
-                      </>
-                    ) : (
-                      " · 정답 미입력(자동 채점 불가)"
-                    )}
                   </p>
                 </div>
+              </div>
+
+              {/* 정답을 학생 답안 바로 위에 둔다 — 채점자가 눈을 옮기지 않고 대조할 수 있어야 한다.
+                  아직 안 넣었으면 여기서 바로 입력한다(엑셀을 다시 올리러 가지 않아도 되게). */}
+              <div className={`essay-key${q.accepted.length > 0 ? "" : " empty"}`}>
+                <span className="essay-key-label">정답</span>
+                {editingKey === q.no ? (
+                  <>
+                    <input
+                      className="essay-key-input"
+                      autoFocus
+                      defaultValue={q.accepted.join(" | ")}
+                      placeholder="정답 문장. 똑같이 맞다고 볼 답이 여럿이면 | 로 나눠 적으세요"
+                      onChange={(e) => setKeyDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void saveAnswerKey(q.no);
+                        if (e.key === "Escape") setEditingKey(null);
+                      }}
+                    />
+                    <button
+                      className="button tiny primary"
+                      disabled={busy !== null}
+                      onClick={() => saveAnswerKey(q.no)}
+                    >
+                      저장
+                    </button>
+                    <button className="button tiny ghost" onClick={() => setEditingKey(null)}>
+                      취소
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {q.accepted.length > 0 ? (
+                      <p className="essay-key-text">
+                        {q.accepted.map((answer, i) => (
+                          <span key={answer}>
+                            {i > 0 ? <em> 또는 </em> : null}
+                            {answer}
+                          </span>
+                        ))}
+                      </p>
+                    ) : (
+                      <p className="essay-key-text muted">
+                        아직 없습니다. 넣어 두면 일치하는 답안이 자동으로 만점 처리됩니다.
+                      </p>
+                    )}
+                    {canEdit ? (
+                      <button
+                        className="button tiny ghost"
+                        onClick={() => {
+                          setKeyDraft(q.accepted.join(" | "));
+                          setEditingKey(q.no);
+                        }}
+                      >
+                        {q.accepted.length > 0 ? "고치기" : "정답 입력"}
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
 
               {q.transcribed === 0 ? (

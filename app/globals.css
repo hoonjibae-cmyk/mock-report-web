@@ -1077,6 +1077,44 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 
 /* --- 영역별 성취 --- */
+/* --- 주관식 정답 — 학생 답안 바로 위에 두어 눈을 옮기지 않고 대조하게 한다 --- */
+.essay-key {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 12px;
+  padding: 10px 13px;
+  border: 1px solid #bfe3cd;
+  border-radius: 10px;
+  background: #f4fbf7;
+}
+.essay-key.empty { border-color: var(--line); background: #f7f9fc; }
+.essay-key-label {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 99px;
+  background: var(--success);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.essay-key.empty .essay-key-label { background: var(--muted); }
+.essay-key-text {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--navy-deep);
+  word-break: break-word;
+}
+.essay-key-text.muted { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+.essay-key-text em { font-style: normal; font-weight: 400; color: var(--muted); }
+.essay-key-input { flex: 1 1 320px; min-width: 0; margin: 0; font-size: 13.5px; }
+.essay-key > .button { margin-left: auto; }
+
 /* --- 주관식 묶음 채점 --- */
 .essay-groups { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .essay-group {
