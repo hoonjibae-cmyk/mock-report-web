@@ -194,7 +194,9 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
           <p className="review-note">
             <strong>정답과 정확히 일치하는 답안만</strong> 자동으로 만점 처리합니다. 오답으로 보이는
             답안과 백지는 자동으로 0점 처리하지 않습니다 — 학생이 틀린 것인지 글씨를 잘못 읽은
-            것인지 구분할 수 없기 때문입니다.
+            것인지 구분할 수 없기 때문입니다.{" "}
+            <strong>점수를 누르면 곧바로 저장됩니다</strong>(따로 저장 버튼이 없습니다). 저장된
+            묶음에는 <span className="essay-score-chip">✓ 점수</span>가 표시됩니다.
             {pendingReview > 0 ? (
               <>
                 {" "}
@@ -315,7 +317,10 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                           </p>
                           {group.matchesKey ? <span className="essay-badge">정답</span> : null}
                           {allSame && currentScore !== null ? (
-                            <span className="essay-score-chip">{currentScore}점</span>
+                            // 누르는 즉시 저장되므로, 저장됐다는 사실을 눈에 보이게 남긴다
+                            <span className="essay-score-chip" title="저장되었습니다">
+                              ✓ {currentScore}점
+                            </span>
                           ) : null}
                         </div>
 
@@ -348,17 +353,26 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                               max={q.point}
                               step={0.5}
                               placeholder="직접"
+                              title="부분점수를 직접 입력합니다. Enter를 누르거나 칸을 벗어나면 저장됩니다."
                               disabled={busy !== null}
                               onKeyDown={(e) => {
-                                if (e.key !== "Enter") return;
-                                const value = Number((e.target as HTMLInputElement).value);
-                                if (Number.isFinite(value)) {
-                                  void post(
-                                    "gradeGroup",
-                                    { questionNo: q.no, groupKey: group.key, score: value },
-                                    groupId,
-                                  );
-                                }
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              // Enter만 받으면 입력해 놓고 저장이 안 된 줄 모르는 일이 생긴다.
+                              // 칸을 벗어날 때도 저장하되, 값이 실제로 바뀐 경우만 보낸다.
+                              onBlur={(e) => {
+                                const raw = e.target.value.trim();
+                                if (!raw) return;
+                                const value = Number(raw);
+                                if (!Number.isFinite(value)) return;
+                                const clamped = Math.max(0, Math.min(q.point, value));
+                                if (allSame && currentScore === Math.round(clamped * 10) / 10) return;
+                                e.target.value = "";
+                                void post(
+                                  "gradeGroup",
+                                  { questionNo: q.no, groupKey: group.key, score: value },
+                                  groupId,
+                                );
                               }}
                             />
                             <button
