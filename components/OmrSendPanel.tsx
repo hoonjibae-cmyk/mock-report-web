@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
-import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
+import { ACADEMY_NAME, ACADEMY_PHONE, EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { RecipientType } from "@/lib/report-messages";
 import type { SendTarget, TargetCounts } from "@/lib/report-send";
 
@@ -297,13 +297,13 @@ export default function OmrSendPanel({
         </div>
         <div className="alimtalk-preview">
           <div className="alimtalk-bubble">
-            <p className="alimtalk-head">[목동유쌤영어학원] 성적표 안내</p>
+            <p className="alimtalk-head">[{ACADEMY_NAME}] 성적표 안내</p>
             <p>
-              <strong>{sample?.studentName || "홍길동"}</strong> 학생의{" "}
-              <strong>{examTitle}</strong> 성적표가 준비되었습니다.
+              <strong>{sample?.studentName || "홍길동"}</strong> 학생의 성적표가 준비되었습니다.
             </p>
             <p className="alimtalk-meta">
-              ▪ 응시일 :{" "}
+              ▪ 시험명 : <strong>{examTitle}</strong>
+              <br />▪ 응시일 :{" "}
               {examDateText || <span className="alimtalk-missing">시험 정보에 응시일이 없습니다</span>}
             </p>
             <p>
@@ -311,7 +311,7 @@ export default function OmrSendPanel({
               <br />
               열람 시 학부모님 휴대전화 뒤 4자리를 입력하셔야 합니다.
             </p>
-            <p className="alimtalk-foot">▪ 문의 : 02-0000-0000</p>
+            <p className="alimtalk-foot">▪ 문의 : {ACADEMY_PHONE}</p>
             <div className="alimtalk-button">성적표 확인하기</div>
           </div>
           <p className="subtle">
