@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
+import { compactMark, toChoices, type AnswerKeyValue } from "@/lib/omr-answers";
 import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
 import { essayCountOf } from "@/lib/omr-scoring";
 
@@ -27,16 +27,25 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
     const lastQuestion = exam.numQuestions + essayCountOf(exam);
 
-    const answerKey: Record<string, MarkValue> = {};
+    const answerKey: Record<string, AnswerKeyValue> = {};
     for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
       const q = Number(key);
-      if (!Number.isInteger(q) || q < 1 || q > exam.numQuestions) {
+      if (!Number.isInteger(q) || q < 1 || q > lastQuestion) {
         return NextResponse.json(
-          { error: `문항 번호 ${key}는 1~${exam.numQuestions} 범위를 벗어납니다.` },
+          { error: `문항 번호 ${key}는 1~${lastQuestion} 범위를 벗어납니다.` },
           { status: 400 },
         );
       }
       if (value === null || value === undefined || value === "") continue;
+
+      // 주관식 정답은 문장이다. 보기번호로 검사하면 안 되고, 그대로 담는다.
+      // (똑같이 맞다고 볼 답이 여럿이면 | 로 나눠 한 문자열에 적는다)
+      if (q > exam.numQuestions) {
+        const text = String(value).trim();
+        if (text) answerKey[String(q)] = text.slice(0, 2000);
+        continue;
+      }
+
       const raws = Array.isArray(value) ? value : [value];
       for (const entry of raws) {
         const choice = Number(entry);

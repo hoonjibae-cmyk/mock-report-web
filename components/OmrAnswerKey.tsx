@@ -3,7 +3,13 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
-import { compactMark, formatChoices, toChoices, type MarkValue } from "@/lib/omr-answers";
+import {
+  compactMark,
+  formatChoices,
+  toChoices,
+  type AnswerKeyValue,
+  type MarkValue,
+} from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 
 interface Props {
@@ -36,7 +42,23 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
     for (let q = 1; q <= n; q += 1) out[String(q)] = exam?.questionMeta?.[String(q)]?.area ?? "";
     return out;
   });
+  /**
+   * 주관식(서술형) 정답 — 문장이라 보기번호와 자료형이 다르다.
+   * 넣어 두면 전사 결과가 이와 일치하는 답안이 자동으로 만점 처리된다.
+   */
+  const [essayKey, setEssayKey] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    const base = exam?.numQuestions ?? 0;
+    const n = typeof exam?.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
+    for (let k = 1; k <= n; k += 1) {
+      const saved = exam?.answerKey?.[String(base + k)];
+      out[String(base + k)] = typeof saved === "string" ? saved : "";
+    }
+    return out;
+  });
   const [bulkArea, setBulkArea] = useState("");
+  /** 주관식 정답을 몇 개나 넣었는지 — 넣은 만큼 자동 채점이 된다 */
+  const essayFilled = Object.values(essayKey).filter((text) => text.trim()).length;
   const [bulk, setBulk] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -184,10 +206,15 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
     setError("");
     setMessage("");
     try {
-      const answerKey: Record<string, MarkValue> = {};
+      const answerKey: Record<string, AnswerKeyValue> = {};
       for (const [q, value] of Object.entries(key)) {
         const packed = compactMark(value);
         if (packed != null) answerKey[q] = packed;
+      }
+      // 주관식은 문장 그대로 담는다(여러 개면 | 로 구분해 적는다)
+      for (const [q, text] of Object.entries(essayKey)) {
+        const trimmed = text.trim();
+        if (trimmed) answerKey[q] = trimmed;
       }
       const pointsPayload: Record<string, number> = {};
       for (const q of allNumbers) {
@@ -267,7 +294,9 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
             <p className="subtle">
               정답 {filled}/{total}문항
               {multiCount > 0 ? ` · 모두 고르기 ${multiCount}문항` : ""}
-              {essayCount > 0 ? ` · 서술형 ${essayCount}문항(정답 없이 배점·영역만)` : ""} · 총점{" "}
+              {essayCount > 0
+                ? ` · 주관식 ${essayCount}문항(정답 ${essayFilled}/${essayCount})`
+                : ""} · 총점{" "}
               {pointTotal}점
               {autoPoint > 0 ? ` (배점 미입력 문항은 ${autoPoint}점씩 자동 배분)` : ""}
               {areaNames.length > 0 ? ` · 영역 ${areaNames.length}종` : ""}
@@ -422,19 +451,33 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
                 {/* minWidth:0 — 없으면 flex 항목의 min-width:auto가 카드 폭을 넘긴다 */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 0 }}>
                   {isEssay ? (
-                    <span
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: "#7a5c17",
-                        background: "#fff8df",
-                        borderRadius: 6,
-                        padding: "4px 8px",
-                        alignSelf: "flex-start",
-                      }}
-                    >
-                      서술형 · 손채점
-                    </span>
+                    /* 주관식 정답 — 문장이라 보기 버튼 대신 글자 칸을 둔다.
+                       넣어 두면 전사 결과가 일치하는 답안이 자동으로 만점 처리된다. */
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#7a5c17",
+                          background: "#fff8df",
+                          borderRadius: 6,
+                          padding: "4px 8px",
+                          alignSelf: "flex-start",
+                        }}
+                      >
+                        주관식
+                      </span>
+                      <input
+                        value={essayKey[String(q)] ?? ""}
+                        disabled={!canEdit}
+                        placeholder="정답 문장 (여러 개면 | 로 구분)"
+                        title="예: He is looking forward to seeing you. | He's looking forward to seeing you."
+                        style={{ width: "100%", margin: 0, fontSize: 13 }}
+                        onChange={(e) =>
+                          setEssayKey((prev) => ({ ...prev, [String(q)]: e.target.value }))
+                        }
+                      />
+                    </div>
                   ) : (
                     <div
                       style={{ display: "flex", gap: 5, rowGap: 4, alignItems: "center", flexWrap: "wrap" }}
