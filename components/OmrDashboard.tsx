@@ -335,6 +335,9 @@ export default function OmrDashboard({
                             담임 의견
                           </Link>
                         ) : null}
+                        <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/send`}>
+                          발송
+                        </Link>
                         {canDelete ? (
                           <button
                             className="button tiny danger"

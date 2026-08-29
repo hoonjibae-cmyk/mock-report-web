@@ -1750,3 +1750,39 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
   .scan-preview { position: static; }
   .scan-preview-stage { height: 380px; }
 }
+
+/* ── 성적표 알림톡 발송 ─────────────────────────────────────────────
+   발송은 되돌릴 수 없다. 못 보내는 줄을 숨기지 않고 흐리게 남겨,
+   "왜 이 학생은 목록에 없지?"라는 의문이 생기지 않게 한다. */
+.send-blockers { border-left: 4px solid var(--danger); }
+.send-blockers ul { margin: 8px 0 6px; padding-left: 18px; }
+.send-blockers li { font-size: 13px; line-height: 1.7; color: #52606d; }
+
+.row-blocked { background: #fafbfc; }
+.row-blocked td { color: var(--muted); }
+.blocked-reason { display: block; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+
+.send-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line);
+}
+.send-bar p { margin: 0; }
+
+/* 실제로 나갈 문구를 카카오톡 말풍선 모양으로 보여 준다 — 문구가 심사받은
+   템플릿과 다르면 발송이 거부되므로, 눈으로 대조할 수 있어야 한다. */
+.alimtalk-preview { display: grid; gap: 8px; }
+.alimtalk-bubble {
+  max-width: 380px; padding: 14px 16px 12px;
+  background: #fef01b; border-radius: 4px 14px 14px 14px;
+  color: #1c1c1c; font-size: 13px; line-height: 1.75;
+}
+.alimtalk-bubble p { margin: 0 0 10px; }
+.alimtalk-head { font-weight: 800; }
+.alimtalk-foot { color: #4a4a3a; font-size: 12px; }
+.alimtalk-button {
+  margin-top: 2px; padding: 9px 0; text-align: center;
+  background: #fff; border: 1px solid rgba(0, 0, 0, .12); border-radius: 6px;
+  font-weight: 700; font-size: 13px;
+}
+.alimtalk-preview code { font-size: 11.5px; word-break: break-all; }

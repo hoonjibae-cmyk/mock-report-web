@@ -451,6 +451,7 @@ export default function OmrCommentsEditor({
         <div style={{ display: "flex", gap: 8 }}>
           <Link className="button ghost" href="/admin/omr">← 시험 목록</Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/reports`}>← 성적표 생성</Link>
+          <Link className="button secondary" href={`/admin/omr/${exam.id}/send`}>알림톡 발송 →</Link>
         </div>
       </header>
 
