@@ -153,7 +153,11 @@ export function applyGroupScore(
   score: number,
   point: number,
 ): Record<string, number> {
-  const clamped = Math.max(0, Math.min(point, Math.round(score * 10) / 10));
+  const bounded = Math.max(0, Math.min(point, score));
+  // 만점은 배점을 그대로 둔다. 배점은 100점을 문항 수로 나눈 값이라
+  // (예: 100/45 = 2.222…) 반올림해 저장하면 만점을 받고도 총점이 100점에
+  // 못 미친다. 부분점수만 소수점 첫째 자리로 정리한다.
+  const clamped = bounded >= point - 1e-9 ? point : Math.round(bounded * 10) / 10;
   const out: Record<string, number> = {};
   for (const member of group.members) out[member.scanId] = clamped;
   return out;

@@ -142,6 +142,18 @@ test("묶음에 매긴 점수는 그 묶음 전원에게 같이 간다", () => {
   assert.deepEqual(applyGroupScore(groups[0], 1.55, 4), { s1: 1.6, s2: 1.6 });
 });
 
+test("만점은 배점을 그대로 저장한다 — 반올림하면 총점이 100점에 못 미친다", () => {
+  // 배점을 지정하지 않으면 100점을 문항 수로 나눈다(예: 100/45 = 2.222…).
+  // 만점을 2.2로 저장하면 45문항을 다 맞혀도 99점이 된다.
+  const point = 100 / 45;
+  const groups = groupEssayAnswers([a("s1", "정답")], []);
+  assert.deepEqual(applyGroupScore(groups[0], point, point), { s1: point });
+  // 배점을 넘겨 눌러도 배점 그대로
+  assert.deepEqual(applyGroupScore(groups[0], 99, point), { s1: point });
+  // 부분점수는 소수점 첫째 자리로 정리
+  assert.deepEqual(applyGroupScore(groups[0], point / 2, point), { s1: 1.1 });
+});
+
 test("진행 상황은 묶음이 아니라 학생 수로도 센다", () => {
   const groups = groupEssayAnswers(
     [a("s1", "A"), a("s2", "A"), a("s3", "B"), a("s4", "C")],
