@@ -24,6 +24,34 @@ export interface Transcript {
   unclear: boolean;
 }
 
+/**
+ * 답안이 어느 글자로 쓰일지.
+ *
+ * 한글은 초성·중성·종성이 한 블록으로 합쳐지고 구별할 음절이 2,000자를 넘어
+ * 영문보다 훨씬 어렵다. 어느 쪽인지 미리 알려 주면 후보가 줄어 오독이 준다.
+ *
+ * 주의: 여기서 알려 주는 것은 **글자 종류**까지다. 정답 문장 자체를 알려 주면
+ * 모델이 그쪽으로 끌려가 틀린 답을 맞은 답으로 읽는다 — 그건 절대 하지 않는다.
+ */
+export type ExpectedScript = "latin" | "hangul" | "mixed";
+
+/** 정답 문장에서 글자 종류를 추론한다(정답을 입력해 둔 경우에만 쓸 수 있다) */
+export function scriptOf(samples: string[]): ExpectedScript | null {
+  const text = samples.join(" ");
+  const hangul = (text.match(/[가-힣]/g) ?? []).length;
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (hangul === 0 && latin === 0) return null;
+  if (hangul === 0) return "latin";
+  if (latin === 0) return "hangul";
+  return "mixed";
+}
+
+const SCRIPT_HINT: Record<ExpectedScript, string> = {
+  latin: "이 답안은 영문으로 쓰여 있습니다. 한글로 읽지 마십시오.",
+  hangul: "이 답안은 한글로 쓰여 있습니다. 영문으로 읽지 마십시오.",
+  mixed: "이 답안에는 영문과 한글이 섞여 있을 수 있습니다.",
+};
+
 export class TranscribeNotConfiguredError extends Error {
   constructor() {
     super(
@@ -54,7 +82,7 @@ const SYSTEM = `당신은 손으로 쓴 시험 답안을 글자로 옮기는 전
  */
 export async function transcribeEssay(
   jpeg: Buffer,
-  hint: { question: number; prompt?: string } = { question: 0 },
+  hint: { question: number; prompt?: string; script?: ExpectedScript | null } = { question: 0 },
   requestedModel: AiModelId = DEFAULT_AI_MODEL,
 ): Promise<Transcript> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -74,9 +102,13 @@ export async function transcribeEssay(
           content: [
             {
               type: "input_text",
-              text: hint.prompt
-                ? `${hint.question}번 답안 칸입니다. 문제: ${hint.prompt}\n학생이 쓴 글자를 그대로 옮겨 주세요.`
-                : `${hint.question}번 답안 칸입니다. 학생이 쓴 글자를 그대로 옮겨 주세요.`,
+              text: [
+                `${hint.question}번 답안 칸입니다.`,
+                hint.script ? SCRIPT_HINT[hint.script] : null,
+                "학생이 쓴 글자를 그대로 옮겨 주세요.",
+              ]
+                .filter(Boolean)
+                .join(" "),
             },
             { type: "input_image", image_url: dataUrl, detail: "high" },
           ],
@@ -99,7 +131,13 @@ export async function transcribeEssay(
  * 적당히 나눠 동시에 보낸다.
  */
 export async function transcribeMany(
-  items: Array<{ key: string; jpeg: Buffer; question: number; prompt?: string }>,
+  items: Array<{
+    key: string;
+    jpeg: Buffer;
+    question: number;
+    prompt?: string;
+    script?: ExpectedScript | null;
+  }>,
   requestedModel: AiModelId = DEFAULT_AI_MODEL,
   concurrency = 6,
 ): Promise<Map<string, Transcript>> {
@@ -108,7 +146,11 @@ export async function transcribeMany(
     const batch = items.slice(i, i + concurrency);
     const results = await Promise.all(
       batch.map((item) =>
-        transcribeEssay(item.jpeg, { question: item.question, prompt: item.prompt }, requestedModel),
+        transcribeEssay(
+          item.jpeg,
+          { question: item.question, prompt: item.prompt, script: item.script },
+          requestedModel,
+        ),
       ),
     );
     batch.forEach((item, index) => out.set(item.key, results[index]));

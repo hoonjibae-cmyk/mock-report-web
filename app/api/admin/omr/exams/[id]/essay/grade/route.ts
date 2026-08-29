@@ -11,7 +11,7 @@ import {
 import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
 import { downloadEssayCrop, listScans, updateScan, type OmrScan } from "@/lib/omr-scans";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
-import { transcribeMany, TranscribeNotConfiguredError } from "@/lib/omr-transcribe";
+import { scriptOf, transcribeMany, TranscribeNotConfiguredError } from "@/lib/omr-transcribe";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -142,6 +142,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         );
       }
 
+      // 정답을 입력해 뒀으면 어느 글자로 쓰인 답인지 알 수 있다. 후보가 줄면
+      // 오독이 준다 — 특히 한글은 구별할 음절이 많아 효과가 크다.
+      // (글자 종류만 알려 준다. 정답 문장을 알려 주면 모델이 그쪽으로 끌려가
+      //  틀린 답을 맞은 답으로 읽는다.)
+      const scriptByQuestion = new Map<number, ReturnType<typeof scriptOf>>();
+      for (const no of numbers) {
+        scriptByQuestion.set(no, scriptOf(parseAcceptedAnswers(exam.answerKey?.[String(no)])));
+      }
+
       const jobs: Array<{ key: string; jpeg: Buffer; question: number; scan: OmrScan }> = [];
       for (const scan of gradable) {
         for (const no of numbers) {
@@ -166,7 +175,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       const model = await getAiModel();
       const results = await transcribeMany(
-        jobs.map(({ key, jpeg, question }) => ({ key, jpeg, question })),
+        jobs.map(({ key, jpeg, question }) => ({
+          key,
+          jpeg,
+          question,
+          script: scriptByQuestion.get(question) ?? null,
+        })),
         model,
       );
 
