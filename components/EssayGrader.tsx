@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import AcademyLogo from "@/components/AcademyLogo";
 import EssayCrop from "@/components/EssayCrop";
-import type { OmrExam } from "@/lib/omr-types";
+import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 
 /**
  * 주관식 채점 화면 — 학생이 아니라 **답안**을 단위로 채점한다.
@@ -127,8 +128,20 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
 
   if (!exam) {
     return (
-      <div className="panel">
-        <p className="form-error">{setupError || "시험을 찾을 수 없습니다."}</p>
+      <div className="admin-shell">
+        <header className="admin-header">
+          <div className="brand-lockup">
+            <AcademyLogo size="large" />
+            <div>
+              <strong>주관식 채점</strong>
+              <span>목동유쌤영어학원</span>
+            </div>
+          </div>
+          <Link className="button ghost" href="/admin/omr">
+            ← 시험 목록
+          </Link>
+        </header>
+        <p className="form-error block">{setupError || "시험을 찾을 수 없습니다."}</p>
       </div>
     );
   }
@@ -143,7 +156,31 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
   );
 
   return (
-    <div>
+    <div className="admin-shell">
+      {/* 이 화면은 스캔 검수와 성적표 사이에 있다. 양쪽으로 오갈 길을 둔다. */}
+      <header className="admin-header">
+        <div className="brand-lockup">
+          <AcademyLogo size="large" />
+          <div>
+            <strong>주관식 채점</strong>
+            <span>
+              {EXAM_TYPE_LABELS[exam.examType]} · {exam.title}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link className="button ghost" href="/admin/omr">
+            시험 목록
+          </Link>
+          <Link className="button ghost" href={`/admin/omr/${exam.id}/scans`}>
+            ← 스캔 · 검수
+          </Link>
+          <Link className="button secondary" href={`/admin/omr/${exam.id}/reports`}>
+            성적표 →
+          </Link>
+        </div>
+      </header>
+
       {error ? <p className="form-error">{error}</p> : null}
       {message ? <p className="form-ok">{message}</p> : null}
 
@@ -319,7 +356,7 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                           {allSame && currentScore !== null ? (
                             // 누르는 즉시 저장되므로, 저장됐다는 사실을 눈에 보이게 남긴다
                             <span className="essay-score-chip" title="저장되었습니다">
-                              ✓ {currentScore}점
+                              ✓ {fmtPoint(currentScore)}점
                             </span>
                           ) : null}
                         </div>
@@ -328,21 +365,25 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                           <div className="essay-actions">
                             <span className="subtle">점수</span>
                             {[q.point, q.point / 2, 0].map((value) => {
-                              const rounded = Math.round(value * 10) / 10;
+                              // 화면에는 반올림해 보여 주되, 저장은 정확한 값으로 한다
+                              const on =
+                                allSame &&
+                                currentScore !== null &&
+                                Math.abs(currentScore - value) < 0.05;
                               return (
                                 <button
-                                  key={rounded}
-                                  className={`button tiny${allSame && currentScore === rounded ? " primary" : " ghost"}`}
+                                  key={fmtPoint(value)}
+                                  className={`button tiny${on ? " primary" : " ghost"}`}
                                   disabled={busy !== null}
                                   onClick={() =>
                                     post(
                                       "gradeGroup",
-                                      { questionNo: q.no, groupKey: group.key, score: rounded },
+                                      { questionNo: q.no, groupKey: group.key, score: value },
                                       groupId,
                                     )
                                   }
                                 >
-                                  {rounded}
+                                  {fmtPoint(value)}
                                 </button>
                               );
                             })}
@@ -392,7 +433,9 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                                 <div className="essay-crop-row" key={member.scanId}>
                                   <div className="essay-crop-head">
                                     <strong>수험번호 {member.studentId ?? "—"}</strong>
-                                    {member.score !== null ? <span>{member.score}점</span> : null}
+                                    {member.score !== null ? (
+                                      <span>{fmtPoint(member.score)}점</span>
+                                    ) : null}
                                   </div>
                                   {member.hasCrop ? (
                                     <EssayCrop scanId={member.scanId} questionNo={q.no} />
