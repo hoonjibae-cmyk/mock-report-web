@@ -22,6 +22,8 @@ interface Setup {
   directoryError: string | null;
   siteUrl: string;
   siteUrlReady: boolean;
+  /** 시험 자체가 못 보내는 상태일 때의 이유(응시일 누락 등) */
+  examBlocker: string | null;
 }
 
 interface SendOutcome {
@@ -60,6 +62,7 @@ export default function OmrSendPanel({
   const [counts, setCounts] = useState<Record<RecipientType, TargetCounts> | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [examTitle, setExamTitle] = useState(exam?.title ?? "");
+  const [examDateText, setExamDateText] = useState("");
 
   const [recipient, setRecipient] = useState<RecipientType>("parent");
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -80,6 +83,7 @@ export default function OmrSendPanel({
       setCounts(data.counts ?? null);
       setSetup(data.setup ?? null);
       setExamTitle(data.examTitle ?? exam.title);
+      setExamDateText(data.examDateText ?? "");
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "발송 대상을 불러오지 못했습니다.");
@@ -205,6 +209,7 @@ export default function OmrSendPanel({
       "학생 관리 프로그램 연동(STUDENT_API_URL)이 없어 연락처를 가져올 수 없습니다.",
     );
   }
+  if (setup?.examBlocker) blockers.push(setup.examBlocker);
   if (setup?.directoryError) blockers.push(setup.directoryError);
 
   const sample = pickedRows[0]?.target ?? sendable[0]?.target ?? targets[0];
@@ -296,6 +301,10 @@ export default function OmrSendPanel({
             <p>
               <strong>{sample?.studentName || "홍길동"}</strong> 학생의{" "}
               <strong>{examTitle}</strong> 성적표가 준비되었습니다.
+            </p>
+            <p className="alimtalk-meta">
+              ▪ 응시일 :{" "}
+              {examDateText || <span className="alimtalk-missing">시험 정보에 응시일이 없습니다</span>}
             </p>
             <p>
               아래 버튼을 눌러 확인해 주세요.

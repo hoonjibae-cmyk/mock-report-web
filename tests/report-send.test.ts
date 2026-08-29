@@ -13,6 +13,8 @@ import test from "node:test";
 import {
   buildSendTargets,
   countTargets,
+  examSendBlocker,
+  formatExamDate,
   resolveSelections,
   templateVariables,
   type SendReportRow,
@@ -220,13 +222,41 @@ test("템플릿 변수 이름은 심사받은 템플릿과 글자까지 같아�
   const variables = templateVariables({
     studentName: "김민준",
     examTitle: "8월 월말평가",
+    examDate: "2026-08-29",
     token: "abc123",
   });
-  assert.deepEqual(Object.keys(variables).sort(), ["#{시험명}", "#{토큰}", "#{학생명}"]);
+  assert.deepEqual(Object.keys(variables).sort(), [
+    "#{시험명}",
+    "#{응시일}",
+    "#{토큰}",
+    "#{학생명}",
+  ]);
   assert.equal(variables["#{학생명}"], "김민준");
   assert.equal(variables["#{시험명}"], "8월 월말평가");
+  assert.equal(variables["#{응시일}"], "2026년 8월 29일");
   assert.equal(variables["#{토큰}"], "abc123");
-  assert.equal(Object.keys(variables).length, 3, "심사받은 템플릿의 변수는 3개뿐이다");
+  assert.equal(Object.keys(variables).length, 4, "심사받은 템플릿의 변수는 4개뿐이다");
+});
+
+test("응시일은 학부모가 읽을 우리말 표기로 나간다", () => {
+  // 2026-08-29를 그대로 보내면 전산 화면에서 퍼온 것처럼 보인다.
+  assert.equal(formatExamDate("2026-08-29"), "2026년 8월 29일");
+  // 앞의 0은 떼고, 시각이 붙어 있어도 날짜만 본다
+  assert.equal(formatExamDate("2026-01-05"), "2026년 1월 5일");
+  assert.equal(formatExamDate("2026-12-31T00:00:00.000Z"), "2026년 12월 31일");
+});
+
+test("응시일이 없으면 시험 전체를 막는다", () => {
+  // 빈 변수는 대행사에서 거부될 수 있고, 통과하더라도 '응시일 :' 뒤가 빈
+  // 메시지가 60명에게 나간다. 시험 정보에서 한 칸만 채우면 되는 일이다.
+  assert.equal(formatExamDate(null), "");
+  assert.equal(formatExamDate(""), "");
+  assert.equal(formatExamDate("미정"), "");
+
+  assert.equal(examSendBlocker("2026-08-29"), null, "응시일이 있으면 막지 않는다");
+  for (const empty of [null, undefined, "", "미정"]) {
+    assert.match(examSendBlocker(empty) ?? "", /응시일/, `${String(empty)} 는 막아야 한다`);
+  }
 });
 
 test("번호 정규화는 휴대전화만 통과시킨다", () => {

@@ -1779,7 +1779,9 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 }
 .alimtalk-bubble p { margin: 0 0 10px; }
 .alimtalk-head { font-weight: 800; }
-.alimtalk-foot { color: #4a4a3a; font-size: 12px; }
+.alimtalk-meta, .alimtalk-foot { color: #4a4a3a; font-size: 12px; }
+/* 응시일이 비면 빈 칸이 그대로 나간다 — 미리보기에서 눈에 띄어야 한다 */
+.alimtalk-missing { color: #a11; font-weight: 700; }
 .alimtalk-button {
   margin-top: 2px; padding: 9px 0; text-align: center;
   background: #fff; border: 1px solid rgba(0, 0, 0, .12); border-radius: 6px;

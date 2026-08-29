@@ -8,6 +8,8 @@ import { listExamMessages, recordMessages, type RecipientType } from "@/lib/repo
 import {
   buildSendTargets,
   countTargets,
+  examSendBlocker,
+  formatExamDate,
   resolveSelections,
   templateVariables,
   type SendReportRow,
@@ -82,6 +84,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({
       ok: true,
       examTitle: exam.title,
+      // 미리보기에 실제로 들어갈 표기 그대로 — 화면이 따로 만들지 않는다
+      examDateText: formatExamDate(exam.examDate),
       targets,
       counts: {
         parent: countTargets(targets, "parent"),
@@ -94,6 +98,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         siteUrl,
         // 링크 주소가 localhost면 학부모가 열 수 없는 링크가 나간다.
         siteUrlReady: /^https:\/\//.test(siteUrl),
+        // 응시일이 비면 알림톡 변수가 빈 칸으로 나간다 — 보내기 전에 막는다
+        examBlocker: examSendBlocker(exam.examDate),
       },
     });
   } catch (error) {
@@ -127,6 +133,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         { status: 400 },
       );
     }
+
+    const examBlocked = examSendBlocker(exam.examDate);
+    if (examBlocked) return NextResponse.json({ error: examBlocked }, { status: 400 });
 
     const body = await request.json().catch(() => ({}));
     const raw: unknown[] = Array.isArray(body.targets) ? body.targets : [];
@@ -169,6 +178,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         variables: templateVariables({
           studentName: item.studentName,
           examTitle: exam.title,
+          examDate: exam.examDate,
           token: item.token,
         }),
       })),
