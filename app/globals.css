@@ -310,9 +310,31 @@ button { cursor: pointer; }
 .process-panel h2 { margin: 0 0 22px; font-size: 22px; letter-spacing: -.03em; }
 .process-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 17px; position: relative; z-index: 1; }
 .process-list li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; }
-.process-list li > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: rgba(255,255,255,.13); color: #fff; font-weight: 850; }
+/* 어두운 패널에 있던 시절의 색이 남아 있었다. 지금은 흰 패널이라 이름
+   앞 동그라미가 흰 글씨/흰 배경으로 보이지 않았고, 아래 줄도 흰 바탕에
+   묻혔다. */
+.process-list li > span,
+.process-list .recent-report > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: var(--blue-soft); color: var(--navy); font-weight: 850; }
 .process-list strong { font-size: 14px; }
-.process-list p { margin: 2px 0 0; color: #c6d7eb; font-size: 12px; }
+.process-list p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+
+/* 홈의 '최근' 목록 — 눌러서 그 항목으로 바로 가는 줄.
+   누를 수 있다는 것이 보여야 하므로 색과 밑줄로 드러낸다. */
+.admin-table td > a.row-title { display: block; font-size: 13px; font-weight: 800; color: var(--navy); text-decoration: none; }
+.admin-table td > a.row-title:hover,
+.admin-table td > a.row-title:focus-visible { text-decoration: underline; }
+
+/* 줄 전체가 링크가 되면 칸 나눔은 링크가 맡는다. li가 그대로 격자를 잡고
+   있으면 링크가 32px 칸에 들어가 글자가 한 자씩 접힌다. */
+.process-list li.recent-report-item { display: block; }
+.process-list li > .recent-report {
+  display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start;
+  color: inherit; text-decoration: none;
+  margin: -6px -8px; padding: 6px 8px; border-radius: 11px;
+}
+.process-list li > .recent-report:hover { background: var(--blue-soft); }
+.process-list li > .recent-report:hover strong { text-decoration: underline; }
+.process-list li > .recent-report strong { color: var(--ink); }
 .result-panel, .reports-panel { margin-top: 20px; }
 .link-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; }
 .link-card { border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }

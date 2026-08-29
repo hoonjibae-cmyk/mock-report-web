@@ -136,7 +136,25 @@ export default function AdminHome({ currentUser, exams, reports, setupError, can
                     return (
                       <tr key={exam.id}>
                         <td><span className="status-chip active">{EXAM_TYPE_LABELS[exam.examType]}</span></td>
-                        <td><strong>{exam.title}</strong><span>{exam.examDate || exam.createdAt.slice(0, 10)}</span></td>
+                        <td>
+                          {/*
+                            제목을 누르면 그 시험에서 **다음에 할 일**로 간다. 정답이
+                            덜 채워졌으면 정답 입력, 다 채웠으면 스캔·검수다. 어느
+                            쪽인지는 바로 옆 '정답' 칸에 그대로 보이므로, 눌러 보기
+                            전에 어디로 갈지 알 수 있다.
+                          */}
+                          <Link
+                            className="row-title"
+                            href={
+                              filled >= exam.numQuestions
+                                ? `/admin/omr/${exam.id}/scans`
+                                : `/admin/omr/${exam.id}/key`
+                            }
+                          >
+                            {exam.title}
+                          </Link>
+                          <span>{exam.examDate || exam.createdAt.slice(0, 10)}</span>
+                        </td>
                         <td>
                           {filled >= exam.numQuestions ? (
                             <span className="status-chip active">완료</span>
@@ -172,14 +190,26 @@ export default function AdminHome({ currentUser, exams, reports, setupError, can
           ) : (
             <ul className="process-list" style={{ marginTop: 0 }}>
               {reports.slice(0, 5).map((report) => (
-                <li key={report.id}>
-                  <span>{report.studentName.slice(0, 1)}</span>
-                  <div>
-                    <strong>{report.studentName}</strong>
-                    <p>
-                      {report.batchTitle} · {new Date(report.createdAt).toLocaleDateString("ko-KR")}
-                    </p>
-                  </div>
+                <li className="recent-report-item" key={report.id}>
+                  {/*
+                    학부모가 받는 그 성적표를 그대로 연다(웹 리포트 관리의 '웹'
+                    버튼과 같은 곳). 새 탭으로 여는 것은, 관리 화면으로 돌아오려고
+                    뒤로 가기를 누르게 하지 않기 위해서다.
+                  */}
+                  <a
+                    className="recent-report"
+                    href={`/r/${report.token}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <span>{report.studentName.slice(0, 1)}</span>
+                    <div>
+                      <strong>{report.studentName}</strong>
+                      <p>
+                        {report.batchTitle} · {new Date(report.createdAt).toLocaleDateString("ko-KR")}
+                      </p>
+                    </div>
+                  </a>
                 </li>
               ))}
             </ul>
