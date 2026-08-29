@@ -153,3 +153,15 @@ test("진행 상황은 묶음이 아니라 학생 수로도 센다", () => {
   assert.equal(progress.groups, 3);
   assert.equal(progress.gradedGroups, 2); // A묶음(2명)과 C묶음(1명)만 완료
 });
+
+test("정답에서 글자 종류를 알아내 전사에 힌트로 준다", async () => {
+  // 한글은 구별할 음절이 2,000자를 넘어 영문보다 오독이 잦다.
+  // 어느 글자로 쓰인 답인지 미리 알려 주면 후보가 줄어든다.
+  const { scriptOf } = await import("../lib/omr-transcribe");
+  assert.equal(scriptOf(["He is looking forward to seeing you."]), "latin");
+  assert.equal(scriptOf(["그는 너를 만나기를 고대하고 있다."]), "hangul");
+  assert.equal(scriptOf(["to부정사"]), "mixed");
+  // 정답을 입력하지 않았으면 알 수 없다 — 힌트 없이 전사한다
+  assert.equal(scriptOf([]), null);
+  assert.equal(scriptOf(["123", "!!"]), null);
+});
