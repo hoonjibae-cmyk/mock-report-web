@@ -4,13 +4,16 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "OMR 리포트 | 목동유쌤영어학원",
   description: "OMR 답안지 생성·자동 채점과 학생별 웹 성적표 발송",
-  // 아이콘 원본은 public/app-icon.png 한 장뿐이다. 크기별 파일을 따로 두지
-  // 않는 것은, 파일이 늘어날수록 아이콘을 바꿀 때 한 곳을 빠뜨리기 쉬워서다.
-  // 탭에 들어갈 작은 크기는 브라우저가 알아서 줄여 쓴다.
+  // 크기별 파일을 따로 둔다. 512px 원본은 256KB라, 그걸 탭 아이콘으로 쓰면
+  // 성적표를 여는 학부모 휴대전화마다 매번 받아 간다. 탭에는 2KB짜리 32px면
+  // 충분하다. 큰 것은 홈 화면에 추가할 때만 쓰인다.
   icons: {
-    icon: "/app-icon.png",
-    shortcut: "/app-icon.png",
-    apple: "/app-icon.png",
+    icon: [
+      { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/icon-32.png",
+    apple: { url: "/icon-180.png", sizes: "180x180", type: "image/png" },
   },
   appleWebApp: {
     capable: true,
