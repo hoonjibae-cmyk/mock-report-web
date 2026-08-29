@@ -137,22 +137,56 @@ export function countTargets(targets: SendTarget[], type: RecipientType): Target
 }
 
 /**
+ * 시험 응시일을 학부모가 읽을 모양으로 바꾼다.
+ *
+ * `2026-08-29`를 그대로 보내면 전산 화면에서 퍼온 것처럼 보인다. 알림톡은
+ * 학부모가 읽는 글이므로 우리말 표기로 바꾼다. 날짜로 읽히지 않으면 빈
+ * 문자열을 돌려주고, 그 판단은 부르는 쪽에 맡긴다.
+ */
+export function formatExamDate(raw: string | null | undefined): string {
+  const text = String(raw ?? "").trim();
+  const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return "";
+  const [, year, month, day] = match;
+  return `${year}년 ${Number(month)}월 ${Number(day)}일`;
+}
+
+/**
  * 알림톡 템플릿의 `#{변수}` 자리에 채울 값.
  *
  * 심사받은 템플릿의 변수 이름과 **글자 하나까지 같아야** 한다. 이름이 다르면
  * 치환되지 않은 채 `#{학생명}` 그대로 발송되거나 발송 자체가 거부된다.
  * 그래서 이름을 코드 여기저기에 흩지 않고 이 함수 하나에 모아 둔다.
+ *
+ * 값이 빈 변수도 마찬가지로 위험하다. 그래서 응시일이 비어 있으면 여기서
+ * 조용히 빈 칸을 채우지 않고, 발송을 시작하기 전에 막는다(canSendExam).
  */
 export function templateVariables(args: {
   studentName: string;
   examTitle: string;
+  examDate: string | null | undefined;
   token: string;
 }): Record<string, string> {
   return {
     "#{학생명}": args.studentName,
     "#{시험명}": args.examTitle,
+    "#{응시일}": formatExamDate(args.examDate),
     "#{토큰}": args.token,
   };
+}
+
+/**
+ * 시험 자체가 발송 가능한 상태인가 — 학생별 사정과 무관하게 전체를 막는 것.
+ *
+ * 응시일이 비어 있으면 `#{응시일}`이 빈 칸으로 나간다. 빈 변수는 대행사에서
+ * 거부될 수 있고, 통과하더라도 "응시일 :" 뒤가 비어 있는 메시지가 60명에게
+ * 나간다. 시험 정보에서 한 칸만 채우면 되는 일이므로 보내기 전에 막는다.
+ */
+export function examSendBlocker(examDate: string | null | undefined): string | null {
+  if (!formatExamDate(examDate)) {
+    return "시험 응시일이 비어 있습니다. 알림톡에 응시일이 들어가므로, 시험 정보에서 응시일을 먼저 입력해 주세요.";
+  }
+  return null;
 }
 
 /** 화면에서 고른 대상 하나 */
