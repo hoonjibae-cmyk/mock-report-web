@@ -22,6 +22,8 @@ export interface DirectoryStudent {
   grade: string;
   /** 학부모 연락처 — 성적표 PIN(뒤 4자리)에 쓴다 */
   parentPhone: string;
+  /** 학생 본인 연락처 — 없는 학생이 많다. 알림톡을 학생에게도 보낼 때만 쓴다 */
+  studentPhone: string;
   className: string;
   teacher: string;
   /** 재원 / 휴원 / 퇴원 등 */
@@ -62,6 +64,8 @@ function normalize(raw: Record<string, unknown>, requested: string): DirectorySt
     school: pick("school", "schoolName", "school_name"),
     grade: pick("grade", "schoolLevel", "school_level"),
     parentPhone: pick("parentPhone", "parent_phone", "parentHp1", "parent_hp1", "phone"),
+    // 학생 관리 프로그램 v1.7.1부터 내려온다. 예전 버전이 붙어 있으면 빈 값이다.
+    studentPhone: pick("studentPhone", "student_phone", "studentHp", "student_hp"),
     className: pick("className", "class_name"),
     teacher: pick("teacher"),
     status: pick("status"),
