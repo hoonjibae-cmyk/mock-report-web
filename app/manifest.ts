@@ -21,9 +21,10 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/app-icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      // 안드로이드는 아이콘을 제 모양(원·둥근사각형)으로 잘라 쓴다. maskable로
-      // 내주면 잘리는 것을 감안해 그리는데, 이 그림은 여백이 없어 가장자리가
-      // 잘려 나간다. 그래서 any로만 내주고 잘림을 맡기지 않는다.
+      // maskable은 일부러 쓰지 않는다. 그것을 켜면 안드로이드가 아이콘을 제
+      // 모양(원·둥근사각형)대로 잘라 쓰는데, 안전영역(가운데 80% 원)을 재 보니
+      // 연필의 17.5%가 그 밖에 있다 — 지우개 쪽이 잘려 나간다. any로만 내주면
+      // 안드로이드가 아이콘을 통째로 줄여 넣으므로 잘리는 곳이 없다.
     ],
   };
 }
