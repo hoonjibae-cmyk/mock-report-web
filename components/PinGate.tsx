@@ -2,17 +2,20 @@
 
 // 성적표 잠금 화면.
 //
-// 여기에 **번호의 뒷자리를 보여 주면 안 된다.** 열쇠가 학부모 휴대전화 뒤
-// 4자리인데 마스킹된 번호(010-****-4316)를 띄우면 화면이 답을 인쇄하는
-// 셈이 된다. 링크만 넘겨받은 사람도 그대로 열 수 있다.
+// 등록된 번호를 보여 주되 **뒤 4자리는 가린다**(010-1234-****).
 //
-// 그래서 이 화면은 번호를 아예 넘겨받지 않는다. 받지 않으면 나중에 실수로
-// 다시 내보낼 수도 없다. "어느 번호인지"는 숫자 없이 말로 알려 준다.
+// 보여 주는 이유 — 아버지·어머니 번호 중 어느 것이 등록돼 있는지 헷갈려
+// 엉뚱한 번호로 시도하는 일이 잦다. 가운데 자리를 보면 바로 알 수 있다.
+// 가리는 이유 — 뒤 4자리가 곧 열쇠다. 그것까지 띄우면 화면이 답을 인쇄하는
+// 셈이라, 링크만 받은 사람도 그대로 열 수 있다.
+//
+// 넘어오는 값은 페이지에서 gatePhoneHint 로 한 번 걸러진 것이다. 형식이
+// 어긋나면(예전 성적표) 빈 문자열이 와서 아무것도 뜨지 않는다.
 
 import { FormEvent, useState } from "react";
 import AcademyLogo from "@/components/AcademyLogo";
 
-export default function PinGate({ token }: { token: string }) {
+export default function PinGate({ token, phoneMasked }: { token: string; phoneMasked: string }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -50,6 +53,7 @@ export default function PinGate({ token }: { token: string }) {
           학생 개인정보 보호를 위해, <strong>학원에 등록된 학부모님 휴대전화</strong> 번호의
           마지막 4자리를 입력해 주세요.
         </p>
+        {phoneMasked ? <p className="phone-hint">등록 번호: {phoneMasked}</p> : null}
         <form className="login-form" onSubmit={unlock}>
           <label htmlFor="pin">휴대전화 뒤 4자리</label>
           <input id="pin" type="password" inputMode="numeric" maxLength={4} pattern="[0-9]{4}" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" required />

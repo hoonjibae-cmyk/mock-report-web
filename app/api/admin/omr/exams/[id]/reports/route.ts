@@ -13,7 +13,7 @@ import {
 import { EXAM_TYPE_LABELS, ACADEMY_NAME } from "@/lib/omr-types";
 import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 import { isGenericReport } from "@/lib/omr-report-types";
-import { maskPhone, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
+import { maskPhoneForGate, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 
 export const runtime = "nodejs";
@@ -270,7 +270,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         student_name: input.name.trim(),
         school: input.school?.trim() || null,
         grade: null,
-        parent_phone_masked: phone ? maskPhone(phone) : null,
+        parent_phone_masked: phone ? maskPhoneForGate(phone) : null,
         access_pin_hash: pinRequired ? hashPin(pin) : null,
         pin_required: pinRequired,
         is_active: true,

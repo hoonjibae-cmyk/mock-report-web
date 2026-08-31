@@ -12,7 +12,7 @@ import type {
 import { buildSummerRoadmapHint, parentFriendlyLabel } from "@/lib/learning-roadmap";
 import {
   clamp,
-  maskPhone,
+  maskPhoneForGate,
   normalizeHeader,
   normalizePhone,
   round,
@@ -240,7 +240,7 @@ export function analyzeCohort(bundles: StudentBundle[], reportTitle: string, exa
         name: bundle.name,
         school: bundle.school,
         grade: bundle.grade || "3",
-        phoneMasked: maskPhone(bundle.parentPhone),
+        phoneMasked: maskPhoneForGate(bundle.parentPhone),
       },
       reportTitle,
       examLabel,

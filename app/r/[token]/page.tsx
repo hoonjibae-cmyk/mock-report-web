@@ -6,6 +6,7 @@ import { hasReportAccess } from "@/lib/auth";
 import { getExamOverview, parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { getReportByToken, recordReportView } from "@/lib/reports";
+import { gatePhoneHint } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +34,9 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   if (!row.is_active) return <Unavailable title="현재 열람할 수 없는 성적표입니다" message="학원에서 링크를 중지했거나 새 링크로 교체했습니다." />;
 
   if (row.pin_required && !(await hasReportAccess(token))) {
-    // 마스킹된 번호(010-****-4316)는 넘기지 않는다. 뒤 4자리가 곧 열쇠라
-    // 화면에 띄우면 링크만 받은 사람도 그대로 열 수 있다.
-    return <PinGate token={token} />;
+    // gatePhoneHint 를 거쳐 넘긴다. 예전 성적표는 뒤 4자리가 드러난 형식으로
+    // 저장돼 있는데, 그 네 자리가 곧 열쇠라 그대로 띄우면 안 된다.
+    return <PinGate token={token} phoneMasked={gatePhoneHint(row.parent_phone_masked)} />;
   }
 
   await recordReportView(row.id, row.view_count).catch(() => undefined);

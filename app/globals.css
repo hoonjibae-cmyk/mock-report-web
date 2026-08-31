@@ -359,9 +359,9 @@ button { cursor: pointer; }
 .empty-cell { text-align: center; color: var(--muted); padding: 32px !important; }
 
 .report-gate-card .lock-icon { width: 74px; height: 48px; margin: 28px auto 0; display: grid; place-items: center; letter-spacing: 5px; border: 2px solid #c6d2e1; border-radius: 12px; color: var(--navy); font-weight: 900; }
-/* .phone-hint 는 지웠다. 마스킹된 번호를 잠금 화면에 띄우던 자리인데,
-   뒤 4자리가 곧 열쇠라 답을 인쇄하는 셈이었다. 자리를 남겨 두면 언젠가
-   다시 쓰이게 된다. */
+/* 잠금 화면의 '등록 번호: 010-1234-****'. 뒤 4자리는 열쇠라 절대 여기
+   들어오지 않는다 — 페이지에서 gatePhoneHint 로 걸러 넘긴다. */
+.phone-hint { display: inline-block; padding: 7px 12px; background: var(--blue-soft); border-radius: 99px; font-weight: 700; color: var(--navy) !important; }
 .gate-help { margin-top: 14px; font-size: 12px; color: var(--muted); }
 
 .report-shell { min-height: 100vh; padding: 28px 18px 70px; }
