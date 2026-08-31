@@ -33,12 +33,35 @@ export function phoneLast4(value: unknown): string {
   return phone.length >= 4 ? phone.slice(-4) : "";
 }
 
-export function maskPhone(value: unknown): string {
+/**
+ * 성적표 잠금 화면에 띄울 번호 — `010-1234-****`
+ *
+ * **뒤 4자리를 가린다.** 그 네 자리가 곧 열쇠이기 때문이다. 예전에는 반대로
+ * 가운데를 가리고 뒷자리를 드러냈는데, 그러면 화면이 답을 인쇄하는 셈이라
+ * 링크만 받은 사람도 그대로 열 수 있었다.
+ *
+ * 가운데를 보여 주는 것은 "누구 번호인가"를 알리기 위해서다. 아버지·어머니
+ * 번호가 헷갈려 엉뚱한 번호로 시도하는 일을 막아 준다. 가운데 네 자리만으로는
+ * 아무것도 열 수 없다.
+ */
+export function maskPhoneForGate(value: unknown): string {
   const phone = normalizePhone(value);
   if (phone.length < 8) return phone ? "***" : "";
   const head = phone.slice(0, 3);
-  const tail = phone.slice(-4);
-  return `${head}-****-${tail}`;
+  const middle = phone.slice(3, -4);
+  return `${head}-${middle}-****`;
+}
+
+/**
+ * 저장된 마스킹 번호를 잠금 화면에 띄워도 되는지 거른다.
+ *
+ * 이 함수가 있는 이유는 **예전 성적표** 때문이다. 예전에는 `010-****-4316`
+ * 처럼 뒤 4자리가 드러난 채로 저장했는데, 그 값을 그대로 띄우면 열쇠가
+ * 노출된다. 형식이 맞는 것만 통과시키고, 나머지는 아무것도 보여 주지 않는다.
+ */
+export function gatePhoneHint(stored: string | null | undefined): string {
+  const text = String(stored ?? "").trim();
+  return /^01[0-9]-\d{3,4}-\*{4}$/.test(text) ? text : "";
 }
 
 export function studentMergeKey(name: string, school: string, phone: string): string {
