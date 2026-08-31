@@ -33,7 +33,9 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   if (!row.is_active) return <Unavailable title="현재 열람할 수 없는 성적표입니다" message="학원에서 링크를 중지했거나 새 링크로 교체했습니다." />;
 
   if (row.pin_required && !(await hasReportAccess(token))) {
-    return <PinGate token={token} phoneMasked={row.parent_phone_masked ?? ""} />;
+    // 마스킹된 번호(010-****-4316)는 넘기지 않는다. 뒤 4자리가 곧 열쇠라
+    // 화면에 띄우면 링크만 받은 사람도 그대로 열 수 있다.
+    return <PinGate token={token} />;
   }
 
   await recordReportView(row.id, row.view_count).catch(() => undefined);
