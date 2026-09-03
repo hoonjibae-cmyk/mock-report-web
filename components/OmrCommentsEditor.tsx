@@ -522,21 +522,35 @@ export default function OmrCommentsEditor({
           ) : null}
         </div>
 
-        {canEdit ? (
-          <label style={{ display: "block", marginBottom: 10 }}>
-            <span style={{ display: "block", marginBottom: 4, fontSize: 12, fontWeight: 700, color: "#667085" }}>
-              초안 참고 메모(선택) — 이번 시험에서 관찰한 점을 적으면 초안에 반영됩니다
-            </span>
+        {/*
+          메모 칸과 총평 칸이 나란히 있어 어느 쪽이 성적표에 실리는지 헷갈렸다.
+          둘의 역할을 글로 못 박고, 메모는 상자 안에 넣어 '옆에 딸린 도구'로
+          보이게 한다. AI를 쓰지 않는 학원에서는 메모 칸 자체가 할 일이 없으므로
+          아예 내보내지 않는다.
+        */}
+        {canEdit && aiEnabled ? (
+          <div className="ai-memo">
+            <label htmlFor="overview-memo">
+              <strong>AI 초안에만 쓰이는 메모 (선택)</strong>
+              <span>
+                이번 시험에서 관찰한 점을 적으면 초안에 반영됩니다.
+                <b> 이 칸의 글은 성적표에 실리지 않습니다.</b>
+              </span>
+            </label>
             <input
-              style={{ width: "100%" }}
+              id="overview-memo"
               value={overviewMemo}
               placeholder="예: 듣기 후반부에서 흔들린 학생이 많았음, 어법 문항 체감 난도 높았음"
               onChange={(e) => setOverviewMemo(e.target.value)}
             />
-          </label>
+          </div>
         ) : null}
 
+        <label className="field-label" htmlFor="overview-text">
+          학부모에게 나갈 총평 — <b>이 칸의 글이 성적표에 그대로 실립니다</b>
+        </label>
         <textarea
+          id="overview-text"
           value={overviewText}
           disabled={!canEdit}
           rows={6}
