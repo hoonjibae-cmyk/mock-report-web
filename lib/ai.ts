@@ -5,7 +5,11 @@ import type { StudentReportData, SubjectReport } from "@/lib/types";
 import { buildRuleReview } from "@/lib/analysis";
 import { chunk } from "@/lib/utils";
 import { DEFAULT_AI_MODEL, resolveAiModel, type AiModelId } from "@/lib/ai-models";
-import { sanitizeNationalReviewList, sanitizeNationalReviewText } from "@/lib/review-sanitizer";
+import {
+  sanitizeNationalReviewList,
+  sanitizeNationalReviewText,
+  stripHanja,
+} from "@/lib/review-sanitizer";
 import {
   aggregateFriendlyStats,
   buildSummerRoadmapHint,
@@ -25,7 +29,8 @@ const ReviewSchema = z.object({
 const BatchSchema = z.object({ reviews: z.array(ReviewSchema) });
 
 function sanitizeParentText(value: string): string {
-  return value
+  // 한자부터 걷어낸다 — 학부모가 읽는 글은 한글로만 나간다.
+  return stripHanja(value)
     .replace(/(?:닮음\s*[·,ㆍ/]?\s*내심|내심\s*[·,ㆍ/]?\s*닮음)/g, "삼각형·도형의 성질과 공간 추론")
     .replace(/내심|외심/g, "삼각형·도형의 성질")
     .replace(/닮음/g, "도형 사이의 관계")

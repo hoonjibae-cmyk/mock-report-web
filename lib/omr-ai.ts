@@ -6,6 +6,7 @@ import { z } from "zod";
 import { resolveAiModel, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
 import type { OmrExam } from "@/lib/omr-types";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
+import { stripHanja } from "@/lib/review-sanitizer";
 import type { GenericReportData } from "@/lib/omr-report-types";
 
 const DraftSchema = z.object({ draft: z.string() });
@@ -36,7 +37,9 @@ const COMMON_RULES = `반드시 지킬 작성 원칙:
 - 학원 담임 선생님이 직접 쓴 글처럼 자연스러운 존댓말로 작성합니다. AI, 인공지능, 자동 생성 같은 표현은 절대 쓰지 않습니다.
 - 제공된 수치만 근거로 하고, 확인되지 않은 학습 태도나 습관을 사실처럼 단정하지 않습니다.
 - 따뜻하되 구체적으로 씁니다. 막연한 칭찬·격려("잘했어요", "화이팅")만으로 채우지 않습니다.
-- 학원 자체 시험이므로 학원 평균·석차·표준점수 언급은 자연스럽게 허용됩니다.`;
+- 학원 자체 시험이므로 학원 평균·석차·표준점수 언급은 자연스럽게 허용됩니다.
+- **한글로만 씁니다. 한자는 한 글자도 쓰지 않습니다.** 之間·等·約 같은 표기 대신
+  '사이', '등', '약'처럼 한글로 적습니다. 숫자와 %, 영어 고유명사는 그대로 써도 됩니다.`;
 
 /** 시험 공통 총평 초안 — 응시 집단 전체에 대한 분석 */
 export async function draftOverviewComment(
@@ -86,7 +89,8 @@ ${COMMON_RULES}
     text: { format: zodTextFormat(DraftSchema, "overview_draft") },
   });
 
-  const draft = response.output_parsed?.draft?.trim();
+  // 프롬프트로 막았어도 모델은 가끔 한자를 섞는다. 부탁은 보장이 아니다.
+  const draft = stripHanja(response.output_parsed?.draft ?? "");
   if (!draft) throw new Error("AI 초안 생성에 실패했습니다. 다시 시도해 주세요.");
   return draft;
 }
@@ -139,7 +143,10 @@ ${COMMON_RULES}
 
   const parsed = response.output_parsed?.areas ?? [];
   if (parsed.length === 0) throw new Error("AI 초안 생성에 실패했습니다. 다시 시도해 주세요.");
-  return parsed.map((entry) => ({ area: String(entry.area).trim(), text: String(entry.text).trim() }));
+  return parsed.map((entry) => ({
+    area: stripHanja(String(entry.area)),
+    text: stripHanja(String(entry.text)),
+  }));
 }
 
 /** 학생별 개별 코멘트 초안 — 종합 평가 + 영역별 평가 */
@@ -218,13 +225,13 @@ ${COMMON_RULES}
     text: { format: zodTextFormat(StudentDraftSchema, "student_comment_draft") },
   });
 
-  const overall = response.output_parsed?.overall?.trim();
+  const overall = stripHanja(response.output_parsed?.overall ?? "");
   if (!overall) throw new Error("AI 초안 생성에 실패했습니다. 다시 시도해 주세요.");
   return {
     overall,
     areas: (response.output_parsed?.areas ?? []).map((entry) => ({
-      area: String(entry.area).trim(),
-      text: String(entry.text).trim(),
+      area: stripHanja(String(entry.area)),
+      text: stripHanja(String(entry.text)),
     })),
   };
 }

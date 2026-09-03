@@ -1,3 +1,31 @@
+/**
+ * 한자를 걷어낸다. 학부모가 읽는 글은 한글로만 나가야 한다.
+ *
+ * 프롬프트로 "한자를 쓰지 말라"고 해도 모델은 가끔 `학생之間의` 처럼 섞어
+ * 낸다. 부탁은 보장이 아니므로 받은 뒤에 한 번 더 거른다.
+ *
+ * 지우기만 해도 문장이 살아나는 이유는, 한국어 글에서 한자가 끼어들 때는
+ * 앞뒤에 띄어쓰기가 없기 때문이다 — `학생之間의` 에서 之間만 빼면 `학생의`가
+ * 되어 뜻과 문법이 그대로 유지된다.
+ */
+export function stripHanja(value: string): string {
+  return String(value ?? "")
+    // CJK 통합 한자 + 확장 A + 호환 한자
+    .replace(/[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g, "")
+    // 한자만 들어 있던 괄호는 통째로 없앤다 — `듣기() 영역`이 남으면 더 어색하다
+    .replace(/\s*[(（[]\s*[)）\]]/g, "")
+    // 한자를 지운 자리에 남는 겹공백·공백 뒤 문장부호를 정리한다
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.!?%)\]}])/g, "$1")
+    .replace(/([(\[{])\s+/g, "$1")
+    .trim();
+}
+
+/** 한자가 섞여 있는가 — 화면에서 경고하거나 다시 만들 때 쓴다 */
+export function containsHanja(value: string): boolean {
+  return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(String(value ?? ""));
+}
+
 const KOREAN_COUNT = "(?:\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)";
 
 const ACADEMY_COMPARISON_PATTERNS = [
