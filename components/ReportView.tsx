@@ -1,6 +1,6 @@
 import A4ReportView from "@/components/A4ReportView";
 import AcademyLogo from "@/components/AcademyLogo";
-import ReportActions from "@/components/ReportActions";
+import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { SUBJECT_KEYS } from "@/lib/exams";
 import { sanitizeNationalReviewList, sanitizeNationalReviewText } from "@/lib/review-sanitizer";
 import type { CategoryStat, StudentReportData, SubjectReport } from "@/lib/types";
@@ -144,7 +144,7 @@ export default function ReportView({ report }: { report: StudentReportData }) {
 
   return (
     <main className="report-shell">
-      <ReportActions />
+      <ReportLayoutEffects />
       <article className="report-document web-report-document">
         <header className="report-hero">
           <div className="brand-lockup report-brand">

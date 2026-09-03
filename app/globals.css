@@ -365,7 +365,6 @@ button { cursor: pointer; }
 .gate-help { margin-top: 14px; font-size: 12px; color: var(--muted); }
 
 .report-shell { min-height: 100vh; padding: 28px 18px 70px; }
-.report-actions { width: min(1120px, 100%); margin: 0 auto 12px; display: flex; justify-content: flex-end; }
 .report-document { width: min(1120px, 100%); margin: 0 auto; background: #fff; box-shadow: var(--shadow); border-radius: 5px; overflow: hidden; }
 .report-hero { border-top: 8px solid var(--navy); padding: 28px 38px 0; }
 .report-brand { padding-bottom: 22px; border-bottom: 1px solid var(--line); }
@@ -489,7 +488,6 @@ button { cursor: pointer; }
   .login-card { padding: 28px 22px; }
 
   .report-shell { padding: 0; }
-  .report-actions { padding: 10px 12px; margin: 0; background: #fff; position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); }
   .report-document { border-radius: 0; box-shadow: none; }
   .report-hero { padding: 22px 18px 0; }
   .report-title-block { padding: 24px 0 20px; }
@@ -729,51 +727,9 @@ button, input, select { font: inherit; }
   .user-account-head { align-items: flex-start; flex-direction: column; }
 }
 
-/* v1.8: 선택형 A4 출력 레이아웃 */
-.report-actions {
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.report-view-switch {
-  display: inline-flex;
-  padding: 4px;
-  border: 1px solid #c8d4e3;
-  border-radius: 12px;
-  background: #eef3f8;
-  gap: 3px;
-}
-
-.report-view-option {
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: transparent;
-  color: #53657c;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.report-view-option.active {
-  background: #fff;
-  color: var(--navy);
-  box-shadow: 0 2px 9px rgba(24, 60, 115, .13);
-}
-
-.report-print-action {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.report-print-action > span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
+/* v1.8: 선택형 A4 출력 레이아웃 (?layout=a4).
+   화면에 떠 있던 전환·인쇄 막대는 걷어냈다 — 학부모가 받는 성적표에
+   출력 설정을 내밀 자리가 아니다. 그리는 규칙만 남긴다. */
 .a4-report-root { display: none; }
 
 body.report-layout-a4 {
@@ -787,7 +743,6 @@ body.report-layout-a4 .report-shell {
 
 body.report-layout-a4 .web-report-document { display: none; }
 body.report-layout-a4 .a4-report-root { display: block; }
-body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 
 .a4-report-root {
   width: 210mm;
@@ -1008,13 +963,6 @@ body.report-layout-a4 .report-actions { width: min(210mm, calc(100vw - 24px)); }
 .a4-result.blank { background: #f1f3f5; color: #667085; }
 
 @media (max-width: 760px) {
-  .report-actions { align-items: stretch; }
-  .report-view-switch { width: 100%; }
-  .report-view-option { flex: 1; }
-  .report-print-action { width: 100%; justify-content: space-between; }
-  .report-print-action > span { display: none; }
-  .report-print-action .button { flex: 1; }
-  body.report-layout-a4 .report-actions { position: sticky; width: calc(100vw - 24px); }
 }
 
 @media print {
