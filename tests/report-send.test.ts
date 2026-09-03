@@ -66,6 +66,7 @@ function message(over: Partial<ReportMessage> = {}): ReportMessage {
     error: null,
     sentBy: "관리자",
     createdAt: over.createdAt ?? "2026-08-29T01:00:00.000Z",
+    ...over,
   };
 }
 

@@ -171,34 +171,34 @@ export async function sendAlimtalk(recipients: AlimtalkRecipient[]): Promise<Ali
   }
 
   // 응답은 번호 기준으로 오므로 번호 → 수신자로 되짚는다.
-  // 같은 번호가 둘 이상이면(학부모=학생 번호) 순서대로 나눠 준다.
-  const byPhone = new Map<string, AlimtalkRecipient[]>();
-  for (const r of recipients) {
-    const list = byPhone.get(r.phone) ?? [];
-    list.push(r);
-    byPhone.set(r.phone, list);
-  }
-  const take = (phone: string | undefined): AlimtalkRecipient | undefined => {
-    const list = byPhone.get(String(phone ?? ""));
-    return list?.shift();
+  // 대행사가 번호를 다른 모양으로 돌려줄 수 있어(하이픈, 국가번호 82) 양쪽을
+  // 같은 모양으로 맞춘 뒤 견준다. 이걸 안 하면 되짚기가 통째로 빗나간다.
+  const matchKey = (raw: string | null | undefined): string => {
+    const digits = String(raw ?? "").replace(/\D/g, "");
+    return digits.startsWith("82") ? `0${digits.slice(2)}` : digits;
   };
 
-  const results = new Map<string, AlimtalkResult>();
-  for (const entry of payload.messageList ?? []) {
-    const recipient = take(entry.to);
-    if (!recipient) continue;
-    results.set(recipient.key, {
-      key: recipient.key,
-      ok: true,
-      // type이 ATA면 알림톡, 그 외(SMS/LMS)는 대체 발송된 것이다
-      channel: entry.type === "ATA" ? "alimtalk" : (entry.type?.toLowerCase() ?? "alimtalk"),
-      messageId: entry.messageId ?? null,
-      error: null,
-    });
+  const byPhone = new Map<string, AlimtalkRecipient[]>();
+  for (const r of recipients) {
+    const key = matchKey(r.phone);
+    const list = byPhone.get(key) ?? [];
+    list.push(r);
+    byPhone.set(key, list);
   }
+  // 같은 번호가 둘 이상이면(학부모=학생 번호) 순서대로 나눠 준다.
+  const take = (phone: unknown): AlimtalkRecipient | undefined =>
+    byPhone.get(matchKey(phone as string))?.shift();
+
+  const results = new Map<string, AlimtalkResult>();
+
+  // 1) 명시적 실패 — 대행사가 "이건 못 보냈다"고 말한 것만 확실한 실패다.
+  let unmatchedFailures = 0;
   for (const entry of payload.failedMessageList ?? []) {
-    const recipient = take(entry.to);
-    if (!recipient) continue;
+    const recipient = take(entry?.to);
+    if (!recipient) {
+      unmatchedFailures += 1;
+      continue;
+    }
     results.set(recipient.key, {
       key: recipient.key,
       ok: false,
@@ -208,15 +208,55 @@ export async function sendAlimtalk(recipients: AlimtalkRecipient[]): Promise<Ali
     });
   }
 
-  // 응답에 없는 건은 결과를 알 수 없다 — 성공으로 넘기면 안 된다
-  return recipients.map(
-    (r) =>
-      results.get(r.key) ?? {
+  // 2) 접수된 건 — 어떤 경로로 나갔는지(알림톡/문자)까지 알 수 있다.
+  for (const entry of payload.messageList ?? []) {
+    // 대행사가 메시지ID 문자열만 돌려주는 응답 형태도 있다. 그런 건 번호를
+    // 알 수 없으니 아래 3)에서 접수된 것으로 처리된다.
+    if (!entry || typeof entry !== "object") continue;
+    const recipient = take(entry.to);
+    if (!recipient) continue;
+    results.set(recipient.key, {
+      key: recipient.key,
+      ok: true,
+      // type이 ATA면 알림톡, 그 외(SMS/LMS)는 문자로 대체 발송된 것이다
+      channel: entry.type === "ATA" ? "alimtalk" : (entry.type?.toLowerCase() ?? "alimtalk"),
+      messageId: entry.messageId ?? null,
+      error: null,
+    });
+  }
+
+  // 3) 응답에서 못 찾은 나머지.
+  //
+  // 예전에는 이것을 **실패로** 기록했다. "모르면 성공으로 넘기지 않는다"는
+  // 뜻이었는데, 실제로는 반대로 작동했다. 여기까지 왔다는 것은 대행사가
+  // 요청을 받아들였다는(HTTP 200) 뜻이고, 응답 모양이 우리 예상과 조금만
+  // 달라도 멀쩡히 나간 알림톡이 전부 '실패'로 남았다. 그러면 선생님이 다시
+  // 보내고 학부모는 같은 메시지를 두 번 받는다.
+  //
+  // 그래서 기본값을 뒤집는다 — 접수된 것으로 본다. 단, 대행사가 실패를
+  // 말했는데 그게 누구인지 못 짚은 경우에는 그럴 수 없다. 실패가 어딘가에
+  // 섞여 있다는 뜻이므로, 남은 건을 확인 대상으로 남긴다.
+  if (unmatchedFailures > 0) {
+    console.error("발송 실패 건을 수신자와 맞추지 못했습니다", {
+      unmatchedFailures,
+      responseKeys: Object.keys(payload ?? {}),
+    });
+  }
+
+  return recipients.map((r) => {
+    const found = results.get(r.key);
+    if (found) return found;
+    if (unmatchedFailures > 0) {
+      return {
         key: r.key,
         ok: false,
         channel: null,
         messageId: null,
-        error: "발송 결과를 확인하지 못했습니다. 솔라피 콘솔에서 확인해 주세요.",
-      },
-  );
+        error:
+          "대행사가 일부 실패를 알렸으나 어느 건인지 확인하지 못했습니다. " +
+          "솔라피 콘솔에서 실제 발송 여부를 확인해 주세요.",
+      };
+    }
+    return { key: r.key, ok: true, channel: null, messageId: null, error: null };
+  });
 }

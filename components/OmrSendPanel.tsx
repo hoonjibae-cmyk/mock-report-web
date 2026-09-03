@@ -402,6 +402,10 @@ export default function OmrSendPanel({
                             {slot.history.lastAt?.slice(0, 16).replace("T", " ")}
                             {slot.history.attempts > 1 ? ` · ${slot.history.attempts}회 시도` : ""}
                           </span>
+                          {/* 사유 없이 '실패'만 뜨면 무엇을 고쳐야 할지 알 수 없다 */}
+                          {slot.history.lastError ? (
+                            <span className="send-fail-reason">{slot.history.lastError}</span>
+                          ) : null}
                         </>
                       ) : (
                         <span className="subtle">—</span>
