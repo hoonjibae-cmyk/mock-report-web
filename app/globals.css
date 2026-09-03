@@ -1633,7 +1633,28 @@ body.report-layout-a4 .a4-report-root { display: block; }
   margin-top: 12px;
   align-items: start;
 }
-.review-answers { min-width: 0; }
+/* 검수 화면의 문항 목록 — 답안지와 같은 순서로 흐르게 한다.
+   답안지는 한 열을 위에서 아래로 채우고 다음 열로 넘어간다(1~15, 16~30).
+   화면이 왼쪽에서 오른쪽으로 흐르면 눈이 번호를 좇느라 대조가 안 된다. */
+.review-answers {
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(var(--answer-rows, 20), auto);
+  grid-auto-columns: minmax(var(--answer-col-w, 190px), 1fr);
+  gap: 8px;
+  overflow-x: auto;
+}
+
+@media (max-width: 900px) {
+  /* 좁은 화면에서는 답안지를 나란히 놓고 볼 일이 없다. 열을 맞추느라 옆으로
+     길어지느니, 화면 너비에 맞춰 접히는 편이 낫다. */
+  .review-answers {
+    grid-auto-flow: row;
+    grid-template-rows: none;
+    grid-template-columns: repeat(auto-fill, minmax(var(--answer-col-w, 190px), 1fr));
+  }
+}
 
 .scan-preview {
   position: sticky;
