@@ -112,6 +112,8 @@ export interface SendSummary {
   lastAt: string | null;
   lastStatus: MessageStatus | null;
   attempts: number;
+  /** 마지막 실패의 사유 — 화면에 '실패'만 뜨면 손쓸 방법이 없다 */
+  lastError: string | null;
 }
 
 /**
@@ -132,6 +134,7 @@ export function summarizeByReport(messages: ReportMessage[]): Map<string, SendSu
         lastAt: message.createdAt,
         lastStatus: message.status,
         attempts: 1,
+        lastError: message.status === "failed" ? message.error : null,
       });
       continue;
     }

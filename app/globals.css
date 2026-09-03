@@ -1771,6 +1771,7 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .row-blocked { background: #fafbfc; }
 .row-blocked td { color: var(--muted); }
 .blocked-reason { display: block; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
+.send-fail-reason { display: block; margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--danger) !important; }
 
 .send-bar {
   display: flex; align-items: center; justify-content: space-between;
