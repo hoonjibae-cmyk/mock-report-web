@@ -109,6 +109,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
 
   const total = exam?.numQuestions ?? 0;
   const choices = exam?.numChoices ?? 5;
+  // 답안지 한 열에 담기는 문항 수. 답안지를 만들 때 정한 값을 그대로 쓴다 —
+  // 화면과 종이의 열이 어긋나면 나란히 놓고 대조할 수 없다. 값이 없으면
+  // 답안지 생성기의 기본값(20)을 따른다.
+  const perColumn = Math.max(
+    1,
+    Math.min(total || 1, Number(exam?.omrConfig?.per_column) || 20),
+  );
 
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
@@ -725,12 +732,22 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                             <div className="review-split">
                               {/* 스캔 이미지는 펼친 답안지 한 장만 불러온다 */}
                               <ScanPreview scanId={scan.id} />
+                              {/*
+                                답안지와 같은 순서로 늘어놓는다. 답안지는 한 열을
+                                위에서 아래로 채우고 다음 열로 넘어가는데(1~15,
+                                16~30), 화면이 왼쪽에서 오른쪽으로 흐르면 눈이
+                                번호를 좇느라 대조가 되지 않는다.
+
+                                열당 문항 수는 시험을 만들 때 정한 값(per_column)
+                                이고 답안지도 그 값으로 열을 나눈다. 좁은 화면에서는
+                                답안지를 나란히 놓고 볼 일이 없으므로 CSS에서 원래
+                                흐름으로 되돌린다.
+                              */}
                               <div
                                 className="review-answers"
                                 style={{
-                                  display: "grid",
-                                  gridTemplateColumns: `repeat(auto-fill, minmax(${64 + choices * 26}px, 1fr))`,
-                                  gap: 8,
+                                  ["--answer-rows" as string]: perColumn,
+                                  ["--answer-col-w" as string]: `${64 + choices * 26}px`,
                                 }}
                               >
                               {Array.from({ length: total }, (_, i) => i + 1).map((q) => {
