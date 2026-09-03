@@ -1,5 +1,5 @@
 import AcademyLogo from "@/components/AcademyLogo";
-import ReportActions from "@/components/ReportActions";
+import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { formatChoices, toChoices } from "@/lib/omr-answers";
 import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 
@@ -273,7 +273,7 @@ export default function GenericReport({
 
   return (
     <main className="report-shell">
-      <ReportActions />
+      <ReportLayoutEffects />
       <article className="report-document web-report-document">
         <header className="report-hero">
           <div className="brand-lockup report-brand">
