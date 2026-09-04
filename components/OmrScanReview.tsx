@@ -109,6 +109,9 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
 
   const total = exam?.numQuestions ?? 0;
   const choices = exam?.numChoices ?? 5;
+  // 주관식 문항 수 — 검수 다음에 어디로 가야 하는지가 이 값으로 갈린다
+  const essayCount =
+    typeof exam?.omrConfig?.essay_count === "number" ? exam.omrConfig.essay_count : 0;
   // 답안지 한 열에 담기는 문항 수. 답안지를 만들 때 정한 값을 그대로 쓴다 —
   // 화면과 종이의 열이 어긋나면 나란히 놓고 대조할 수 없다. 값이 없으면
   // 답안지 생성기의 기본값(20)을 따른다.
@@ -402,9 +405,20 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
           <Link className="button secondary" href={`/admin/omr/${exam.id}/key`}>
             정답 입력
           </Link>
-          <Link className="button secondary" href={`/admin/omr/${exam.id}/reports`}>
-            성적표 생성 →
-          </Link>
+          {/*
+            주관식이 있는 시험은 채점을 건너뛸 수 없다. 안 하고 성적표를 만들면
+            주관식이 조용히 0점으로 들어간다. 그래서 다음 단계로 성적표가 아니라
+            주관식 채점을 안내한다.
+          */}
+          {essayCount > 0 ? (
+            <Link className="button secondary" href={`/admin/omr/${exam.id}/essay`}>
+              주관식 채점 →
+            </Link>
+          ) : (
+            <Link className="button secondary" href={`/admin/omr/${exam.id}/reports`}>
+              성적표 생성 →
+            </Link>
+          )}
           <a
             className="button secondary"
             href={`/api/admin/omr/exams/${exam.id}/sheet`}

@@ -136,6 +136,30 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       );
     }
 
+    // 주관식은 채점하지 않으면 **조용히 0점**으로 들어간다. 그대로 성적표를
+    // 만들면 학생이 쓴 답이 통째로 사라진 점수가 학부모에게 나간다. 되돌리기
+    // 어려운 실수라, 정답 미입력과 같은 선에서 막는다.
+    const essayCount = essayCountOf(exam);
+    if (essayCount > 0) {
+      const objectiveCount = exam.numQuestions;
+      let ungraded = 0;
+      for (const scan of reviewed) {
+        for (let q = objectiveCount + 1; q <= objectiveCount + essayCount; q += 1) {
+          if (typeof scan.essayScores?.[String(q)] !== "number") ungraded += 1;
+        }
+      }
+      if (ungraded > 0) {
+        return NextResponse.json(
+          {
+            error:
+              `주관식 채점이 ${ungraded}칸 남아 있습니다. 지금 성적표를 만들면 그 칸이 0점으로 들어갑니다. ` +
+              "'주관식 채점'에서 마친 뒤 다시 시도해 주세요.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     // 채점(검수 완료 전체가 응시 집단)
     const { cohort, scored } = scoreExam(exam, reviewed);
     // 국영수 모의고사 기준 자료 — 있으면 전국 비교·문항 분류를 얹는다
@@ -201,7 +225,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       throw new Error(`성적표 묶음 저장 실패: ${batchError?.message ?? "알 수 없는 오류"}`);
     }
 
-    const essayCount = essayCountOf(exam);
     const generatedAt = new Date().toISOString();
 
     const rows = reviewed.map((scan) => {
