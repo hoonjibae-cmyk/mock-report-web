@@ -293,7 +293,13 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Link className="button ghost" href="/admin/omr">← 시험 목록</Link>
-          <Link className="button secondary" href={`/admin/omr/${exam.id}/scans`}>← 스캔 · 검수</Link>
+          {/* 주관식이 있으면 바로 앞 단계는 스캔이 아니라 주관식 채점이다 */}
+          <Link
+            className="button secondary"
+            href={`/admin/omr/${exam.id}/${essayCount > 0 ? "essay" : "scans"}`}
+          >
+            ← {essayCount > 0 ? "주관식 채점" : "스캔 · 검수"}
+          </Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/comments`}>담임 의견 →</Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/send`}>알림톡 발송 →</Link>
         </div>
