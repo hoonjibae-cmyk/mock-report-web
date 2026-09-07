@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { generateSheet, OmrApiNotConfiguredError } from "@/lib/omr-api";
 import { getExam, sheetSpecFor } from "@/lib/omr-exams";
+import { readCachedSheet, sheetCacheKey, sheetCachePath, writeCachedSheet } from "@/lib/omr-sheet-cache";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -35,7 +36,18 @@ function errorPage(title: string, detail: string, status: number) {
   });
 }
 
-// OMR 답안지 PDF 다운로드: 시험 설정 → Python OMR API /generate → PDF 스트림
+function pdfResponse(pdf: Buffer<ArrayBuffer>, filename: string) {
+  return new NextResponse(pdf, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+// OMR 답안지 PDF 다운로드: 보관해 둔 것 → 없으면 Python OMR API /generate
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await authorizeApi("createReports");
   if (auth.response) return auth.response;
@@ -45,18 +57,20 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const exam = await getExam(id);
     if (!exam) return errorPage("시험을 찾을 수 없습니다.", "목록에서 다시 선택해 주세요.", 404);
 
-    const result = await generateSheet(sheetSpecFor(exam));
-    const pdf = Buffer.from(result.pdf_base64, "base64");
+    const spec = sheetSpecFor(exam);
+    const cachePath = sheetCachePath(id, sheetCacheKey(spec));
     const filename = `${exam.title.replace(/[^\w가-힣.-]+/g, "_")}_OMR.pdf`;
 
-    return new NextResponse(pdf, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-        "Cache-Control": "no-store",
-      },
-    });
+    // 같은 설정으로 만든 답안지가 보관돼 있으면 그대로 내려준다. 판독 서버를
+    // 부르지 않으므로, 서버가 잠들어 있어도 기다림 없이 열린다.
+    const cached = await readCachedSheet(cachePath);
+    if (cached) return pdfResponse(cached, filename);
+
+    const result = await generateSheet(spec);
+    const pdf = Buffer.from(result.pdf_base64, "base64");
+    await writeCachedSheet(cachePath, pdf);
+
+    return pdfResponse(pdf, filename);
   } catch (error) {
     console.error(error);
     if (error instanceof OmrApiNotConfiguredError) {

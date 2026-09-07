@@ -125,3 +125,44 @@ export async function readScans(
   }
   return (await res.json()) as ReadScansResult;
 }
+
+export interface OmrPingResult {
+  /** 판독 서버가 응답했는가 */
+  awake: boolean;
+  /** 배포된 판독기 버전 — 고친 내용이 반영됐는지 확인용 */
+  version?: string;
+  /** 응답하지 않은 이유(사람이 읽을 문장) */
+  error?: string;
+}
+
+/**
+ * 판독 서버를 깨운다.
+ *
+ * 실패해도 예외를 올리지 않는다. 이것은 미리 깨워 두는 준비 동작이라,
+ * 안 됐다고 화면을 막을 이유가 없다. 정작 필요한 순간에 다시 부르면 된다.
+ *
+ * 잠든 서버가 일어나는 데 1분쯤 걸리므로 기다리는 시간을 넉넉히 준다.
+ */
+export async function pingOmrApi(): Promise<OmrPingResult> {
+  let base: string;
+  try {
+    base = apiBase();
+  } catch {
+    return { awake: false, error: "OMR_API_URL이 설정되어 있지 않습니다." };
+  }
+  try {
+    const res = await fetch(`${base}/health`, {
+      headers: apiHeaders(false),
+      signal: AbortSignal.timeout(75_000),
+      cache: "no-store",
+    });
+    if (!res.ok) return { awake: false, error: `판독 서버가 ${res.status}로 답했습니다.` };
+    const body = (await res.json()) as { version?: string };
+    return { awake: true, version: body.version };
+  } catch (error) {
+    return {
+      awake: false,
+      error: error instanceof Error ? error.message : "판독 서버에 닿지 못했습니다.",
+    };
+  }
+}
