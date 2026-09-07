@@ -12,7 +12,7 @@ import {
 } from "@/lib/mock-report";
 import { EXAM_TYPE_LABELS, ACADEMY_NAME } from "@/lib/omr-types";
 import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
-import { isGenericReport } from "@/lib/omr-report-types";
+import { isGenericReport, recentGrowth } from "@/lib/omr-report-types";
 import { maskPhoneForGate, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 
@@ -231,10 +231,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const input = nameByScan.get(scan.id)!;
       const result = scoredByScan.get(scan.id)!;
       const key = scan.studentId as string;
-      const growth = [...(growthByKey.get(key) ?? [])].sort((a, b) =>
-        a.date.localeCompare(b.date),
-      );
-      growth.push({
+      // 기록이 아무리 쌓여도 최근 GROWTH_LIMIT 회차만 싣는다.
+      const growth = recentGrowth(growthByKey.get(key) ?? [], {
         examId: id,
         title: exam.title,
         date: exam.examDate || generatedAt.slice(0, 10),

@@ -1,6 +1,6 @@
 {
   "name": "omr-report",
-  "version": "1.16.5",
+  "version": "1.17.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
