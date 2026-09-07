@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { gatePhoneHint, maskPhoneForGate, phoneLast4 } from "../lib/utils";
+import { maskPhone, normalizePhone } from "../lib/messaging/solapi";
 
 test("잠금 화면용 마스킹은 뒤 4자리를 가린다", () => {
   assert.equal(maskPhoneForGate("010-1234-5678"), "010-1234-****");
@@ -51,4 +52,13 @@ test("이상한 값은 조용히 버린다", () => {
   for (const bad of [null, undefined, "", "***", "010-1234-5678", "몰라요", "010****"]) {
     assert.equal(gatePhoneHint(bad), "", `${String(bad)} 는 버려야 한다`);
   }
+});
+
+test("시험 발송 번호는 휴대전화만 받는다", async () => {
+  // 알림톡은 유선번호로 가지 않는다. 저장 단계에서 걸러야, 눌렀는데 아무 일도
+  // 일어나지 않는 상황을 만들지 않는다.
+  const { DEFAULT_TEST_PHONE } = await import("../lib/app-settings");
+  assert.match(DEFAULT_TEST_PHONE, /^01[0-9]{8,9}$/, "기본 번호부터 휴대전화여야 한다");
+  assert.equal(normalizePhone(DEFAULT_TEST_PHONE), DEFAULT_TEST_PHONE);
+  assert.equal(maskPhone(DEFAULT_TEST_PHONE), "010-****-2753");
 });
