@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import FilterBar, { type FilterGroup } from "@/components/FilterBar";
+import { useOmrWarmup } from "@/components/useOmrWarmup";
 import {
   EXAM_TYPE_LABELS,
   MOCK_SUBJECTS,
@@ -33,6 +34,10 @@ export default function OmrDashboard({
   canDelete,
   currentUser,
 }: Props) {
+  // 시험 목록에 들어왔다는 것은 답안지를 뽑거나 스캔을 올릴 참이라는 뜻이다.
+  // 화면을 보는 동안 판독 서버를 미리 깨워 둔다.
+  useOmrWarmup(omrServiceReady);
+
   const [exams, setExams] = useState<OmrExam[]>(initialExams);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState(setupError);

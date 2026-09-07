@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ScanPreview from "@/components/ScanPreview";
+import { useOmrWarmup } from "@/components/useOmrWarmup";
 import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
@@ -95,6 +96,9 @@ interface ReviewSummary {
 }
 
 export default function OmrScanReview({ exam, initialScans, setupError, canEdit }: Props) {
+  // 이 화면에서 답안지를 뽑고 스캔을 올린다. 들어온 김에 판독 서버를 깨워 둔다.
+  useOmrWarmup(Boolean(exam));
+
   const [scans, setScans] = useState<OmrScan[]>(initialScans);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
