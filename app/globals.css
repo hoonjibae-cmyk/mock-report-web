@@ -1413,6 +1413,20 @@ body.report-layout-a4 .a4-report-root { display: block; }
 }
 .picked-files li button:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
 
+/* 여러 장이 든 PDF는 나눠 보낼 수 없어 판독 도중 끊긴다 — 누르기 전에 알린다 */
+.pdf-split-warning {
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #f0c36d;
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: #fdf6e3;
+  color: #6b4c14;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.pdf-split-warning strong { display: block; margin-bottom: 3px; color: #8a5a00; }
+
 /* --- 설정: AI 모델 선택 --- */
 .ai-model-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .ai-model-option {
