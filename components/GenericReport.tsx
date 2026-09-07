@@ -421,7 +421,9 @@ export default function GenericReport({
           <section className="analysis-card">
             <div className="card-title-row">
               <h4>표준점수 성장 추이</h4>
-              <span>{report.examTypeLabel} 기준 · 회차 난이도 보정</span>
+              <span>
+                {report.examTypeLabel} 기준 · 최근 {report.growth.length}회차 · 회차 난이도 보정
+              </span>
             </div>
             <GrowthChart points={report.growth} />
             <p className="subtle">

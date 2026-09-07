@@ -87,6 +87,44 @@ export interface GrowthPoint {
   mean: number;
 }
 
+/**
+ * 성장 추이에 싣는 회차 수(이번 시험 포함).
+ *
+ * 시험이 쌓일수록 가로축이 촘촘해져 정작 최근 흐름이 안 보인다. 학부모가
+ * 궁금한 것은 "지난 몇 달 사이 올랐나"이지 1년 전과의 비교가 아니다.
+ */
+export const GROWTH_LIMIT = 3;
+
+/**
+ * 이전 회차 + 이번 회차를 합쳐 최근 것만 남긴다.
+ *
+ * '최근 3개월'이 아니라 **성적표가 남아 있는 최근 3회차**다. 두 달 쉬었다
+ * 본 학생에게 달력으로 잘라 빈 그래프를 보여주는 것보다, 있는 기록 셋을
+ * 보여주는 편이 맞다.
+ *
+ * 이번 회차는 응시일이 앞당겨 적혀 있더라도 언제나 들어간다 — 지금 만드는
+ * 성적표의 점수가 제 그래프에서 빠지면 읽는 사람이 먼저 의심한다.
+ */
+export function recentGrowth(
+  previous: readonly GrowthPoint[],
+  current: GrowthPoint,
+  limit: number = GROWTH_LIMIT,
+): GrowthPoint[] {
+  if (limit <= 0) return [];
+  const byDate = (a: GrowthPoint, b: GrowthPoint) => a.date.localeCompare(b.date);
+  if (limit === 1) return [current];
+
+  const seen = new Set<string>([current.examId]);
+  const prior: GrowthPoint[] = [];
+  // 같은 시험이 두 번 들어오면 한 회차가 두 칸을 차지해 흐름이 왜곡된다.
+  for (const point of [...previous].sort(byDate)) {
+    if (seen.has(point.examId)) continue;
+    seen.add(point.examId);
+    prior.push(point);
+  }
+  return [...prior.slice(-(limit - 1)), current].sort(byDate);
+}
+
 export interface GenericReportData {
   schemaVersion: 2;
   family: "C_generic";
