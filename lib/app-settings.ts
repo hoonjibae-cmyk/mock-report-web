@@ -9,6 +9,15 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const AI_MODEL_KEY = "ai_model";
 const COMMENT_STYLE_KEY = "comment_style";
+const TEST_PHONE_KEY = "alimtalk_test_phone";
+
+/**
+ * 알림톡 시험 발송을 받을 번호의 기본값.
+ *
+ * 학부모 60명에게 보내기 전에 한 번 받아 보는 용도다. 값은 설정 화면에서
+ * 언제든 바꿀 수 있고, 여기 적힌 것은 처음 한 번의 출발점일 뿐이다.
+ */
+export const DEFAULT_TEST_PHONE = "01055982753";
 
 /**
  * 새 시험을 만들 때 기본으로 잡히는 의견 작성 방식.
@@ -26,6 +35,8 @@ export interface AppSettings {
   aiModel: AiModelId;
   /** 새 시험의 의견 작성 방식 기본값(시험마다 바꿀 수 있음) */
   commentStyle: CommentStyle;
+  /** 알림톡 시험 발송을 받을 번호(하이픈 없는 숫자) */
+  testPhone: string;
   /** 설정 테이블을 읽지 못해 기본값으로 동작 중인지(마이그레이션 안내용) */
   storageReady: boolean;
 }
@@ -73,7 +84,7 @@ export async function readSettings(): Promise<AppSettings> {
     const { data, error } = await supabase
       .from("app_settings")
       .select("key,value")
-      .in("key", [AI_MODEL_KEY, COMMENT_STYLE_KEY]);
+      .in("key", [AI_MODEL_KEY, COMMENT_STYLE_KEY, TEST_PHONE_KEY]);
     if (error) throw new Error(error.message);
     const byKey = new Map((data ?? []).map((row) => [row.key as string, row.value]));
     return {
@@ -81,11 +92,63 @@ export async function readSettings(): Promise<AppSettings> {
       commentStyle:
         normalizeCommentStyle((byKey.get(COMMENT_STYLE_KEY) as { style?: unknown } | undefined)?.style) ??
         DEFAULT_COMMENT_STYLE,
+      testPhone:
+        normalizeTestPhone((byKey.get(TEST_PHONE_KEY) as { phone?: unknown } | undefined)?.phone) ??
+        DEFAULT_TEST_PHONE,
       storageReady: true,
     };
   } catch {
-    return { aiModel: DEFAULT_AI_MODEL, commentStyle: DEFAULT_COMMENT_STYLE, storageReady: false };
+    return {
+      aiModel: DEFAULT_AI_MODEL,
+      commentStyle: DEFAULT_COMMENT_STYLE,
+      testPhone: DEFAULT_TEST_PHONE,
+      storageReady: false,
+    };
   }
+}
+
+/** 휴대전화 번호만 통과시킨다 — 알림톡은 유선번호로 가지 않는다 */
+function normalizeTestPhone(value: unknown): string | null {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return /^01[0-9]{8,9}$/.test(digits) ? digits : null;
+}
+
+/** 알림톡 시험 발송을 받을 번호 */
+export async function getTestPhone(): Promise<string> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", TEST_PHONE_KEY)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return normalizeTestPhone((data?.value as { phone?: unknown } | null)?.phone) ?? DEFAULT_TEST_PHONE;
+  } catch {
+    return DEFAULT_TEST_PHONE;
+  }
+}
+
+export async function setTestPhone(value: unknown, updatedBy?: string): Promise<string> {
+  const phone = normalizeTestPhone(value);
+  if (!phone) {
+    throw new Error("휴대전화 번호를 010으로 시작하는 숫자로 입력해 주세요. 알림톡은 유선번호로 가지 않습니다.");
+  }
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert(
+      { key: TEST_PHONE_KEY, value: { phone }, updated_at: new Date().toISOString(), updated_by: updatedBy ?? null },
+      { onConflict: "key" },
+    );
+  if (error) {
+    throw new Error(
+      /relation .* does not exist|schema cache/i.test(error.message)
+        ? "설정 저장소가 아직 만들어지지 않았습니다. Supabase → SQL Editor 에서 supabase/migration_v5_app_settings.sql 을 실행해 주세요."
+        : `설정 저장 실패: ${error.message}`,
+    );
+  }
+  return phone;
 }
 
 export async function setCommentStyle(value: unknown, updatedBy?: string): Promise<CommentStyle> {

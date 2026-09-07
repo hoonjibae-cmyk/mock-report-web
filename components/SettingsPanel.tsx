@@ -8,6 +8,8 @@ import { APP_VERSION_LABEL } from "@/lib/version";
 
 interface Props {
   initialAiModel: AiModelId;
+  /** 알림톡 시험 발송을 받을 번호(하이픈 없는 숫자) */
+  initialTestPhone: string;
   /** 새 시험에 기본으로 잡을 담임 의견 작성 방식 */
   initialCommentStyle: CommentStyle;
   /** 설정 저장소(app_settings 테이블)가 준비되어 있는가 */
@@ -18,8 +20,17 @@ interface Props {
   currentUser: NavUser;
 }
 
+/** 화면에 보여 줄 때만 하이픈을 넣는다. 저장은 서버가 숫자만 남긴다. */
+function formatPhone(value: string): string {
+  const d = String(value ?? "").replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, d.length - 4)}-${d.slice(-4)}`;
+}
+
 export default function SettingsPanel({
   initialAiModel,
+  initialTestPhone,
   initialCommentStyle,
   storageReady,
   directoryConfigured,
@@ -33,6 +44,55 @@ export default function SettingsPanel({
   const [message, setMessage] = useState("");
   const [directoryStatus, setDirectoryStatus] = useState("");
   const [directoryChecking, setDirectoryChecking] = useState(false);
+  // 알림톡 시험 발송 — 학부모 60명에게 보내기 전에 한 번 받아 본다
+  const [testPhone, setTestPhone] = useState(formatPhone(initialTestPhone));
+  const [testSaving, setTestSaving] = useState(false);
+  const [testSending, setTestSending] = useState(false);
+  const [testStatus, setTestStatus] = useState("");
+
+  async function saveTestPhone() {
+    setTestSaving(true);
+    setTestStatus("");
+    setError("");
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testPhone }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "번호를 저장하지 못했습니다.");
+      setTestPhone(formatPhone(data.settings?.testPhone ?? testPhone));
+      setTestStatus("번호를 저장했습니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "번호를 저장하지 못했습니다.");
+    } finally {
+      setTestSaving(false);
+    }
+  }
+
+  async function sendTest() {
+    // 실제로 나가는 메시지다. 눌렀는데 안 왔을 때와 잘못 눌렀을 때를 구분할 수
+    // 있어야 하므로, 어느 번호로 가는지 적어 확인을 받는다.
+    if (!window.confirm(`${testPhone} 으로 알림톡을 한 건 보냅니다. 진행할까요?`)) return;
+    setTestSending(true);
+    setTestStatus("");
+    setError("");
+    try {
+      const res = await fetch("/api/admin/messaging/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "시험 발송에 실패했습니다.");
+      setTestStatus(
+        data.channel === "alimtalk"
+          ? `${data.phoneMasked} 로 알림톡을 보냈습니다. 휴대전화를 확인해 주세요.`
+          : `${data.phoneMasked} 로 보냈습니다(문자로 대체 발송됨). 휴대전화를 확인해 주세요.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "시험 발송에 실패했습니다.");
+    } finally {
+      setTestSending(false);
+    }
+  }
 
   async function checkDirectory() {
     setDirectoryChecking(true);
@@ -234,6 +294,70 @@ export default function SettingsPanel({
             </p>
           </div>
         )}
+      </div>
+
+      {/*
+        학부모에게 나가기 전에 한 번 받아 보는 자리. 실제 발송은 되돌릴 수
+        없으므로, 문구·응시일 표기·버튼이 여는 주소를 먼저 눈으로 본다.
+      */}
+      <div className="panel" style={{ marginTop: 20 }}>
+        <div className="section-heading wrap">
+          <div>
+            <p className="eyebrow">MESSAGING</p>
+            <h2>알림톡 시험 발송</h2>
+            <p className="subtle">
+              학부모에게 보내기 전에 <strong>정해 둔 번호로 한 건</strong> 보내 봅니다. 실제
+              템플릿·실제 발송이라 문구와 버튼이 그대로 옵니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="test-send">
+          <label htmlFor="test-phone">받을 번호</label>
+          <div className="test-send-row">
+            <input
+              id="test-phone"
+              value={testPhone}
+              inputMode="numeric"
+              placeholder="010-0000-0000"
+              disabled={!canEdit}
+              onChange={(e) => setTestPhone(formatPhone(e.target.value))}
+            />
+            <button
+              className="button secondary"
+              type="button"
+              disabled={!canEdit || testSaving}
+              onClick={saveTestPhone}
+            >
+              {testSaving ? "저장 중…" : "번호 저장"}
+            </button>
+            <button
+              className="button primary"
+              type="button"
+              disabled={!canEdit || testSending}
+              onClick={sendTest}
+            >
+              {testSending ? "보내는 중…" : "시험 발송"}
+            </button>
+          </div>
+          {testStatus ? <p className="status-message">{testStatus}</p> : null}
+          <p className="subtle">
+            번호를 바꾸면 <strong>번호 저장</strong>을 먼저 눌러 주세요. 시험 발송은 저장된 번호로
+            나갑니다.
+          </p>
+          <div className="info-box">
+            <strong>확인할 것</strong>
+            <p>
+              문구가 심사받은 템플릿과 같은지 · 응시일이 제대로 들어갔는지 · 버튼이{" "}
+              <code>report.yussam.com</code> 을 여는지.
+            </p>
+            <p>
+              버튼을 누르면 <strong>성적표 대신 안내 화면</strong>이 뜹니다 — 남의 성적표 주소를
+              시험 삼아 부르지 않기 위해 가짜 링크를 씁니다. 성적표 화면까지 보시려면 발송
+              화면에서 한 명만 골라 보내 주세요.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="panel" style={{ marginTop: 20 }}>

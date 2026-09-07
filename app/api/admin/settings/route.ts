@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { readSettings, setAiModel, setCommentStyle } from "@/lib/app-settings";
+import { readSettings, setAiModel, setCommentStyle, setTestPhone } from "@/lib/app-settings";
 
 export const runtime = "nodejs";
 
@@ -22,6 +22,10 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     // 두 설정을 한 화면에서 다루므로, 보내온 항목만 골라 저장한다
+    if (body.testPhone !== undefined) {
+      const testPhone = await setTestPhone(body.testPhone, auth.user.username);
+      return NextResponse.json({ ok: true, settings: { testPhone, storageReady: true } });
+    }
     if (body.commentStyle !== undefined) {
       const commentStyle = await setCommentStyle(body.commentStyle, auth.user.username);
       return NextResponse.json({ ok: true, settings: { commentStyle, storageReady: true } });

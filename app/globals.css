@@ -1633,6 +1633,18 @@ body.report-layout-a4 .a4-report-root { display: block; }
   margin-top: 12px;
   align-items: start;
 }
+/* 설정 화면의 알림톡 시험 발송 */
+.test-send { display: grid; gap: 8px; max-width: 620px; }
+.test-send > label { font-size: 12.5px; font-weight: 700; color: #52607a; }
+.test-send-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.test-send-row input { flex: 1; min-width: 170px; }
+.test-send .subtle { margin: 0; }
+
+@media (max-width: 560px) {
+  .test-send-row input { min-width: 100%; }
+  .test-send-row .button { flex: 1; }
+}
+
 /* 담임 의견 화면 — 메모 칸과 총평 칸을 눈으로 구분한다.
    나란히 놓인 입력칸 두 개는 어느 쪽이 성적표에 실리는지 알려 주지 않으면
    반드시 헷갈린다. 메모는 상자에 넣어 '옆에 딸린 도구'로 보이게 한다. */
