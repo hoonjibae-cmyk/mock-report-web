@@ -5,6 +5,7 @@ import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ScanPreview from "@/components/ScanPreview";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
+import { countPdfPages, pdfSplitWarning, type PickedPdf } from "@/lib/pdf-pages";
 import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
@@ -20,6 +21,11 @@ interface Draft {
   studentId: string;
   /** 값은 보기 하나(숫자) 또는 여러 개(배열) — '모두 고르기' 문항 대응 */
   answers: Record<string, MarkValue>;
+}
+
+/** 같은 파일을 가리키는 이름 — 목록 key와 쪽수 표를 같은 기준으로 맞춘다 */
+function fileKey(file: File): string {
+  return `${file.name}:${file.size}`;
 }
 
 function formatBytes(bytes: number): string {
@@ -110,6 +116,8 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   const [picked, setPicked] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // 고른 PDF의 쪽수 — 파일을 읽어야 알 수 있어 비동기로 채운다
+  const [pdfPages, setPdfPages] = useState<Record<string, number | null>>({});
 
   const total = exam?.numQuestions ?? 0;
   const choices = exam?.numChoices ?? 5;
@@ -123,6 +131,44 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     1,
     Math.min(total || 1, Number(exam?.omrConfig?.per_column) || 20),
   );
+
+  // 고른 PDF의 쪽수를 미리 센다. 60장이 한 파일에 들어 있으면 나눠 보낼 수
+  // 없어 판독 도중 시간이 초과되는데, 그때는 올린 것이 통째로 사라진다.
+  // 누르기 전에 알려주려면 여기서 파일을 열어 보는 수밖에 없다.
+  useEffect(() => {
+    let alive = true;
+    const pdfs = picked.filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
+    if (pdfs.length === 0) {
+      setPdfPages({});
+      return;
+    }
+    (async () => {
+      const counted: Record<string, number | null> = {};
+      for (const file of pdfs) {
+        try {
+          counted[fileKey(file)] = countPdfPages(new Uint8Array(await file.arrayBuffer()));
+        } catch {
+          // 못 읽으면 '모름'으로 둔다 — 크기로 판단하게 된다
+          counted[fileKey(file)] = null;
+        }
+      }
+      if (alive) setPdfPages(counted);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [picked]);
+
+  const pdfWarning = useMemo(() => {
+    const pdfs: PickedPdf[] = picked
+      .filter((f) => /\.pdf$/i.test(f.name) || f.type === "application/pdf")
+      .map((f) => ({
+        name: f.name,
+        size: f.size,
+        pages: fileKey(f) in pdfPages ? pdfPages[fileKey(f)] : null,
+      }));
+    return pdfSplitWarning(pdfs);
+  }, [picked, pdfPages]);
 
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
@@ -512,9 +558,14 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
               </div>
               <ul>
                 {picked.map((file) => (
-                  <li key={`${file.name}:${file.size}`}>
+                  <li key={fileKey(file)}>
                     <span className="name" title={file.name}>{file.name}</span>
-                    <span className="size">{formatBytes(file.size)}</span>
+                    <span className="size">
+                      {typeof pdfPages[fileKey(file)] === "number"
+                        ? `${pdfPages[fileKey(file)]}쪽 · `
+                        : ""}
+                      {formatBytes(file.size)}
+                    </span>
                     <button
                       type="button"
                       aria-label={`${file.name} 빼기`}
@@ -531,6 +582,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                 ))}
               </ul>
             </div>
+          ) : null}
+
+          {pdfWarning ? (
+            <p className="pdf-split-warning" role="alert">
+              <strong>나눠 올려 주세요</strong>
+              {pdfWarning}
+            </p>
           ) : null}
 
           <button
