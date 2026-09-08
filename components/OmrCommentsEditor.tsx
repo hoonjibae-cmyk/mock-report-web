@@ -421,7 +421,7 @@ export default function OmrCommentsEditor({
       <div className="admin-shell">
         <header className="admin-header">
           <div className="brand-lockup">
-            <AcademyLogo size="large" />
+            <AcademyLogo size="large" href="/admin" />
             <div>
               <strong>담임 의견</strong>
               <span>목동유쌤영어학원</span>
@@ -440,7 +440,7 @@ export default function OmrCommentsEditor({
     <div className="admin-shell">
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo size="large" />
+          <AcademyLogo size="large" href="/admin" />
           <div>
             <strong>담임 의견</strong>
             <span>

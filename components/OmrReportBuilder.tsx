@@ -266,7 +266,7 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
       <div className="admin-shell">
         <header className="admin-header">
           <div className="brand-lockup">
-            <AcademyLogo size="large" />
+            <AcademyLogo size="large" href="/admin" />
             <div>
               <strong>성적표 생성</strong>
               <span>목동유쌤영어학원</span>
@@ -283,7 +283,7 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
     <div className="admin-shell">
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo size="large" />
+          <AcademyLogo size="large" href="/admin" />
           <div>
             <strong>성적표 생성</strong>
             <span>

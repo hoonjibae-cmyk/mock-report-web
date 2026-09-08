@@ -549,6 +549,19 @@ button { cursor: pointer; }
   width: 72px;
 }
 
+/* 관리 화면의 로고는 홈으로 가는 길이다 — 눌리는 것임을 알아볼 수 있어야 한다 */
+.brand-logo-link {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 10px;
+  transition: opacity 0.15s ease;
+}
+.brand-logo-link:hover { opacity: 0.72; }
+.brand-logo-link:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
 .report-brand .brand-logo {
   width: 72px;
 }

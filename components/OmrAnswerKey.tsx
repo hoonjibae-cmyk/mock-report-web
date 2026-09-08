@@ -250,7 +250,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
       <div className="admin-shell">
         <header className="admin-header">
           <div className="brand-lockup">
-            <AcademyLogo size="large" />
+            <AcademyLogo size="large" href="/admin" />
             <div>
               <strong>정답 입력</strong>
               <span>목동유쌤영어학원</span>
@@ -267,7 +267,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
     <div className="admin-shell">
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo size="large" />
+          <AcademyLogo size="large" href="/admin" />
           <div>
             <strong>정답 입력</strong>
             <span>
