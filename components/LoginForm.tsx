@@ -49,7 +49,7 @@ export default function LoginForm({ googleReady, initialError = "" }: Props) {
           <span className="google-mark" aria-hidden="true">G</span>
           구글 계정으로 로그인
         </a>
-        <p className="login-hint">회사 구글 계정으로 들어오시면 됩니다. 별도 비밀번호는 없습니다.</p>
+        <p className="login-hint">업무용 구글 계정으로 들어오시면 됩니다. 별도 비밀번호는 없습니다.</p>
         {error ? <p className="form-error">{error}</p> : null}
         <button type="button" className="login-alt" onClick={() => setShowPassword(true)}>
           아이디·비밀번호로 로그인

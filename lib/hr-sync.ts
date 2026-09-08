@@ -134,7 +134,7 @@ export function planSync(staffList: readonly HrStaff[], accounts: readonly Exist
     if (!staff.email) {
       plan.skipped.push({
         staff,
-        reason: `${staff.name} 님은 인사 프로그램에 이메일이 없어 계정을 만들 수 없습니다. 인사 프로그램에서 회사 구글 계정을 입력해 주세요.`,
+        reason: `${staff.name} 님은 인사 프로그램에 이메일이 없어 계정을 만들 수 없습니다. 인사 프로그램에서 업무용 구글 계정을 입력해 주세요.`,
       });
       continue;
     }

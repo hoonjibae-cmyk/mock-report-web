@@ -26,7 +26,7 @@ export default async function LoginPage({
         <h1>계정 로그인</h1>
         <p>
           {googleReady
-            ? "회사 구글 계정으로 로그인해 주세요."
+            ? "업무용 구글 계정으로 로그인해 주세요."
             : "관리자 또는 등록된 일반 사용자 계정으로 로그인해 주세요."}
         </p>
         <LoginForm googleReady={googleReady} initialError={error ?? ""} />
