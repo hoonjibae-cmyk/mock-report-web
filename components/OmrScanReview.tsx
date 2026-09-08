@@ -5,7 +5,7 @@ import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ScanPreview from "@/components/ScanPreview";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
-import { countPdfPages, pdfSplitWarning, type PickedPdf } from "@/lib/pdf-pages";
+import { PDF_PAGE_LIMIT, countPdfPages, pdfSplitWarning, type PickedPdf } from "@/lib/pdf-pages";
 import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
@@ -533,6 +533,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
           </div>
 
           <ul className="dropzone-notes">
+            {/* 스캔하러 가기 전에 정해야 하는 값이라 맨 앞에 둔다 */}
+            <li className="scan-spec">
+              <strong>권장 스캔 설정 — 해상도 200dpi · PDF는 {PDF_PAGE_LIMIT}쪽 이하</strong>
+              300dpi로 떠도 판독 정확도는 같은데 <b>시간은 두 배</b>가 됩니다(30명 기준 약 2분 →
+              4분). 여러 장이 한 PDF에 들어 있으면 나눠 보낼 수 없어 판독 도중 끊길 수 있습니다
+              (낱장 이미지는 쪽수 제한 없음).
+            </li>
             <li>여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동 분리됩니다.</li>
             <li>큰 파일은 보관함으로 직접 올라가므로 용량 제한 없이 처리됩니다.</li>
             <li>원본 스캔은 7일간 보관 후 자동 삭제됩니다.</li>
