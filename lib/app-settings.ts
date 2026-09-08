@@ -189,3 +189,51 @@ export async function setAiModel(value: unknown, updatedBy?: string): Promise<Ai
   cached = { value: model, at: Date.now() };
   return model;
 }
+
+/**
+ * 인사 연동 자동 실행을 켜 두었는가.
+ *
+ * 왜 이런 걸 두는가
+ * ----------------
+ * 첫 동기화는 대상 부서 전원에게 슬랙 DM을 보낸다. 설정을 막 마친 배포에서
+ * 그것이 예고 없이 나가면, 잘못된 주소나 잘못된 명단이 그대로 전 직원에게
+ * 간다. 되돌릴 수 없다.
+ *
+ * 그래서 **관리자가 화면에서 한 번 직접 돌려 결과를 눈으로 본 뒤에야**
+ * 자동 실행이 시작된다. 그 한 번이 끝나면 이 값이 켜지고, 이후로는 사람이
+ * 아무것도 기억하지 않아도 된다 — 환경변수로 껐다 켜게 만들면 끄고 잊는
+ * 순간 퇴사자 차단이 조용히 멈춘다.
+ */
+const HR_SYNC_ARMED_KEY = "hr_sync_armed";
+
+export async function hrSyncArmed(): Promise<boolean> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", HR_SYNC_ARMED_KEY)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data?.value as { armed?: unknown } | null)?.armed === true;
+  } catch {
+    // 읽지 못하면 켜지 않은 것으로 본다. 확신이 없을 때 60명에게 DM을 보내는
+    // 쪽보다 안 보내는 쪽이 되돌리기 쉽다.
+    return false;
+  }
+}
+
+export async function armHrSync(updatedBy?: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  await supabase
+    .from("app_settings")
+    .upsert(
+      {
+        key: HR_SYNC_ARMED_KEY,
+        value: { armed: true },
+        updated_at: new Date().toISOString(),
+        updated_by: updatedBy ?? null,
+      },
+      { onConflict: "key" },
+    );
+}

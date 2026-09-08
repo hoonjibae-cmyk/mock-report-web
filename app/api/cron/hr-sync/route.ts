@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { hrSyncArmed } from "@/lib/app-settings";
 import { hrConfigured } from "@/lib/hr-directory";
 import { runHrSync } from "@/lib/hr-apply";
 
@@ -42,6 +43,16 @@ export async function GET(request: Request) {
   if (!hrConfigured()) {
     return NextResponse.json({
       skipped: "HR_API_URL/HR_API_KEY가 설정되지 않아 건너뜁니다.",
+    });
+  }
+
+  // 관리자가 화면에서 한 번 직접 돌리기 전까지는 저절로 돌지 않는다.
+  // 첫 실행은 대상 부서 전원에게 슬랙 DM을 보내므로, 설정을 막 마친 배포에서
+  // 그것이 예고 없이 나가면 되돌릴 수 없다.
+  if (!(await hrSyncArmed())) {
+    return NextResponse.json({
+      skipped:
+        "관리자가 '설정 → 계정 관리 → 지금 맞추기'를 한 번 실행하기 전까지는 자동 실행하지 않습니다.",
     });
   }
 

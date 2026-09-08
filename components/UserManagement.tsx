@@ -9,6 +9,7 @@ import {
   type UserPermissions,
 } from "@/lib/access";
 import type { ManagedUser } from "@/lib/users";
+import type { SyncPreview } from "@/lib/hr-apply";
 
 function copyPermissions(value: UserPermissions): UserPermissions {
   return { ...value };
@@ -22,16 +23,37 @@ export default function UserManagement() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [hrReady, setHrReady] = useState(false);
+  const [armed, setArmed] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState("");
   const [syncProblems, setSyncProblems] = useState<string[]>([]);
+  const [preview, setPreview] = useState<SyncPreview | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/users/sync", { cache: "no-store" })
       .then((res) => res.json())
-      .then((data) => setHrReady(data?.hrConfigured === true))
+      .then((data) => {
+        setHrReady(data?.hrConfigured === true);
+        setArmed(data?.armed !== false);
+      })
       .catch(() => setHrReady(false));
   }, []);
+
+  async function loadPreview() {
+    setSyncing(true);
+    setError("");
+    setSyncResult("");
+    try {
+      const res = await fetch("/api/admin/users/sync?preview=1", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "미리보기를 불러오지 못했습니다.");
+      setPreview(data.preview as SyncPreview);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "미리보기를 불러오지 못했습니다.");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function runSync() {
     // 계정을 만들고 끄는 일이라 한 번 물어본다.
@@ -52,6 +74,8 @@ export default function UserManagement() {
           (data.notifyPending > 0 ? ` (슬랙 미가입 ${data.notifyPending}명은 가입 후 자동 발송)` : ""),
       );
       setSyncProblems(Array.isArray(data.problems) ? data.problems : []);
+      setPreview(null);
+      setArmed(true);
       await loadUsers();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "인사 연동에 실패했습니다.");
@@ -211,14 +235,24 @@ export default function UserManagement() {
       <div className="hr-sync-box">
         <div className="hr-sync-head">
           <strong>인사 프로그램 연동</strong>
-          <button
-            className="button"
-            type="button"
-            disabled={syncing || !hrReady}
-            onClick={runSync}
-          >
-            {syncing ? "맞추는 중…" : "지금 맞추기"}
-          </button>
+          <div className="hr-sync-buttons">
+            <button
+              className="button ghost"
+              type="button"
+              disabled={syncing || !hrReady}
+              onClick={loadPreview}
+            >
+              미리보기
+            </button>
+            <button
+              className="button"
+              type="button"
+              disabled={syncing || !hrReady}
+              onClick={runSync}
+            >
+              {syncing ? "맞추는 중…" : "지금 맞추기"}
+            </button>
+          </div>
         </div>
         <p className="subtle">
           교수부·교육운영팀은 <b>일반</b>, 경영지원은 <b>총괄</b> 권한을 받습니다. 대상 부서
@@ -232,6 +266,79 @@ export default function UserManagement() {
             다시 배포해 주세요.
           </p>
         ) : null}
+        {!armed && hrReady ? (
+          <p className="hr-sync-armed-note">
+            아직 자동 실행이 켜지지 않았습니다. <b>첫 실행은 대상 부서 전원에게 슬랙 안내가
+            나가므로</b>, 관리자가 여기서 한 번 직접 돌려 결과를 확인한 뒤부터 6시간마다
+            저절로 돌아갑니다. 먼저 <b>미리보기</b>로 명단을 확인해 보세요.
+          </p>
+        ) : null}
+
+        {preview ? (
+          <div className="hr-preview">
+            <div className="hr-preview-head">
+              <strong>미리보기 — 아직 아무것도 바뀌지 않았습니다</strong>
+              <button type="button" className="button tiny ghost" onClick={() => setPreview(null)}>
+                닫기
+              </button>
+            </div>
+            <p className="subtle">
+              기준 부서: {preview.departments.join(" · ") || "없음"} · 슬랙 안내 예정{" "}
+              {preview.willNotify}명
+              {preview.notifyPending > 0 ? ` (슬랙 미가입 ${preview.notifyPending}명은 가입 후 발송)` : ""}
+            </p>
+
+            <h4>새로 만들 계정 {preview.create.length}명</h4>
+            {preview.create.length === 0 ? (
+              <p className="subtle">없습니다.</p>
+            ) : (
+              <ul className="hr-preview-list">
+                {preview.create.map((item) => (
+                  <li key={item.email}>
+                    <b>{item.name}</b> · {item.department} ·{" "}
+                    {item.role === "admin" ? "총괄" : "일반"} · {item.email}
+                    {item.slackLinked ? "" : " · 슬랙 미가입(안내 보류)"}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {preview.update.length > 0 ? (
+              <>
+                <h4>바뀌는 계정 {preview.update.length}명</h4>
+                <ul className="hr-preview-list">
+                  {preview.update.map((item) => (
+                    <li key={item.name}>
+                      <b>{item.name}</b> · {item.changes.join(", ")}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+
+            {preview.deactivate.length > 0 ? (
+              <>
+                <h4 className="danger-title">사용 중지될 계정 {preview.deactivate.length}명</h4>
+                <ul className="hr-preview-list">
+                  {preview.deactivate.map((item) => (
+                    <li key={item.username}>
+                      <b>{item.displayName}</b> ({item.username})
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+
+            {preview.problems.length > 0 ? (
+              <ul className="hr-sync-problems">
+                {preview.problems.map((problem) => (
+                  <li key={problem}>{problem}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
         {syncResult ? <p className="status-message">{syncResult}</p> : null}
         {syncProblems.length > 0 ? (
           <ul className="hr-sync-problems">
