@@ -2121,6 +2121,42 @@ body.report-layout-a4 .a4-report-root { display: block; }
 }
 .guide-tip b { display: block; margin-bottom: 2px; color: #8a5a00; }
 
+/* 화면 사진 — 그 단계 바로 아래에 놓아 글에서 눈이 그대로 옮겨 가게 한다 */
+.guide-shot { margin: 14px 0 0 43px; }
+.guide-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  /* 화면 사진은 바탕이 희어서 테두리만으로는 페이지에 묻힌다 */
+  box-shadow: 0 1px 3px rgba(20, 33, 61, 0.08);
+}
+.guide-shot figcaption {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12.6px;
+  line-height: 1.75;
+}
+.guide-first .guide-shot { margin: 12px 0 0; }
+
+/*
+ * 넓은 화면에서는 사진만 글 칸 밖으로 빼낸다.
+ *
+ * 글은 760px 안에 있어야 읽기 편하지만, 화면 사진을 같은 칸에 맞추면 버튼
+ * 글자가 뭉개져 무엇을 누르라는 것인지 안 보인다. 설명서에서 사진이 안 읽히면
+ * 없는 것과 같다.
+ */
+@media (min-width: 1180px) {
+  .guide-shot,
+  .guide-first .guide-shot {
+    width: 1060px;
+    /* 글 칸(760px − 좌우 여백 40px = 720px) 기준으로 좌우 균등하게 넘긴다 */
+    margin-left: calc((720px - 1060px) / 2);
+    margin-right: calc((720px - 1060px) / 2);
+  }
+}
+
 .guide-trouble {
   margin-top: 32px;
   padding: 20px 22px;
@@ -2143,7 +2179,7 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .guide-foot b { color: var(--navy-deep); }
 
 @media (max-width: 560px) {
-  .guide-body, .guide-tip { margin-left: 0; }
+  .guide-body, .guide-tip, .guide-shot { margin-left: 0; }
   .guide-body { padding-left: 20px; }
 }
 

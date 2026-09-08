@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import path from "node:path";
 import type { Metadata } from "next";
 import AcademyLogo from "@/components/AcademyLogo";
 
@@ -159,6 +161,76 @@ const TROUBLES = [
 ] as const;
 
 /**
+ * 화면 사진 — `public/guide/` 에 올려 둔 파일을 단계 번호로 찾는다.
+ *
+ * 파일을 올리는 것만으로 설명서에 붙는다. 사진을 한 장 추가할 때마다 코드를
+ * 고쳐야 한다면 결국 아무도 안 올린다.
+ *
+ * 아직 안 올린 단계는 글만 나온다 — 빈 액자도, 깨진 이미지도 뜨지 않는다.
+ * 이름은 `step-3.png` 처럼 단계 번호로 짓고, 전체 화면 한 장은 `overview.png`
+ * 로 둔다. png · jpg · webp 를 받는다.
+ *
+ * 목록은 빌드할 때 한 번 읽는다. 못 읽는 상황에서도 설명서가 통째로 죽지
+ * 않도록 실패는 '사진 없음'으로 삼킨다 — 사진이 빠진 설명서는 여전히 쓸모가
+ * 있지만, 열리지 않는 설명서는 아무 쓸모가 없다.
+ */
+const SHOT_NAME = /^(overview|step-(\d+))\.(png|jpe?g|webp)$/i;
+
+function loadShots(): Map<string, string> {
+  const found = new Map<string, string>();
+  try {
+    for (const name of readdirSync(path.join(process.cwd(), "public", "guide"))) {
+      const match = SHOT_NAME.exec(name);
+      if (match) found.set(match[2] ?? "overview", `/guide/${name}`);
+    }
+  } catch {
+    // 폴더가 없거나 못 읽는 경우 — 글만 있는 설명서로 나간다
+  }
+  return found;
+}
+
+/**
+ * 사진 아래에 붙는 설명. 눈이 어디를 봐야 하는지 짚어 준다.
+ *
+ * 사진 속 학생 이름·점수·연락처는 **모두 지어낸 것**이다. 이 설명서는 로그인
+ * 없이 열리므로 진짜 학생 정보가 들어가서는 안 된다.
+ */
+const SHOT_CAPTIONS: Record<string, string> = {
+  overview:
+    "시험 목록. 시험 한 줄 오른쪽에 답안지 PDF · 정답 입력 · 스캔·검수 · 성적표 · 담임 의견 · 발송 버튼이 하시는 순서대로 놓여 있습니다. 모든 작업이 여기서 시작합니다.",
+  "1":
+    "새 시험 만들기. 수험번호 자리수는 5자리(학생 출결번호)로 정해져 있어 고르실 수 없습니다. 맨 아래 '담임 의견 사용'은 학생마다 코멘트를 달 시험에서만 체크하세요.",
+  "3":
+    "정답 입력. 위쪽 '빠른 입력'에 정답을 한 줄로 붙여넣고 일괄 적용을 누르면 한 번에 채워집니다. 엑셀 양식을 받아 채운 뒤 올려도 됩니다. 각 문항 아래 칸은 배점과 영역(듣기·독해)입니다.",
+  "4":
+    "스캔 올리기. 파일을 끌어다 놓으면 바로 판독이 시작됩니다. 파란 상자 안의 권장 설정(흑백 · 200dpi · PDF 30쪽 이하)을 지키셔야 빠르고 정확합니다.",
+  "5":
+    "검수. 판독기가 확신한 답안지는 자동으로 넘어가고, 확신하지 못한 것만 '확인 필요'로 남습니다. 수험번호를 못 읽었거나 표기가 흐린 답안지만 사람이 보면 됩니다.",
+  "6":
+    "주관식 채점. 같은 답을 쓴 학생끼리 묶여 나오므로 한 번에 채점됩니다. 같은 답에는 반드시 같은 점수가 갑니다.",
+  "7":
+    "담임 의견. 시험 전체에 한 번 쓰는 총평과, 학생마다 따로 쓰는 개별 의견이 있습니다. 시험을 만들 때 '담임 의견 사용'을 체크한 시험에서만 씁니다.",
+  "8":
+    "성적표 만들기. 답안지에서 읽히는 것은 수험번호뿐이라 이름은 여기서 채웁니다. '학생 정보 불러오기'를 누르면 학생 관리 프로그램에서 가져옵니다. 성적표를 만든 뒤에는 '성적 엑셀 받기'가 생깁니다.",
+  "9":
+    "발송. 실제로 나갈 알림톡 문구를 보내기 전에 그대로 보여 줍니다. 연락처가 없어 못 보내는 사람은 숨기지 않고 이유와 함께 표시됩니다.",
+};
+
+function Shot({ shots, name }: { shots: Map<string, string>; name: string }) {
+  const src = shots.get(name);
+  if (!src) return null;
+  const caption = SHOT_CAPTIONS[name] ?? "";
+  return (
+    <figure className="guide-shot">
+      {/* 화면 사진은 크기가 제각각이고 자주 열리는 페이지도 아니라 그대로 싣는다 */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={caption || "프로그램 화면"} loading="lazy" />
+      {caption ? <figcaption>{caption}</figcaption> : null}
+    </figure>
+  );
+}
+
+/**
  * `*이렇게*` 감싼 데를 굵게 그린다.
  *
  * 본문을 데이터로 두었으므로 그 안에 태그를 쓸 수 없다(글자 그대로 나온다).
@@ -176,6 +248,7 @@ function emphasize(text: string) {
 }
 
 export default function GuidePage() {
+  const shots = loadShots();
   return (
     <main className="guide-shell">
       <header className="guide-head">
@@ -200,6 +273,17 @@ export default function GuidePage() {
         </p>
       </section>
 
+      <section className="guide-first">
+        <h2>화면 하나만 기억하시면 됩니다 — OMR 시험</h2>
+        <p>
+          로그인하시면 왼쪽 메뉴에 <b>OMR 시험</b>이 있습니다. 만든 시험이 줄줄이 보이고,
+          시험마다 <b>답안지 뽑기 → 정답 입력 → 스캔·검수 → 성적표 → 발송</b> 버튼이 순서대로
+          붙어 있습니다. 아래 1번부터 9번까지는 그 버튼을 왼쪽에서 오른쪽으로 눌러 가는
+          이야기입니다.
+        </p>
+        <Shot shots={shots} name="overview" />
+      </section>
+
       <ol className="guide-steps">
         {STEPS.map((step) => (
           <li key={step.no}>
@@ -215,6 +299,7 @@ export default function GuidePage() {
                 <li key={line}>{emphasize(line)}</li>
               ))}
             </ul>
+            <Shot shots={shots} name={String(step.no)} />
             <p className="guide-tip">
               <b>알아두면 좋은 것</b>
               {emphasize(step.tip)}

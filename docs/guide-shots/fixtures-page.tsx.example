@@ -1,0 +1,207 @@
+// 사용설명서용 화면 사진을 찍기 위한 임시 페이지.
+//
+// 쓰는 법은 docs/guide-shots/README.md 참고. `app/shots-tmp/page.tsx` 로
+// 복사해 두고 사진을 찍은 뒤 지운다 — 배포에 남기지 않는다.
+//
+// 실제 화면을 가짜 데이터로 띄운다. 진짜 학생 이름·연락처가 설명서에 실리지
+// 않고, 데이터가 없는 단계(검수·담임 의견·발송)도 채워진 모습으로 찍을 수 있다.
+
+import OmrDashboard from "@/components/OmrDashboard";
+import OmrExamForm from "@/components/OmrExamForm";
+import OmrAnswerKey from "@/components/OmrAnswerKey";
+import OmrScanReview from "@/components/OmrScanReview";
+import OmrCommentsEditor from "@/components/OmrCommentsEditor";
+import OmrReportBuilder from "@/components/OmrReportBuilder";
+import OmrSendPanel from "@/components/OmrSendPanel";
+import EssayGrader from "@/components/EssayGrader";
+import type { OmrExam } from "@/lib/omr-types";
+import type { OmrScan } from "@/lib/omr-scans";
+
+export const dynamic = "force-dynamic";
+
+const NAMES = ["강여울", "김하늘", "박새롬", "이바다", "정푸른", "최다솜", "한소리", "윤가온"];
+
+function exam(over: Partial<OmrExam> = {}): OmrExam {
+  const answerKey: Record<string, number> = {};
+  const questionMeta: OmrExam["questionMeta"] = {};
+  for (let q = 1; q <= 45; q += 1) {
+    answerKey[String(q)] = ((q * 3) % 5) + 1;
+    questionMeta[String(q)] = { area: q <= 17 ? "듣기" : "독해" };
+  }
+  return {
+    id: "6a3e8547-5e8f-4b20-8b2d-2fa4ec6636b9",
+    examType: "saturday",
+    reportFamily: "B_english",
+    title: "9월 토요모의고사",
+    subject: null,
+    examDate: "2026-09-12",
+    numQuestions: 45,
+    numChoices: 5,
+    idDigits: 5,
+    omrStyle: "exam",
+    omrConfig: { per_column: 20, essay_count: 0, subject_label: "영어 영역" },
+    answerKey,
+    points: {},
+    questionMeta,
+    mockReference: null,
+    gradeCuts: [],
+    useTeacherComment: true,
+    createdByName: "김선생",
+    createdAt: "2026-09-08T01:00:00.000Z",
+    ...over,
+  };
+}
+
+function scan(i: number, over: Partial<OmrScan> = {}): OmrScan {
+  const answers: Record<string, number> = {};
+  for (let q = 1; q <= 45; q += 1) answers[String(q)] = ((q * 3 + i) % 5) + 1;
+  return {
+    id: `scan-${i}`,
+    examId: "demo",
+    filename: `토요모의고사_스캔_${String(i).padStart(2, "0")}.jpg`,
+    scanPath: null,
+    previewPath: null,
+    studentId: `1030${i}`,
+    studentIdQr: null,
+    studentIdBubbles: `1030${i}`,
+    answers,
+    essayScores: {},
+    essayAnswers: {},
+    essayCrops: {},
+    reviewFlags: [],
+    readConfidence: null,
+    status: "reviewed",
+    reviewedBy: "auto",
+    readError: null,
+    createdAt: "2026-09-12T02:10:00.000Z",
+    updatedAt: "2026-09-12T02:10:00.000Z",
+    ...over,
+  };
+}
+
+const SCANS: OmrScan[] = [
+  // 사람이 확인해야 하는 건을 앞에 둔다 — 검수 화면이 무엇을 하는 곳인지 먼저 보인다
+  scan(9, { status: "pending", studentId: null, studentIdBubbles: null, reviewedBy: null }),
+  scan(10, { status: "pending", studentId: "10310" }),
+  ...NAMES.map((_, i) => scan(i + 1)),
+];
+
+// 실제 직원 이름이 사진에 남지 않게 지어낸 사람으로 로그인한 척한다
+const USER = { username: "teacher", displayName: "김선생", role: "admin" as const };
+
+export default async function Shots({
+  searchParams,
+}: {
+  searchParams: Promise<{ s?: string }>;
+}) {
+  const { s = "overview" } = await searchParams;
+  const e = exam();
+
+  if (s === "overview") {
+    return (
+      <OmrDashboard
+        initialExams={[
+          e,
+          exam({
+            id: "b2",
+            examType: "monthly",
+            reportFamily: "C_generic",
+            title: "9월 월말평가 · 중2",
+            numQuestions: 25,
+            examDate: "2026-09-05",
+            createdByName: "이선생",
+            createdAt: "2026-09-01T01:00:00.000Z",
+          }),
+          exam({
+            id: "b3",
+            examType: "inclass",
+            reportFamily: "C_generic",
+            title: "9월 2주차 인클래스",
+            numQuestions: 20,
+            examDate: "2026-09-09",
+            createdByName: "박선생",
+            createdAt: "2026-08-28T01:00:00.000Z",
+          }),
+        ]}
+        setupError=""
+        activeType={null}
+        omrServiceReady
+        canCreate
+        canDelete
+        currentUser={USER}
+      />
+    );
+  }
+  if (s === "1") return <OmrExamForm />;
+  if (s === "3") return <OmrAnswerKey exam={e} setupError="" canEdit />;
+  if (s === "4" || s === "5") {
+    return <OmrScanReview exam={e} initialScans={s === "4" ? [] : SCANS} setupError="" canEdit />;
+  }
+  if (s === "6") {
+    return <EssayGrader exam={exam({ omrConfig: { per_column: 20, essay_count: 3 } })} setupError="" canEdit />;
+  }
+  if (s === "7") {
+    return (
+      <OmrCommentsEditor
+        exam={e}
+        initialOverview={{
+          aiDraft: null,
+          final:
+            "이번 시험은 듣기에서 수치·시간 정보를 정확히 잡아내는지, 독해에서는 빈칸 앞뒤의 연결어를 근거로 삼는지를 확인했습니다.",
+          areaNotes: [
+            { area: "듣기", text: "대화 후반부의 수치 정보를 놓치지 않는지 확인했습니다." },
+            { area: "독해", text: "빈칸추론에서 앞뒤 문장의 연결 관계를 근거로 쓰는지 보았습니다." },
+          ],
+          style: "structured",
+          status: "final",
+          updatedAt: "2026-09-12T05:00:00.000Z",
+        }}
+        initialStudents={NAMES.slice(0, 5).map((name, i) => ({
+          reportId: `r-${i}`,
+          studentKey: `1030${i + 1}`,
+          studentName: name,
+          school: "목운중 2",
+          createdAt: "2026-09-12T04:00:00.000Z",
+          summary: {
+            raw: 88 - i * 6,
+            max: 100,
+            rank: i + 1,
+            cohortCount: 24,
+            standardScore: 118 - i * 7,
+            weakItems: [31, 34, 39],
+            growth: [
+              { date: "2026-07-11", standardScore: 104 },
+              { date: "2026-08-08", standardScore: 110 },
+              { date: "2026-09-12", standardScore: 118 - i * 7 },
+            ],
+            areas: [
+              { area: "듣기", earned: 34 - i, possible: 37.8, rate: 90 - i * 3, cohortRate: 81 },
+              { area: "독해", earned: 54 - i * 5, possible: 62.2, rate: 87 - i * 8, cohortRate: 74 },
+            ],
+          },
+          comment: {
+            displayKeywords: i === 0 ? ["어휘 암기 성실", "듣기 집중력"] : [],
+            weaveKeywords: [],
+            aiDraft: null,
+            personalFinal:
+              i === 0
+                ? "듣기에서 수치 정보를 끝까지 따라가는 힘이 좋아졌습니다. 독해는 빈칸 앞뒤 연결어를 근거로 삼는 연습을 이어 가면 됩니다."
+                : null,
+            areaFeedback: [],
+            status: i === 0 ? "final" : "draft",
+            editedBy: i === 0 ? "김선생" : null,
+            updatedAt: i === 0 ? "2026-09-12T05:20:00.000Z" : null,
+          },
+        }))}
+        setupError=""
+        canEdit
+        aiEnabled
+      />
+    );
+  }
+  if (s === "8") {
+    return <OmrReportBuilder exam={e} initialScans={SCANS.slice(0, 8)} setupError="" canCreate canExport />;
+  }
+  if (s === "9") return <OmrSendPanel exam={e} canSend setupError="" />;
+  return <p>알 수 없는 화면: {s}</p>;
+}
