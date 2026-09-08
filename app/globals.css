@@ -2141,20 +2141,29 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .guide-first .guide-shot { margin: 12px 0 0; }
 
 /*
- * 넓은 화면에서는 사진만 글 칸 밖으로 빼낸다.
+ * PC에서는 설명서 전체를 넓게 쓴다.
  *
- * 글은 760px 안에 있어야 읽기 편하지만, 화면 사진을 같은 칸에 맞추면 버튼
- * 글자가 뭉개져 무엇을 누르라는 것인지 안 보인다. 설명서에서 사진이 안 읽히면
- * 없는 것과 같다.
+ * 화면 사진을 좁은 글 칸에 맞추면 버튼 글자가 뭉개져 무엇을 누르라는 것인지
+ * 안 보인다. 그렇다고 사진만 글 밖으로 빼내면 글과 사진의 폭이 어긋나 보기가
+ * 어수선하다. 그래서 글도 사진도 같은 폭을 쓰고, 줄이 길어진 만큼 글자를
+ * 함께 키워 읽는 눈이 덜 힘들게 한다.
+ *
+ * 모바일은 손대지 않는다 — 좁은 화면에서는 어차피 폭이 하나뿐이다.
  */
 @media (min-width: 1180px) {
-  .guide-shot,
-  .guide-first .guide-shot {
-    width: 1060px;
-    /* 글 칸(760px − 좌우 여백 40px = 720px) 기준으로 좌우 균등하게 넘긴다 */
-    margin-left: calc((720px - 1060px) / 2);
-    margin-right: calc((720px - 1060px) / 2);
-  }
+  .guide-shell { max-width: 1160px; padding: 42px 30px 70px; }
+
+  .guide-lead { font-size: 16.5px; }
+  .guide-first h2 { font-size: 17px; }
+  .guide-first p { font-size: 15.4px; }
+  .guide-step-head h3 { font-size: 19px; }
+  .guide-where { font-size: 13.5px; }
+  .guide-body li { font-size: 15.6px; }
+  .guide-tip { font-size: 14.4px; }
+  .guide-trouble h2 { font-size: 18px; }
+  .guide-trouble dt { font-size: 15.4px; }
+  .guide-trouble dd { font-size: 14.8px; }
+  .guide-shot figcaption { font-size: 13.6px; }
 }
 
 .guide-trouble {
