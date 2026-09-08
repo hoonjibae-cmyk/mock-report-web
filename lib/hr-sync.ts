@@ -9,7 +9,14 @@ export interface HrStaff {
   empNo: string;
   name: string;
   department: string;
-  /** 로그인 신원(슬랙 계정 이메일). 비어 있으면 계정을 만들 수 없다. */
+  /**
+   * 로그인 신원 — 인사 프로그램의 **업무용 구글메일(workEmail)**.
+   *
+   * 인사 프로그램에는 이메일이 둘이다. 급여명세서 발송용은 개인 메일인 경우가
+   * 많아 슬랙 계정과 대조되지 않는다. 여기 오는 것은 업무용 쪽이어야 한다.
+   *
+   * 비어 있으면 계정을 만들 수 없다.
+   */
   email: string;
   role: "admin" | "user";
   /** 지금 슬랙 안내를 보낼 수 있는가 */
@@ -134,7 +141,7 @@ export function planSync(staffList: readonly HrStaff[], accounts: readonly Exist
     if (!staff.email) {
       plan.skipped.push({
         staff,
-        reason: `${staff.name} 님은 인사 프로그램에 이메일이 없어 계정을 만들 수 없습니다. 인사 프로그램에서 슬랙에 쓰는 이메일을 입력해 주세요.`,
+        reason: `${staff.name} 님은 인사 프로그램에 이메일이 없어 계정을 만들 수 없습니다. 인사 프로그램의 직원 정보에서 '업무용 구글메일'을 채워 주세요(급여명세서용 이메일이 아닙니다).`,
       });
       continue;
     }
