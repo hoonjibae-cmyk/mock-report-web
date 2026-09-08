@@ -77,6 +77,7 @@ export async function fetchHrStaff(): Promise<HrStaffResult> {
         empNo: String(row.empNo ?? "").trim(),
         name: String(row.name ?? "").trim(),
         department: String(row.department ?? "").trim(),
+        // 인사 쪽이 업무용 구글메일(workEmail)을 email 이름으로 실어 보낸다.
         email: String(row.email ?? "").trim().toLowerCase(),
         role: row.role === "admin" ? "admin" : "user",
         slackLinked: row.slackLinked === true,
