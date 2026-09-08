@@ -21,6 +21,44 @@ export default function UserManagement() {
   const [savingId, setSavingId] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [hrReady, setHrReady] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState("");
+  const [syncProblems, setSyncProblems] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/users/sync", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => setHrReady(data?.hrConfigured === true))
+      .catch(() => setHrReady(false));
+  }, []);
+
+  async function runSync() {
+    // 계정을 만들고 끄는 일이라 한 번 물어본다.
+    if (!confirm("인사 프로그램 명단에 맞춰 계정을 만들고, 대상이 아닌 사람은 사용 중지합니다. 진행할까요?")) {
+      return;
+    }
+    setSyncing(true);
+    setSyncResult("");
+    setSyncProblems([]);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/users/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "인사 연동에 실패했습니다.");
+      setSyncResult(
+        `새 계정 ${data.created}명 · 갱신 ${data.updated}명 · 사용 중지 ${data.deactivated}명 · ` +
+          `슬랙 안내 ${data.notified}건` +
+          (data.notifyPending > 0 ? ` (슬랙 미가입 ${data.notifyPending}명은 가입 후 자동 발송)` : ""),
+      );
+      setSyncProblems(Array.isArray(data.problems) ? data.problems : []);
+      await loadUsers();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "인사 연동에 실패했습니다.");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function loadUsers() {
     setLoading(true);
@@ -170,6 +208,40 @@ export default function UserManagement() {
         </div>
       </div>
 
+      <div className="hr-sync-box">
+        <div className="hr-sync-head">
+          <strong>인사 프로그램 연동</strong>
+          <button
+            className="button"
+            type="button"
+            disabled={syncing || !hrReady}
+            onClick={runSync}
+          >
+            {syncing ? "맞추는 중…" : "지금 맞추기"}
+          </button>
+        </div>
+        <p className="subtle">
+          교수부·교육운영팀은 <b>일반</b>, 경영지원은 <b>총괄</b> 권한을 받습니다. 대상 부서
+          재직자에게는 계정이 자동으로 만들어지고 슬랙으로 안내가 갑니다. 퇴사하거나 부서를
+          벗어나면 자동으로 사용 중지됩니다. 매일 새벽에 한 번 저절로 돌아가며, 방금 입사한
+          분을 바로 넣어야 할 때만 이 버튼을 누르면 됩니다.
+        </p>
+        {!hrReady ? (
+          <p className="form-error block">
+            연동이 아직 설정되지 않았습니다. Vercel 환경변수에 HR_API_URL과 HR_API_KEY를 추가한 뒤
+            다시 배포해 주세요.
+          </p>
+        ) : null}
+        {syncResult ? <p className="status-message">{syncResult}</p> : null}
+        {syncProblems.length > 0 ? (
+          <ul className="hr-sync-problems">
+            {syncProblems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
       <form className="user-create-form" onSubmit={createUser}>
         <label><span>로그인 아이디</span><input name="username" placeholder="예: teacher01" autoComplete="off" required /></label>
         <label><span>사용자 이름</span><input name="displayName" placeholder="예: 김유진 선생님" autoComplete="off" required /></label>
@@ -190,8 +262,26 @@ export default function UserManagement() {
             <article className="user-account-card" key={user.id}>
               <div className="user-account-head">
                 <div>
-                  <strong>{user.username}</strong>
-                  <span>{user.lastLoginAt ? `최근 로그인 ${new Date(user.lastLoginAt).toLocaleString("ko-KR")}` : "아직 로그인하지 않음"}</span>
+                  <strong>
+                    {user.username}
+                    {user.role === "admin" ? <em className="role-badge admin">총괄</em> : null}
+                    {user.managedByHr ? <em className="role-badge hr">인사 연동</em> : null}
+                  </strong>
+                  <span>
+                    {user.department ? `${user.department} · ` : ""}
+                    {user.email || "구글 계정 없음(비밀번호 로그인)"}
+                  </span>
+                  <span>
+                    {user.lastLoginAt
+                      ? `최근 로그인 ${new Date(user.lastLoginAt).toLocaleString("ko-KR")}`
+                      : "아직 로그인하지 않음"}
+                    {user.managedByHr && !user.slackNotifiedAt
+                      ? " · 슬랙 안내 대기(가입 후 자동 발송)"
+                      : ""}
+                  </span>
+                  {!user.active && user.deactivatedReason ? (
+                    <span className="deactivated-why">{user.deactivatedReason}</span>
+                  ) : null}
                 </div>
                 <label className="account-active-toggle">
                   <input type="checkbox" checked={draft.active} onChange={(event) => patchDraft(user.id, { active: event.target.checked })} />

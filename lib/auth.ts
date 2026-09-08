@@ -52,32 +52,77 @@ export async function authenticateUser(usernameInput: string, password: string):
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("app_users")
-    .select("id,username,display_name,password_hash,is_active,permissions")
+    .select("id,username,display_name,password_hash,is_active,permissions,role")
     .eq("username", username)
     .maybeSingle();
 
-  if (error || !data || !data.is_active || !verifyUserPassword(password, data.password_hash)) return null;
+  if (error || !data || !data.is_active) return null;
+  // 비밀번호가 없는 계정은 슬랙으로만 들어온다. 빈 값으로 통과하는 일이 없도록
+  // 대조 전에 막는다.
+  if (!data.password_hash || !verifyUserPassword(password, data.password_hash)) return null;
 
+  await touchLastLogin(data.id as string);
+  return fromRow(data);
+}
+
+/** app_users 한 줄을 로그인한 사람으로 옮긴다 */
+function fromRow(row: {
+  id: string;
+  username: string;
+  display_name: string;
+  permissions?: unknown;
+  role?: unknown;
+}): CurrentUser {
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    role: row.role === "admin" ? "admin" : "user",
+    permissions: normalizePermissions(row.permissions),
+    source: "database",
+  };
+}
+
+async function touchLastLogin(id: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
   await supabase
     .from("app_users")
     .update({ last_login_at: new Date().toISOString() })
-    .eq("id", data.id)
+    .eq("id", id)
     .then(() => undefined);
+}
 
-  return {
-    id: data.id,
-    username: data.username,
-    displayName: data.display_name,
-    role: "user",
-    permissions: normalizePermissions(data.permissions),
-    source: "database",
-  };
+/**
+ * 확인된 이메일로 로그인한다(슬랙 로그인이 부른다).
+ *
+ * **명부에 없으면 들어올 수 없다.** 학원 슬랙에 있다는 것과 성적표 프로그램을
+ * 쓸 사람이라는 것은 다른 이야기다 — 조교팀도 슬랙에는 있다. 인사 프로그램에서
+ * 대상 부서에 속한 재직자만 이 표에 들어온다.
+ */
+export async function authenticateByEmail(email: string): Promise<CurrentUser | null> {
+  const address = String(email ?? "").trim().toLowerCase();
+  if (!address) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("id,username,display_name,is_active,permissions,role")
+    .ilike("email", address)
+    .maybeSingle();
+
+  if (error || !data || !data.is_active) return null;
+
+  await touchLastLogin(data.id as string);
+  return fromRow(data);
 }
 
 export async function setSessionCookie(user: CurrentUser): Promise<void> {
   const store = await cookies();
   const token = signPayload({
-    kind: user.role === "admin" ? "environment-admin" : "database-user",
+    // 자리(admin/user)가 아니라 **어디서 온 계정인지** 를 담는다. 예전에는 자리로
+    // 적었는데, DB 계정에도 총괄이 생기면서 그 계정이 환경변수 관리자 행세를
+    // 하게 되어 로그인이 통째로 막힌다.
+    kind: user.source === "environment" ? "environment-admin" : "database-user",
     userId: user.id ?? undefined,
     username: user.username,
     exp: Date.now() + 12 * 60 * 60 * 1000,
@@ -120,19 +165,14 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("app_users")
-    .select("id,username,display_name,is_active,permissions")
+    .select("id,username,display_name,is_active,permissions,role")
     .eq("id", payload.userId)
     .maybeSingle();
   if (error || !data || !data.is_active) return null;
 
-  return {
-    id: data.id,
-    username: data.username,
-    displayName: data.display_name,
-    role: "user",
-    permissions: normalizePermissions(data.permissions),
-    source: "database",
-  };
+  // 자리를 쿠키가 아니라 매번 표에서 읽는다. 부서가 바뀌어 총괄이 풀린 사람이
+  // 쿠키가 살아 있는 동안 총괄로 남으면 안 된다.
+  return fromRow(data);
 }
 
 export function hasPermission(user: CurrentUser, permission: UserPermissionKey): boolean {

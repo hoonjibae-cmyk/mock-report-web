@@ -705,8 +705,69 @@ button, input, select { font: inherit; }
   margin-bottom: 14px;
 }
 .user-account-head > div { display: flex; flex-direction: column; }
-.user-account-head strong { color: var(--navy-deep); font-size: 15px; }
+.user-account-head strong {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--navy-deep); font-size: 15px;
+}
 .user-account-head span { color: var(--muted); font-size: 11px; }
+.user-account-head .deactivated-why { margin-top: 3px; color: var(--danger); }
+.role-badge {
+  font-style: normal; font-size: 10.5px; font-weight: 800;
+  padding: 2px 7px; border-radius: 999px;
+}
+.role-badge.admin { background: var(--navy); color: #fff; }
+.role-badge.hr { background: #eaf0fa; color: var(--navy); }
+
+/* --- 인사 프로그램 연동 --- */
+.hr-sync-box {
+  margin-bottom: 16px;
+  padding: 15px 17px;
+  border: 1px solid #dce4ee;
+  border-left: 4px solid var(--navy);
+  border-radius: 13px;
+  background: #f7f9fd;
+}
+.hr-sync-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 6px;
+}
+.hr-sync-head strong { color: var(--navy-deep); font-size: 14.5px; }
+.hr-sync-box .subtle { margin: 0; font-size: 12.4px; line-height: 1.8; }
+.hr-sync-box .subtle b { color: var(--navy-deep); }
+.hr-sync-problems {
+  margin: 10px 0 0; padding-left: 18px;
+  color: #8a5a00; font-size: 12.2px; line-height: 1.75;
+}
+
+/* --- 슬랙 로그인 --- */
+.button.slack-login {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink); font-weight: 750;
+}
+.button.slack-login:hover { border-color: var(--blue); background: #f7f9fd; }
+/* 슬랙 로고를 흉내 낸 네 갈래 표식 — 외부 이미지를 받아오지 않으려고 CSS로 그린다 */
+.slack-mark {
+  position: relative; width: 18px; height: 18px; flex: 0 0 auto;
+}
+.slack-mark::before, .slack-mark::after {
+  content: ""; position: absolute; border-radius: 3px;
+}
+.slack-mark::before {
+  left: 7px; top: 0; width: 4px; height: 18px;
+  background: linear-gradient(180deg, #2eb67d 0 50%, #ecb22e 50%);
+}
+.slack-mark::after {
+  top: 7px; left: 0; width: 18px; height: 4px;
+  background: linear-gradient(90deg, #36c5f0 0 50%, #e01e5a 50%);
+}
+.login-hint { margin: 10px 0 0; color: var(--muted); font-size: 12.3px; line-height: 1.7; text-align: center; }
+.login-alt {
+  width: 100%; margin-top: 14px; padding: 8px;
+  border: 0; background: transparent;
+  color: var(--muted); font-size: 12.3px; font-weight: 700;
+}
+.login-alt:hover { color: var(--navy); text-decoration: underline; }
+.login-alt.top { margin: 0 0 12px; text-align: left; padding-left: 0; }
 .account-active-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 750; }
 .account-active-toggle input,
 .permission-grid input { width: 16px; height: 16px; accent-color: var(--navy); }
