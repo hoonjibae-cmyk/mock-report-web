@@ -9,7 +9,7 @@ export interface HrStaff {
   empNo: string;
   name: string;
   department: string;
-  /** 구글 로그인 신원. 비어 있으면 계정을 만들 수 없다. */
+  /** 로그인 신원(슬랙 계정 이메일). 비어 있으면 계정을 만들 수 없다. */
   email: string;
   role: "admin" | "user";
   /** 지금 슬랙 안내를 보낼 수 있는가 */
@@ -69,7 +69,7 @@ const USERNAME_RE = /^[a-z0-9._-]{3,40}$/;
 /**
  * 이메일에서 로그인 아이디를 딴다.
  *
- * 아이디는 화면에 이름표로 쓰일 뿐 로그인 열쇠가 아니다(열쇠는 구글 계정이다).
+ * 아이디는 화면에 이름표로 쓰일 뿐 로그인 열쇠가 아니다(열쇠는 슬랙 계정이다).
  * 그래도 겹치면 안 되므로, 겹칠 때는 뒤에 숫자를 붙인다.
  *
  * 딸 수 없는 이메일이면 사번으로 만든다 — 사람이 읽기는 나빠도, 계정을 아예
@@ -134,7 +134,7 @@ export function planSync(staffList: readonly HrStaff[], accounts: readonly Exist
     if (!staff.email) {
       plan.skipped.push({
         staff,
-        reason: `${staff.name} 님은 인사 프로그램에 이메일이 없어 계정을 만들 수 없습니다. 인사 프로그램에서 업무용 구글 계정을 입력해 주세요.`,
+        reason: `${staff.name} 님은 인사 프로그램에 이메일이 없어 계정을 만들 수 없습니다. 인사 프로그램에서 슬랙에 쓰는 이메일을 입력해 주세요.`,
       });
       continue;
     }

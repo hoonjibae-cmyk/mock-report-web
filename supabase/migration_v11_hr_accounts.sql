@@ -1,4 +1,4 @@
--- v11: 인사 프로그램 연동 계정 — 부서가 권한을 정하고, 로그인은 구글로.
+-- v11: 인사 프로그램 연동 계정 — 부서가 권한을 정하고, 로그인은 슬랙으로.
 --
 -- 왜 바꾸는가
 -- ----------
@@ -8,22 +8,23 @@
 --
 -- 비밀번호를 없앤 이유
 -- ------------------
--- 직원은 이미 업무용 구글 계정으로 슬랙을 쓴다. 비밀번호를 따로 만들면 그것을
--- 어떻게든 전달해야 하고(슬랙 DM에 남는다), 퇴사해도 그 비밀번호는 살아 있다.
+-- 직원은 이미 슬랙으로 일하고, 계정 안내도 슬랙으로 간다. 비밀번호를 따로
+-- 만들면 그것을 어떻게든 전달해야 하고(슬랙 DM에 영영 남는다), 퇴사해도 그
+-- 비밀번호는 살아 있다.
 --
--- 구글 계정은 직원이 스스로 만든 것이라 회사가 정지시킬 수 없다. 그래서 구글은
--- **누구인지만** 확인해 주고, **들어와도 되는지** 는 이 표가 정한다 —
--- 여기 없거나 is_active 가 아니면, 살아 있는 구글 계정으로도 못 들어온다.
+-- 슬랙 워크스페이스 멤버십은 회사가 통제한다. 퇴사자를 내보내면 그 순간
+-- 로그인도 막힌다. 슬랙은 **누구인지** 를 확인해 주고, **들어와도 되는지** 는
+-- 이 표가 정한다 — 조교팀도 슬랙에는 있지만 이 프로그램은 쓰지 않는다.
 --
 -- 그래서 password_hash 를 비울 수 있게 한다. 비어 있는 계정은 **비밀번호로
--- 로그인할 수 없다**(구글로만 들어온다). 환경변수 관리자 계정은 그대로 남는다 —
--- 구글이나 인사 프로그램이 멈췄을 때 들어갈 문이 하나는 있어야 한다.
+-- 로그인할 수 없다**(슬랙으로만 들어온다). 환경변수 관리자 계정은 그대로 남는다 —
+-- 슬랙이나 인사 프로그램이 멈췄을 때 들어갈 문이 하나는 있어야 한다.
 
 alter table public.app_users
   -- 'admin'(총괄) | 'user'(일반). 지금까지는 DB 계정이 무조건 일반이었고
   -- 관리자는 환경변수 계정 하나뿐이었다. 경영지원에 총괄을 주려면 필요하다.
   add column if not exists role text not null default 'user',
-  -- 구글 로그인 신원. 이 값이 로그인의 열쇠다.
+  -- 로그인 신원(슬랙 계정 이메일). 이 값이 로그인의 열쇠다.
   add column if not exists email text,
   -- 인사 프로그램의 사번. 이름이나 이메일이 바뀌어도 이 값은 안 바뀐다.
   add column if not exists hr_emp_no text,
@@ -41,7 +42,7 @@ alter table public.app_users
   add constraint app_users_role_check check (role in ('admin', 'user')) not valid;
 alter table public.app_users validate constraint app_users_role_check;
 
--- 구글 로그인 계정은 비밀번호가 없다.
+-- 슬랙으로 들어오는 계정은 비밀번호가 없다.
 alter table public.app_users alter column password_hash drop not null;
 
 -- 이메일은 로그인 열쇠라 겹치면 안 된다. 비어 있는 계정(예전 방식)은 여럿 있어도 된다.
@@ -55,7 +56,7 @@ create unique index if not exists app_users_hr_emp_no_unique_idx
 comment on column public.app_users.role is
   '총괄(admin) | 일반(user). 인사 프로그램의 부서가 정한다.';
 comment on column public.app_users.email is
-  '구글 로그인 신원. 인사 프로그램의 직원 이메일과 같아야 로그인된다.';
+  '로그인 신원. 슬랙 계정 이메일이 인사 프로그램의 직원 이메일과 같아야 로그인된다.';
 comment on column public.app_users.managed_by_hr is
   '인사 연동이 만든 계정. 손으로 만든 계정은 연동이 끄지 않는다.';
 comment on column public.app_users.slack_notified_at is

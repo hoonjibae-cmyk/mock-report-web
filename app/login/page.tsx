@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import AcademyLogo from "@/components/AcademyLogo";
 import LoginForm from "@/components/LoginForm";
 import { getCurrentUser } from "@/lib/auth";
-import { googleConfigured } from "@/lib/google-auth";
+import { slackLoginConfigured } from "@/lib/slack-auth";
 
 export default async function LoginPage({
   searchParams,
@@ -11,7 +11,7 @@ export default async function LoginPage({
 }) {
   if (await getCurrentUser()) redirect("/admin");
   const { error } = await searchParams;
-  const googleReady = googleConfigured();
+  const slackReady = slackLoginConfigured();
 
   return (
     <main className="login-shell">
@@ -25,11 +25,11 @@ export default async function LoginPage({
         </div>
         <h1>계정 로그인</h1>
         <p>
-          {googleReady
-            ? "업무용 구글 계정으로 로그인해 주세요."
+          {slackReady
+            ? "학원 슬랙 계정으로 로그인해 주세요."
             : "관리자 또는 등록된 일반 사용자 계정으로 로그인해 주세요."}
         </p>
-        <LoginForm googleReady={googleReady} initialError={error ?? ""} />
+        <LoginForm slackReady={slackReady} initialError={error ?? ""} />
       </section>
     </main>
   );

@@ -13,7 +13,7 @@ export interface ManagedUser {
   updatedAt: string;
   /** 총괄(admin) | 일반(user) — 인사 연동이 부서로 정한다 */
   role: "admin" | "user";
-  /** 구글 로그인 신원. 비어 있으면 예전 방식(비밀번호) 계정이다 */
+  /** 로그인 신원(슬랙 계정 이메일). 비어 있으면 예전 방식(비밀번호) 계정이다 */
   email: string | null;
   /** 마지막으로 확인한 소속 */
   department: string | null;

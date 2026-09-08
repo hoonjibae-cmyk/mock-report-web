@@ -739,17 +739,26 @@ button, input, select { font: inherit; }
   color: #8a5a00; font-size: 12.2px; line-height: 1.75;
 }
 
-/* --- 구글 로그인 --- */
-.button.google-login {
+/* --- 슬랙 로그인 --- */
+.button.slack-login {
   display: inline-flex; align-items: center; justify-content: center; gap: 9px;
   border: 1px solid var(--line); background: #fff; color: var(--ink); font-weight: 750;
 }
-.button.google-login:hover { border-color: var(--blue); background: #f7f9fd; }
-.google-mark {
-  display: grid; place-items: center;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: linear-gradient(135deg, #ea4335 0 25%, #fbbc05 25% 50%, #34a853 50% 75%, #4285f4 75%);
-  color: #fff; font-weight: 900; font-size: 12px; font-family: Georgia, serif;
+.button.slack-login:hover { border-color: var(--blue); background: #f7f9fd; }
+/* 슬랙 로고를 흉내 낸 네 갈래 표식 — 외부 이미지를 받아오지 않으려고 CSS로 그린다 */
+.slack-mark {
+  position: relative; width: 18px; height: 18px; flex: 0 0 auto;
+}
+.slack-mark::before, .slack-mark::after {
+  content: ""; position: absolute; border-radius: 3px;
+}
+.slack-mark::before {
+  left: 7px; top: 0; width: 4px; height: 18px;
+  background: linear-gradient(180deg, #2eb67d 0 50%, #ecb22e 50%);
+}
+.slack-mark::after {
+  top: 7px; left: 0; width: 18px; height: 4px;
+  background: linear-gradient(90deg, #36c5f0 0 50%, #e01e5a 50%);
 }
 .login-hint { margin: 10px 0 0; color: var(--muted); font-size: 12.3px; line-height: 1.7; text-align: center; }
 .login-alt {

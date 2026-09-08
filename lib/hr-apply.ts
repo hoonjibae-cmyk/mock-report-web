@@ -31,7 +31,7 @@ export function welcomeText(staff: HrStaff, siteUrl: string): string {
     `${staff.name} 님, 목동유쌤영어학원 *성적표 프로그램(OMR 리포트)* 계정이 준비되었습니다.`,
     "",
     `• 주소 : ${siteUrl.replace(/\/$/, "")}`,
-    `• 로그인 : *구글 계정으로 로그인* 을 누르고 업무용 구글 계정(${staff.email})으로 들어오시면 됩니다.`,
+    "• 로그인 : *슬랙으로 로그인* 을 누르시면 됩니다. 지금 보고 계신 이 슬랙 계정 그대로입니다.",,
     "• 별도 비밀번호는 없습니다.",
     `• 권한 : ${staff.department} · ${role}`,
     "",
@@ -72,7 +72,7 @@ async function applyPlan(plan: SyncPlan): Promise<{ created: number; updated: nu
     const { error } = await supabase.from("app_users").insert({
       username: item.username,
       display_name: item.staff.name,
-      // 비밀번호는 두지 않는다 — 구글로만 들어온다.
+      // 비밀번호는 두지 않는다 — 슬랙으로만 들어온다.
       password_hash: null,
       email: item.staff.email,
       role: item.staff.role,

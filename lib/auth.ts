@@ -57,7 +57,7 @@ export async function authenticateUser(usernameInput: string, password: string):
     .maybeSingle();
 
   if (error || !data || !data.is_active) return null;
-  // 비밀번호가 없는 계정은 구글로만 들어온다. 빈 값으로 통과하는 일이 없도록
+  // 비밀번호가 없는 계정은 슬랙으로만 들어온다. 빈 값으로 통과하는 일이 없도록
   // 대조 전에 막는다.
   if (!data.password_hash || !verifyUserPassword(password, data.password_hash)) return null;
 
@@ -93,13 +93,13 @@ async function touchLastLogin(id: string): Promise<void> {
 }
 
 /**
- * 구글이 확인해 준 이메일로 로그인한다.
+ * 확인된 이메일로 로그인한다(슬랙 로그인이 부른다).
  *
- * **명부에 없으면 들어올 수 없다.** 구글 계정이 있다는 것과 우리 프로그램을 쓸
- * 사람이라는 것은 다른 이야기다. 인사 프로그램에서 대상 부서에 속한 재직자만
- * 이 표에 들어온다.
+ * **명부에 없으면 들어올 수 없다.** 학원 슬랙에 있다는 것과 성적표 프로그램을
+ * 쓸 사람이라는 것은 다른 이야기다 — 조교팀도 슬랙에는 있다. 인사 프로그램에서
+ * 대상 부서에 속한 재직자만 이 표에 들어온다.
  */
-export async function authenticateGoogle(email: string): Promise<CurrentUser | null> {
+export async function authenticateByEmail(email: string): Promise<CurrentUser | null> {
   const address = String(email ?? "").trim().toLowerCase();
   if (!address) return null;
 
