@@ -54,19 +54,41 @@ export default function ReportsManager({
   const batchLabel = (report: AdminReport) =>
     [report.batchTitle, report.examLabel].filter(Boolean).join(" · ") || "제목 없음";
 
+  const authorOf = (report: AdminReport) => report.createdByName?.trim() || "관리자";
+
   // 시험 필터 항목 — 같은 제목·묶음명은 업로드가 여러 번이어도 하나로 묶는다. 최신순.
   const batches = useMemo(() => {
-    const map = new Map<string, { label: string; createdAt: string; count: number }>();
+    const map = new Map<
+      string,
+      { label: string; createdAt: string; count: number; authors: Set<string> }
+    >();
     for (const report of typeReports) {
       const label = batchLabel(report);
       const existing = map.get(label);
-      if (!existing) map.set(label, { label, createdAt: report.createdAt, count: 1 });
-      else {
+      if (!existing) {
+        map.set(label, {
+          label,
+          createdAt: report.createdAt,
+          count: 1,
+          authors: new Set([authorOf(report)]),
+        });
+      } else {
         existing.count += 1;
+        existing.authors.add(authorOf(report));
         if (existing.createdAt < report.createdAt) existing.createdAt = report.createdAt;
       }
     }
-    return [...map.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...map.values()]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map((batch) => {
+        // 같은 시험을 두 사람이 나눠 만들었을 수 있다. 이름을 다 늘어놓으면
+        // 줄이 넘치므로 첫 사람만 쓰고 나머지는 수로 적는다.
+        const [first, ...rest] = [...batch.authors];
+        return {
+          ...batch,
+          authorNote: rest.length > 0 ? `${first} 외 ${rest.length}명` : first,
+        };
+      });
   }, [typeReports]);
 
   const authorOptions = useMemo(() => {
@@ -156,11 +178,25 @@ export default function ReportsManager({
       // 접어 둔다. batches가 이미 최신순이라 최근 시험이 목록 위로 온다.
       dropdown: true,
       allLabel: "전체 시험",
-      options: batches.map((b) => ({ value: b.label, label: b.label, count: b.count })),
+      options: batches.map((b) => ({
+        value: b.label,
+        label: b.label,
+        note: b.authorNote,
+        count: b.count,
+      })),
       selected: batchFilter,
       onChange: setBatchFilter,
     },
-    { key: "author", label: "만든 사람", options: authorOptions, selected: authors, onChange: setAuthors },
+    {
+      key: "author",
+      label: "만든 사람",
+      // 선생님이 늘면 이 목록도 늘어난다. 시험과 같은 이유로 접어 둔다.
+      dropdown: true,
+      allLabel: "전체",
+      options: authorOptions,
+      selected: authors,
+      onChange: setAuthors,
+    },
     {
       key: "status",
       label: "상태",

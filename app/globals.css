@@ -1627,9 +1627,23 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .filter-dropdown-option .text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* 줄바꿈 없이 잘라내는 것은 각 줄에 따로 걸어야 한다 —
+   세로로 쌓는 상자에 걸면 말줄임표가 나오지 않고 그냥 잘린다. */
+.filter-dropdown-option .text .main,
+.filter-dropdown-option .text small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 이름만으로 구분이 안 될 때 붙는 밑줄 — 만든 사람 등 */
+.filter-dropdown-option .text small {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 .filter-dropdown-option em {
   flex: 0 0 auto;

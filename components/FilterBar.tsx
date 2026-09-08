@@ -15,6 +15,11 @@ export interface FilterOption {
   label: string;
   /** 이 값에 해당하는 항목 수(0이면 흐리게 표시) */
   count?: number;
+  /**
+   * 이름만으로 구분이 안 될 때 밑에 한 줄 더 붙이는 말(만든 사람 등).
+   * 접어 둔 필터에서만 보인다 — 칩은 한 줄짜리라 넣을 자리가 없다.
+   */
+  note?: string;
 }
 
 export interface FilterGroup {
@@ -91,7 +96,11 @@ function FilterDropdown({ group }: { group: FilterGroup }) {
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return group.options;
-    return group.options.filter((option) => option.label.toLowerCase().includes(needle));
+    // 밑줄에 적은 것(만든 사람 등)으로도 찾을 수 있어야 한다. 화면에 보이는
+    // 글자인데 그것으로 검색이 안 되면 없는 것으로 읽힌다.
+    return group.options.filter((option) =>
+      `${option.label} ${option.note ?? ""}`.toLowerCase().includes(needle),
+    );
   }, [group.options, query]);
 
   const allLabel = group.allLabel ?? "전체";
@@ -155,7 +164,10 @@ function FilterDropdown({ group }: { group: FilterGroup }) {
                     onClick={() => toggle(option.value)}
                   >
                     <span className="check" aria-hidden="true" />
-                    <span className="text">{option.label}</span>
+                    <span className="text">
+                      <span className="main">{option.label}</span>
+                      {option.note ? <small>{option.note}</small> : null}
+                    </span>
                     {typeof option.count === "number" ? <em>{option.count}</em> : null}
                   </button>
                 );
