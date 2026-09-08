@@ -152,6 +152,10 @@ export default function ReportsManager({
     {
       key: "batch",
       label: "시험",
+      // 시험은 회차마다 하나씩 쌓인다. 한 해만 지나도 늘어놓을 수 없으므로
+      // 접어 둔다. batches가 이미 최신순이라 최근 시험이 목록 위로 온다.
+      dropdown: true,
+      allLabel: "전체 시험",
       options: batches.map((b) => ({ value: b.label, label: b.label, count: b.count })),
       selected: batchFilter,
       onChange: setBatchFilter,

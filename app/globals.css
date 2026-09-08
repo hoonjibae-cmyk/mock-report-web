@@ -1526,6 +1526,134 @@ body.report-layout-a4 .a4-report-root { display: block; }
   font-variant-numeric: tabular-nums;
 }
 
+/* --- 접어 두는 필터(시험처럼 항목이 계속 늘어나는 것) --- */
+.filter-dropdown { position: relative; }
+.filter-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 210px;
+  max-width: 340px;
+  padding: 6px 11px 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12.6px;
+  font-weight: 700;
+  text-align: left;
+  transition: border-color .12s, color .12s;
+}
+.filter-dropdown-trigger:hover { border-color: var(--blue); color: var(--navy); }
+.filter-dropdown-trigger.active { border-color: var(--navy); color: var(--navy-deep); }
+.filter-dropdown-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-dropdown-trigger em {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.filter-dropdown-caret {
+  flex: 0 0 auto;
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: .55;
+  transition: transform .12s;
+}
+.filter-dropdown.open .filter-dropdown-caret { transform: rotate(180deg); }
+
+.filter-dropdown-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 40px));
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(16, 43, 85, .16);
+}
+.filter-dropdown-search {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12.6px;
+}
+.filter-dropdown-list { max-height: 280px; overflow-y: auto; }
+.filter-dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.8px;
+  font-weight: 600;
+  text-align: left;
+}
+.filter-dropdown-option:hover { background: #f2f5fa; }
+.filter-dropdown-option.empty { opacity: .5; }
+.filter-dropdown-option .check {
+  flex: 0 0 auto;
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.filter-dropdown-option.on .check {
+  border-color: var(--navy);
+  background: var(--navy) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/11px no-repeat;
+}
+.filter-dropdown-option .text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-dropdown-option em {
+  flex: 0 0 auto;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.filter-dropdown-empty { margin: 0; padding: 14px 9px; color: var(--muted); font-size: 12.5px; }
+.filter-dropdown-clear {
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px;
+  border: 0;
+  border-top: 1px solid #eef1f6;
+  border-radius: 0 0 8px 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.3px;
+  font-weight: 700;
+}
+.filter-dropdown-clear:hover { color: var(--danger); }
+
 .filter-tail {
   display: flex;
   align-items: center;
