@@ -11,6 +11,7 @@ interface Props {
   initialScans: OmrScan[];
   setupError: string;
   canCreate: boolean;
+  canExport: boolean;
 }
 
 interface CreatedLink {
@@ -27,7 +28,13 @@ interface Draft {
   phone: string;
 }
 
-export default function OmrReportBuilder({ exam, initialScans, setupError, canCreate }: Props) {
+export default function OmrReportBuilder({
+  exam,
+  initialScans,
+  setupError,
+  canCreate,
+  canExport,
+}: Props) {
   const reviewed = useMemo(
     () => initialScans.filter((scan) => scan.status === "reviewed" && scan.studentId),
     [initialScans],
@@ -435,28 +442,48 @@ export default function OmrReportBuilder({ exam, initialScans, setupError, canCr
               연락처를 가져와 채웁니다(직접 고쳐 둔 칸은 그대로 둡니다).
               {directoryConfigured === false ? " — 아직 연동이 설정되지 않았습니다." : ""}
             </p>
+            {canExport && existingReports > 0 ? (
+              <p className="subtle">
+                <strong>성적 엑셀 받기</strong>를 누르면 응시생 전원의{" "}
+                <strong>학생명 · 총점수 · 영역별 점수</strong>가 엑셀 한 장으로 나옵니다(성적표에
+                실린 점수 그대로). 영역 열은 이 시험에 적어 둔 영역을 따릅니다 — 듣기·독해로
+                나눠 두었다면 그 두 칸이 나옵니다.
+              </p>
+            ) : null}
           </div>
-          {canCreate ? (
-            <div className="toolbar" style={{ flexWrap: "wrap" }}>
-              <button
+          <div className="toolbar" style={{ flexWrap: "wrap" }}>
+            {canCreate ? (
+              <>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={loadStudents}
+                  disabled={directoryLoading || reviewed.length === 0}
+                  title="수험번호로 학생 관리 프로그램에서 이름·학교·연락처를 불러옵니다"
+                >
+                  {directoryLoading ? "불러오는 중…" : "학생 정보 불러오기"}
+                </button>
+                <button
+                  className="button primary"
+                  onClick={generate}
+                  disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
+                  title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
+                >
+                  {loading ? "채점·생성 중…" : "성적표 생성"}
+                </button>
+              </>
+            ) : null}
+            {/* 학생 이름은 성적표를 만들 때 들어오므로, 그 전에는 뽑을 표가 없다 */}
+            {canExport && existingReports > 0 ? (
+              <a
                 className="button secondary"
-                type="button"
-                onClick={loadStudents}
-                disabled={directoryLoading || reviewed.length === 0}
-                title="수험번호로 학생 관리 프로그램에서 이름·학교·연락처를 불러옵니다"
+                href={`/api/admin/omr/exams/${exam.id}/scores`}
+                title="응시생 전원의 학생명·총점수·영역별 점수를 엑셀 한 장으로 내려받습니다"
               >
-                {directoryLoading ? "불러오는 중…" : "학생 정보 불러오기"}
-              </button>
-              <button
-                className="button primary"
-                onClick={generate}
-                disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
-                title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
-              >
-                {loading ? "채점·생성 중…" : "성적표 생성"}
-              </button>
-            </div>
-          ) : null}
+                성적 엑셀 받기
+              </a>
+            ) : null}
+          </div>
         </div>
 
         {reviewed.length === 0 ? (
