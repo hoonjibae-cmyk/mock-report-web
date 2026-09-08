@@ -31,7 +31,7 @@ export function welcomeText(staff: HrStaff, siteUrl: string): string {
     `${staff.name} 님, 목동유쌤영어학원 *성적표 프로그램(OMR 리포트)* 계정이 준비되었습니다.`,
     "",
     `• 주소 : ${siteUrl.replace(/\/$/, "")}`,
-    "• 로그인 : *슬랙으로 로그인* 을 누르시면 됩니다. 지금 보고 계신 이 슬랙 계정 그대로입니다.",,
+    "• 로그인 : *슬랙으로 로그인* 을 누르시면 됩니다. 지금 보고 계신 이 슬랙 계정 그대로입니다.",
     "• 별도 비밀번호는 없습니다.",
     `• 권한 : ${staff.department} · ${role}`,
     "",
