@@ -22,8 +22,8 @@ interface Setup {
   directoryError: string | null;
   siteUrl: string;
   siteUrlReady: boolean;
-  /** 시험 자체가 못 보내는 상태일 때의 이유(응시일 누락 등) */
-  examBlocker: string | null;
+  /** 막지는 않지만 알아야 하는 것(응시일 누락 등) */
+  examDateNotice: string | null;
 }
 
 interface SendOutcome {
@@ -209,7 +209,6 @@ export default function OmrSendPanel({
       "학생 관리 프로그램 연동(STUDENT_API_URL)이 없어 연락처를 가져올 수 없습니다.",
     );
   }
-  if (setup?.examBlocker) blockers.push(setup.examBlocker);
   if (setup?.directoryError) blockers.push(setup.directoryError);
 
   const sample = pickedRows[0]?.target ?? sendable[0]?.target ?? targets[0];
@@ -234,6 +233,13 @@ export default function OmrSendPanel({
 
       {error ? <p className="form-error block">{error}</p> : null}
       {message ? <p className="status-message">{message}</p> : null}
+
+      {setup?.examDateNotice ? (
+        <p className="send-date-notice" role="alert">
+          <strong>응시일 없이 나갑니다</strong>
+          {setup.examDateNotice}
+        </p>
+      ) : null}
 
       {blockers.length > 0 ? (
         <section className="panel send-blockers">

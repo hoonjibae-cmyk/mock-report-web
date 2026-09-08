@@ -8,7 +8,7 @@ import { listExamMessages, recordMessages, type RecipientType } from "@/lib/repo
 import {
   buildSendTargets,
   countTargets,
-  examSendBlocker,
+  examDateNotice,
   formatExamDate,
   resolveSelections,
   templateVariables,
@@ -98,8 +98,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         siteUrl,
         // 링크 주소가 localhost면 학부모가 열 수 없는 링크가 나간다.
         siteUrlReady: /^https:\/\//.test(siteUrl),
-        // 응시일이 비면 알림톡 변수가 빈 칸으로 나간다 — 보내기 전에 막는다
-        examBlocker: examSendBlocker(exam.examDate),
+        // 응시일이 비면 알림톡의 '응시일' 칸이 빈 채로 나간다. 막지는 않고
+        // 화면에 알리기만 한다 — 보낼지는 사람이 정한다.
+        examDateNotice: examDateNotice(exam.examDate),
       },
     });
   } catch (error) {
@@ -133,9 +134,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         { status: 400 },
       );
     }
-
-    const examBlocked = examSendBlocker(exam.examDate);
-    if (examBlocked) return NextResponse.json({ error: examBlocked }, { status: 400 });
 
     const body = await request.json().catch(() => ({}));
     const raw: unknown[] = Array.isArray(body.targets) ? body.targets : [];

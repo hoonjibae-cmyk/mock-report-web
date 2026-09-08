@@ -2193,3 +2193,17 @@ body.report-layout-a4 .a4-report-root { display: block; }
   color: var(--navy-deep);
   font-size: 13.5px;
 }
+
+/* 응시일 없이 나갈 때 — 막지 않고 알리기만 한다 */
+.send-date-notice {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid #f0c36d;
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: #fdf6e3;
+  color: #6b4c14;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.send-date-notice strong { display: block; margin-bottom: 3px; color: #8a5a00; }
