@@ -13,7 +13,7 @@ import test from "node:test";
 import {
   buildSendTargets,
   countTargets,
-  examSendBlocker,
+  examDateNotice,
   formatExamDate,
   resolveSelections,
   templateVariables,
@@ -247,16 +247,19 @@ test("응시일은 학부모가 읽을 우리말 표기로 나간다", () => {
   assert.equal(formatExamDate("2026-12-31T00:00:00.000Z"), "2026년 12월 31일");
 });
 
-test("응시일이 없으면 시험 전체를 막는다", () => {
-  // 빈 변수는 대행사에서 거부될 수 있고, 통과하더라도 '응시일 :' 뒤가 빈
-  // 메시지가 60명에게 나간다. 시험 정보에서 한 칸만 채우면 되는 일이다.
+test("응시일이 없어도 막지 않고 알리기만 한다", () => {
+  // 예전에는 아예 발송을 막았다. 응시일이 없어도 성적표는 보내야 할 때가
+  // 있어, 보낼지는 사람이 정하게 바꿨다.
   assert.equal(formatExamDate(null), "");
   assert.equal(formatExamDate(""), "");
   assert.equal(formatExamDate("미정"), "");
 
-  assert.equal(examSendBlocker("2026-08-29"), null, "응시일이 있으면 막지 않는다");
+  assert.equal(examDateNotice("2026-08-29"), null, "응시일이 있으면 알릴 것이 없다");
   for (const empty of [null, undefined, "", "미정"]) {
-    assert.match(examSendBlocker(empty) ?? "", /응시일/, `${String(empty)} 는 막아야 한다`);
+    const notice = examDateNotice(empty) ?? "";
+    assert.match(notice, /응시일/, `${String(empty)} 는 알려야 한다`);
+    // 무슨 일이 벌어지는지까지 말해야 사람이 판단할 수 있다.
+    assert.match(notice, /거부/, "대행사에서 거부될 수 있다는 것을 밝혀야 한다");
   }
 });
 

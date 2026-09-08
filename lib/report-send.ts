@@ -182,11 +182,24 @@ export function templateVariables(args: {
  * 거부될 수 있고, 통과하더라도 "응시일 :" 뒤가 비어 있는 메시지가 60명에게
  * 나간다. 시험 정보에서 한 칸만 채우면 되는 일이므로 보내기 전에 막는다.
  */
-export function examSendBlocker(examDate: string | null | undefined): string | null {
-  if (!formatExamDate(examDate)) {
-    return "시험 응시일이 비어 있습니다. 알림톡에 응시일이 들어가므로, 시험 정보에서 응시일을 먼저 입력해 주세요.";
-  }
-  return null;
+/**
+ * 응시일이 비었을 때 화면에 띄울 알림. 막지는 않는다.
+ *
+ * 알림톡 문구에 '응시일 :' 칸이 있어 비면 그 뒤가 빈 채로 나간다. 예전에는
+ * 아예 발송을 막았는데, 지금은 **보내는 쪽이 판단한다** — 응시일이 없어도
+ * 성적표는 보내야 할 때가 있다.
+ *
+ * 다만 알림톡 템플릿의 변수는 대행사에서 빈 값을 거부할 수 있다. 거부되면
+ * 그 사유가 발송 결과에 건별로 남으므로, 화면에서 미리 막는 대신 여기서
+ * 그 가능성을 알려 준다.
+ */
+export function examDateNotice(examDate: string | null | undefined): string | null {
+  if (formatExamDate(examDate)) return null;
+  return (
+    "시험 응시일이 비어 있습니다. 알림톡의 '응시일' 칸이 빈 채로 나가고, " +
+    "대행사에서 거부될 수도 있습니다(거부되면 발송 결과에 사유가 남습니다). " +
+    "그대로 보내시려면 진행하시고, 채우시려면 시험 정보에서 응시일을 넣어 주세요."
+  );
 }
 
 /** 화면에서 고른 대상 하나 */
