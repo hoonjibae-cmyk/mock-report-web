@@ -2059,3 +2059,127 @@ body.report-layout-a4 .a4-report-root { display: block; }
   font-weight: 700; font-size: 13px;
 }
 .alimtalk-preview code { font-size: 11.5px; word-break: break-all; }
+
+/* --- 선생님용 사용설명서 (/guide) --- */
+.guide-shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 34px 20px 60px;
+}
+.guide-head { margin-bottom: 26px; }
+.guide-lead {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.85;
+}
+.guide-lead b { color: var(--navy-deep); }
+
+.guide-first {
+  margin-bottom: 26px;
+  padding: 16px 18px;
+  border: 1px solid #dce4ee;
+  border-left: 4px solid var(--navy);
+  border-radius: 13px;
+  background: #f7f9fd;
+}
+.guide-first h2 { margin: 0 0 6px; font-size: 15px; color: var(--navy-deep); }
+.guide-first p { margin: 0; font-size: 14px; line-height: 1.85; }
+.guide-first b { color: var(--navy-deep); }
+
+.guide-steps { list-style: none; margin: 0; padding: 0; }
+.guide-steps > li {
+  padding: 20px 0;
+  border-top: 1px solid #e9edf4;
+}
+.guide-steps > li:first-child { border-top: 0; }
+.guide-step-head { display: flex; align-items: flex-start; gap: 13px; }
+.guide-no {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 14px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.guide-step-head h3 { margin: 3px 0 2px; font-size: 17px; color: var(--navy-deep); }
+.guide-where { color: var(--muted); font-size: 12.5px; font-weight: 700; }
+
+.guide-body { margin: 12px 0 0 43px; padding-left: 18px; }
+.guide-body li { font-size: 14.2px; line-height: 1.9; }
+
+.guide-tip {
+  margin: 12px 0 0 43px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: #fdf6e3;
+  color: #6b4c14;
+  font-size: 13.2px;
+  line-height: 1.8;
+}
+.guide-tip b { display: block; margin-bottom: 2px; color: #8a5a00; }
+
+.guide-trouble {
+  margin-top: 32px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.guide-trouble h2 { margin: 0 0 6px; font-size: 16px; color: var(--navy-deep); }
+.guide-trouble dl { margin: 0; }
+.guide-trouble dl > div { padding: 12px 0; border-top: 1px solid #eef1f6; }
+.guide-trouble dl > div:first-of-type { border-top: 0; }
+.guide-trouble dt { font-size: 14px; font-weight: 750; color: var(--navy-deep); }
+.guide-trouble dd { margin: 5px 0 0; font-size: 13.6px; line-height: 1.85; color: var(--muted); }
+
+.guide-foot {
+  margin-top: 26px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.guide-foot b { color: var(--navy-deep); }
+
+@media (max-width: 560px) {
+  .guide-body, .guide-tip { margin-left: 0; }
+  .guide-body { padding-left: 20px; }
+}
+
+/* 인사 연동 — 미리보기 */
+.hr-sync-buttons { display: flex; gap: 8px; flex: 0 0 auto; }
+.hr-sync-armed-note {
+  margin: 10px 0 0;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: #fdf6e3;
+  color: #6b4c14;
+  font-size: 12.6px;
+  line-height: 1.8;
+}
+.hr-sync-armed-note b { color: #8a5a00; }
+.hr-preview {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.hr-preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 4px;
+}
+.hr-preview-head strong { font-size: 13.5px; color: var(--navy-deep); }
+.hr-preview .subtle { margin: 0 0 4px; font-size: 12.3px; }
+.hr-preview h4 {
+  margin: 14px 0 5px;
+  font-size: 13px;
+  color: var(--navy-deep);
+}
+.hr-preview h4.danger-title { color: var(--danger); }
+.hr-preview-list {
+  margin: 0; padding-left: 18px;
+  font-size: 12.8px; line-height: 1.85; color: var(--ink);
+}
+.hr-preview-list b { color: var(--navy-deep); }

@@ -34,9 +34,11 @@ export function welcomeText(staff: HrStaff, siteUrl: string): string {
     "• 로그인 : *슬랙으로 로그인* 을 누르시면 됩니다. 지금 보고 계신 이 슬랙 계정 그대로입니다.",
     "• 별도 비밀번호는 없습니다.",
     `• 권한 : ${staff.department} · ${role}`,
+    `• 사용설명서 : ${siteUrl.replace(/\/$/, "")}/guide`,
     "",
-    "시험을 만들고 OMR 답안지를 뽑는 것부터 성적표 발송까지 이 주소에서 합니다.",
-    "로그인이 안 되거나 권한이 맞지 않으면 경영지원에 알려 주세요.",
+    "OMR 답안지 생성, 자동 채점 및 성적표 발송까지 이 주소에서 합니다.",
+    "처음이시면 사용설명서를 먼저 보시면 순서대로 따라가실 수 있습니다.",
+    "로그인이 안 되거나 권한이 맞지 않으면 운영진에 알려 주세요.",
   ].join("\n");
 }
 
@@ -147,6 +149,53 @@ async function sendNotices(staffList: readonly HrStaff[]): Promise<{ notified: n
   }
 
   return { notified, problems };
+}
+
+export interface SyncPreview {
+  /** 새로 만들 계정 */
+  create: Array<{ name: string; department: string; email: string; role: "admin" | "user"; slackLinked: boolean }>;
+  /** 고칠 계정 — 무엇이 달라지는지까지 */
+  update: Array<{ name: string; changes: string[] }>;
+  /** 끌 계정 */
+  deactivate: Array<{ displayName: string; username: string }>;
+  /** 사람이 손봐야 하는 것 */
+  problems: string[];
+  /** 지금 슬랙 안내가 나갈 사람 수 */
+  willNotify: number;
+  /** 슬랙 미가입이라 다음으로 미룰 사람 수 */
+  notifyPending: number;
+  departments: string[];
+}
+
+/**
+ * 무엇이 바뀔지만 보여 준다. **아무것도 고치지 않고 아무에게도 보내지 않는다.**
+ *
+ * 첫 실행은 대상 부서 전원에게 DM을 보내므로 되돌릴 수 없다. 누르기 전에
+ * 명단을 눈으로 볼 수 있어야 한다.
+ */
+export async function previewHrSync(): Promise<SyncPreview> {
+  const directory = await fetchHrStaff();
+  const accounts = await loadAccounts();
+  const plan = planSync(directory.items, accounts);
+
+  return {
+    create: plan.create.map((item) => ({
+      name: item.staff.name,
+      department: item.staff.department,
+      email: item.staff.email,
+      role: item.staff.role,
+      slackLinked: item.staff.slackLinked,
+    })),
+    update: plan.update.map((item) => ({ name: item.staff.name, changes: item.changes })),
+    deactivate: plan.deactivate.map((item) => ({
+      displayName: item.displayName,
+      username: item.username,
+    })),
+    problems: plan.skipped.map((item) => item.reason),
+    willNotify: plan.notify.length,
+    notifyPending: directory.items.filter((staff) => !staff.slackLinked).length,
+    departments: directory.departments,
+  };
 }
 
 /** 인사 명부를 읽어 계정을 맞추고, 아직 안내 못 받은 사람에게 슬랙을 보낸다 */
