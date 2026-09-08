@@ -1371,6 +1371,24 @@ body.report-layout-a4 .a4-report-root { display: block; }
   font-size: 12.5px;
   line-height: 1.75;
 }
+/* 스캔하러 가기 전에 정해야 하는 값 — 나머지 안내에 묻히면 못 읽는다 */
+.dropzone-notes li.scan-spec {
+  margin: 0 0 7px -18px;
+  padding: 9px 12px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--navy);
+  border-radius: 9px;
+  background: #f6f8fc;
+  color: var(--ink);
+}
+.dropzone-notes li.scan-spec strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--navy-deep);
+  font-size: 13px;
+}
+.dropzone-notes li.scan-spec b { color: var(--navy-deep); }
 
 .picked-files {
   margin-top: 14px;
