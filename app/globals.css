@@ -2207,3 +2207,64 @@ body.report-layout-a4 .a4-report-root { display: block; }
   line-height: 1.75;
 }
 .send-date-notice strong { display: block; margin-bottom: 3px; color: #8a5a00; }
+
+/* --- 웹 리포트: 시험별로 접었다 펴는 목록 --- */
+.report-group + .report-group { border-top: 1px solid #e9edf4; }
+.report-group .group-row > td {
+  padding: 0;
+  background: #f7f9fd;
+}
+.report-group.open .group-row > td { background: #eef3fb; }
+.group-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+}
+.group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.group-caret {
+  flex: 0 0 auto;
+  width: 0; height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--navy);
+  transition: transform .12s;
+}
+.report-group.open .group-caret { transform: rotate(90deg); }
+.group-name { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.group-name strong { color: var(--navy-deep); font-size: 14.5px; }
+.group-name em { font-style: normal; color: var(--muted); font-size: 12.5px; }
+.group-toggle:hover .group-name strong { text-decoration: underline; }
+
+.group-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  font-size: 12.3px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.group-meta b { color: var(--navy-deep); font-size: 13.5px; }
+.group-meta .muted { color: var(--muted); }
+.group-meta .inline-delete { margin: 0; }
+
+/* 펼친 학생 줄은 시험 줄 아래로 한 칸 들어가 보이게 */
+.report-group .student-row > td:first-child { box-shadow: inset 3px 0 0 var(--navy); }
+
+@media (max-width: 700px) {
+  .group-line { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .group-meta { flex-wrap: wrap; gap: 9px; }
+}

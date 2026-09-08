@@ -112,6 +112,27 @@ export default function ReportsManager({
     }));
   }, [reports]);
 
+  /**
+   * 시험 묶음 하나 — 화면의 접히는 줄 하나.
+   *
+   * 학생을 처음부터 쭉 늘어놓으면 시험이 몇 번 쌓이는 순간 스크롤만 길어지고
+   * "이번 월말평가 누가 빠졌지"를 볼 수 없다. 시험을 먼저 보여주고 그 안에서
+   * 학생을 편다.
+   */
+  interface ReportGroup {
+    label: string;
+    title: string;
+    examLabel: string;
+    /** 같은 시험을 여러 번 올렸으면 묶음이 여럿이다 */
+    batchIds: string[];
+    authors: string[];
+    latestAt: string;
+    active: number;
+    inactive: number;
+    views: number;
+    rows: AdminReport[];
+  }
+
   const visibleReports = useMemo(() => {
     const query = search.trim().toLowerCase();
     const rows = typeReports.filter((report) => {
@@ -165,6 +186,86 @@ export default function ReportsManager({
       dateFrom ||
       dateTo,
   );
+
+  const groups = useMemo<ReportGroup[]>(() => {
+    const map = new Map<string, ReportGroup>();
+    for (const report of visibleReports) {
+      const label = batchLabel(report);
+      let group = map.get(label);
+      if (!group) {
+        group = {
+          label,
+          title: report.batchTitle || "제목 없음",
+          examLabel: report.examLabel || "",
+          batchIds: [],
+          authors: [],
+          latestAt: report.createdAt,
+          active: 0,
+          inactive: 0,
+          views: 0,
+          rows: [],
+        };
+        map.set(label, group);
+      }
+      if (!group.batchIds.includes(report.batchId)) group.batchIds.push(report.batchId);
+      const author = authorOf(report);
+      if (!group.authors.includes(author)) group.authors.push(author);
+      if (group.latestAt < report.createdAt) group.latestAt = report.createdAt;
+      if (report.active) group.active += 1;
+      else group.inactive += 1;
+      group.views += report.viewCount;
+      group.rows.push(report);
+    }
+    // 시험은 최근에 만든 것부터. 학생 정렬은 visibleReports가 이미 해 두었다.
+    return [...map.values()].sort((a, b) =>
+      sort === "oldest" ? a.latestAt.localeCompare(b.latestAt) : b.latestAt.localeCompare(a.latestAt),
+    );
+  }, [visibleReports, sort]);
+
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  /**
+   * 찾는 중이거나 시험이 하나뿐이면 자동으로 편다.
+   *
+   * 검색어를 넣었는데 접힌 줄만 보이면 "안 나온다"고 읽힌다. 사람이 접어 둔
+   * 것과 싸우지 않도록 상태를 고치지 않고 그릴 때만 덮어쓴다.
+   */
+  const forceOpen = Boolean(search.trim()) || groups.length === 1;
+  const isOpen = (label: string) => forceOpen || openGroups.has(label);
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  /** 한 시험의 묶음을 통째로 지운다(같은 시험을 여러 번 올렸으면 여럿) */
+  async function deleteGroup(group: ReportGroup) {
+    if (!permissions.deleteReports) return setError("성적표 삭제 권한이 없습니다.");
+    const confirmed = window.confirm(
+      `‘${group.label}’의 성적표 ${group.rows.length}건을 모두 삭제할까요?\n` +
+        "학생 명단과 모든 기존 링크가 함께 삭제되며 복구할 수 없습니다.",
+    );
+    if (!confirmed) return;
+
+    setError("");
+    let deleted = 0;
+    for (const batchId of group.batchIds) {
+      try {
+        const response = await fetch(`/api/admin/batches/${batchId}`, { method: "DELETE" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "묶음 삭제에 실패했습니다.");
+        deleted += data.deletedCount ?? 0;
+        setReports((current) => current.filter((report) => report.batchId !== batchId));
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "묶음 삭제에 실패했습니다.");
+        return;
+      }
+    }
+    setStatus(`‘${group.label}’의 성적표 ${deleted || group.rows.length}건을 삭제했습니다.`);
+  }
 
   const filterGroups: FilterGroup[] = [
     // 좌측 메뉴에서 이미 유형을 골랐다면 유형 필터는 숨긴다(중복)
@@ -269,25 +370,6 @@ export default function ReportsManager({
     }
   }
 
-  async function deleteBatch(batchId: string, batchTitle: string) {
-    if (!permissions.deleteReports) return setError("성적표 삭제 권한이 없습니다.");
-    const count = reports.filter((report) => report.batchId === batchId).length;
-    const confirmed = window.confirm(
-      `‘${batchTitle}’ 묶음의 성적표 ${count}건을 모두 삭제할까요?\n학생 명단과 모든 기존 링크가 함께 삭제되며 복구할 수 없습니다.`,
-    );
-    if (!confirmed) return;
-
-    setError("");
-    try {
-      const response = await fetch(`/api/admin/batches/${batchId}`, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "묶음 삭제에 실패했습니다.");
-      setReports((current) => current.filter((report) => report.batchId !== batchId));
-      setStatus(`‘${batchTitle}’ 묶음의 성적표 ${data.deletedCount ?? count}건을 삭제했습니다.`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "묶음 삭제에 실패했습니다.");
-    }
-  }
 
   async function deleteAllReports() {
     if (!permissions.deleteReports || !reports.length) return;
@@ -365,25 +447,73 @@ export default function ReportsManager({
           <div className="table-scroll">
             <table className="admin-table">
               <thead><tr><th>학생</th><th>리포트 묶음</th><th>생성자</th><th>상태</th><th>조회</th><th>링크 관리</th></tr></thead>
-              <tbody>
-                {visibleReports.map((report) => (
-                  <tr key={report.id}>
-                    <td><strong>{report.studentName}</strong><span>{report.school || "학교 미입력"} · {formatMiddleGrade(report.grade)}</span></td>
-                    <td><strong>{report.batchTitle}</strong><span>{report.examLabel}</span>{permissions.deleteReports ? <button className="inline-delete" onClick={() => deleteBatch(report.batchId, report.batchTitle)}>이 묶음 삭제</button> : null}</td>
-                    <td><strong>{report.createdByName || "관리자"}</strong><span>{new Date(report.createdAt).toLocaleDateString("ko-KR")}</span></td>
-                    <td><span className={`status-chip ${report.active ? "active" : "inactive"}`}>{report.active ? "활성" : "중지"}</span><span>{report.pinRequired ? "PIN 보호" : "PIN 없음"}</span></td>
-                    <td><strong>{report.viewCount}회</strong><span>{report.lastViewedAt ? new Date(report.lastViewedAt).toLocaleString("ko-KR") : "아직 열람 전"}</span></td>
-                    <td><div className="row-actions">
-                      <a className="button tiny ghost" href={report.url} target="_blank" rel="noreferrer">웹</a>
-                      <a className="button tiny ghost" href={`${report.url}?layout=a4`} target="_blank" rel="noreferrer">A4</a>
-                      <button className="button tiny secondary" onClick={() => copyLink(report.url, report.id)}>{copied === report.id ? "복사됨" : "복사"}</button>
-                      {permissions.manageReports ? <><button className="button tiny ghost" onClick={() => changeReport(report, report.active ? "deactivate" : "activate")}>{report.active ? "중지" : "활성화"}</button><button className="button tiny ghost" onClick={() => changeReport(report, "regenerate")}>새 링크</button></> : null}
-                      {permissions.deleteReports ? <button className="button tiny danger" onClick={() => deleteReport(report)}>삭제</button> : null}
-                    </div></td>
-                  </tr>
-                ))}
-                {!visibleReports.length ? <tr><td colSpan={6} className="empty-cell">{filtering ? "조건에 맞는 성적표가 없습니다." : "표시할 성적표가 없습니다."}</td></tr> : null}
-              </tbody>
+              {groups.map((group) => {
+                const open = isOpen(group.label);
+                return (
+                  <tbody key={group.label} className={`report-group${open ? " open" : ""}`}>
+                    <tr className="group-row">
+                      <td colSpan={6}>
+                        <div className="group-line">
+                          <button
+                            type="button"
+                            className="group-toggle"
+                            aria-expanded={open}
+                            onClick={() => toggleGroup(group.label)}
+                          >
+                            <span className="group-caret" aria-hidden="true" />
+                            <span className="group-name">
+                              <strong>{group.title}</strong>
+                              {group.examLabel ? <em>{group.examLabel}</em> : null}
+                            </span>
+                          </button>
+                          <div className="group-meta">
+                            <span>
+                              <b>{group.rows.length}</b>명
+                            </span>
+                            {group.inactive > 0 ? (
+                              <span className="muted">중지 {group.inactive}</span>
+                            ) : null}
+                            <span className="muted">조회 {group.views}회</span>
+                            <span className="muted">{group.authors.join(", ")}</span>
+                            <span className="muted">
+                              {new Date(group.latestAt).toLocaleDateString("ko-KR")}
+                            </span>
+                            {permissions.deleteReports ? (
+                              <button className="inline-delete" onClick={() => deleteGroup(group)}>
+                                이 시험 삭제
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {open
+                      ? group.rows.map((report) => (
+                          <tr key={report.id} className="student-row">
+                            <td><strong>{report.studentName}</strong><span>{report.school || "학교 미입력"} · {formatMiddleGrade(report.grade)}</span></td>
+                            <td><strong>{report.batchTitle}</strong><span>{report.examLabel}</span></td>
+                            <td><strong>{report.createdByName || "관리자"}</strong><span>{new Date(report.createdAt).toLocaleDateString("ko-KR")}</span></td>
+                            <td><span className={`status-chip ${report.active ? "active" : "inactive"}`}>{report.active ? "활성" : "중지"}</span><span>{report.pinRequired ? "PIN 보호" : "PIN 없음"}</span></td>
+                            <td><strong>{report.viewCount}회</strong><span>{report.lastViewedAt ? new Date(report.lastViewedAt).toLocaleString("ko-KR") : "아직 열람 전"}</span></td>
+                            <td><div className="row-actions">
+                              <a className="button tiny ghost" href={report.url} target="_blank" rel="noreferrer">웹</a>
+                              <a className="button tiny ghost" href={`${report.url}?layout=a4`} target="_blank" rel="noreferrer">A4</a>
+                              <button className="button tiny secondary" onClick={() => copyLink(report.url, report.id)}>{copied === report.id ? "복사됨" : "복사"}</button>
+                              {permissions.manageReports ? <><button className="button tiny ghost" onClick={() => changeReport(report, report.active ? "deactivate" : "activate")}>{report.active ? "중지" : "활성화"}</button><button className="button tiny ghost" onClick={() => changeReport(report, "regenerate")}>새 링크</button></> : null}
+                              {permissions.deleteReports ? <button className="button tiny danger" onClick={() => deleteReport(report)}>삭제</button> : null}
+                            </div></td>
+                          </tr>
+                        ))
+                      : null}
+                  </tbody>
+                );
+              })}
+              {!groups.length ? (
+                <tbody>
+                  <tr><td colSpan={6} className="empty-cell">{filtering ? "조건에 맞는 성적표가 없습니다." : "표시할 성적표가 없습니다."}</td></tr>
+                </tbody>
+              ) : null}
             </table>
           </div>
         </section>
