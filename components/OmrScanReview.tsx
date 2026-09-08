@@ -535,10 +535,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
           <ul className="dropzone-notes">
             {/* 스캔하러 가기 전에 정해야 하는 값이라 맨 앞에 둔다 */}
             <li className="scan-spec">
-              <strong>권장 스캔 설정 — 해상도 200dpi · PDF는 {PDF_PAGE_LIMIT}쪽 이하</strong>
-              300dpi로 떠도 판독 정확도는 같은데 <b>시간은 두 배</b>가 됩니다(30명 기준 약 2분 →
-              4분). 여러 장이 한 PDF에 들어 있으면 나눠 보낼 수 없어 판독 도중 끊길 수 있습니다
-              (낱장 이미지는 쪽수 제한 없음).
+              <strong>
+                권장 스캔 설정 — <b>흑백</b> · 해상도 <b>200dpi</b> · PDF는 {PDF_PAGE_LIMIT}쪽 이하
+              </strong>
+              판독기는 동그라미가 칠해졌는지만 봅니다. 컬러로 뜨면 파일만 서너 배 커지고
+              판독은 더 느려집니다. 300dpi도 정확도는 같은데 <b>시간은 두 배</b>가 됩니다(30명
+              기준 약 2분 → 4분). 여러 장이 한 PDF에 들어 있으면 나눠 보낼 수 없어 판독 도중
+              끊길 수 있습니다(낱장 이미지는 쪽수 제한 없음).
             </li>
             <li>여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동 분리됩니다.</li>
             <li>큰 파일은 보관함으로 직접 올라가므로 용량 제한 없이 처리됩니다.</li>

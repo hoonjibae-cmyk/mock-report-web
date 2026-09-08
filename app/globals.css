@@ -2183,3 +2183,13 @@ body.report-layout-a4 .a4-report-root { display: block; }
   font-size: 12.8px; line-height: 1.85; color: var(--ink);
 }
 .hr-preview-list b { color: var(--navy-deep); }
+/* 값이 정해져 있어 고를 수 없는 칸 — 입력칸과 같은 자리에 같은 크기로 앉힌다 */
+.fixed-field strong {
+  display: block;
+  padding: 9px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: #f6f8fc;
+  color: var(--navy-deep);
+  font-size: 13.5px;
+}

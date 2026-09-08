@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   EXAM_TYPE_LABELS,
   MOCK_SUBJECTS,
+  FIXED_ID_DIGITS,
   USER_QUESTION_COUNT,
   type ExamType,
   type MockSubject,
@@ -66,7 +67,8 @@ export default function OmrExamForm() {
       examDate: String(fd.get("examDate") || ""),
       numQuestions: Number(fd.get("numQuestions")),
       numChoices: Number(fd.get("numChoices")),
-      idDigits: Number(fd.get("idDigits")),
+      // 학원 전체가 출결번호 5자리를 쓴다 — 화면에서 고르지 않는다.
+      idDigits: FIXED_ID_DIGITS,
       omrStyle: String(fd.get("omrStyle") || "exam"),
       perColumn: Number(fd.get("perColumn")) || undefined,
       essayCount: Number(fd.get("essayCount")) || 0,
@@ -174,10 +176,14 @@ export default function OmrExamForm() {
         </div>
 
         <div className="form-row">
-          <label>
-            {/* 답안지에 찍히는 칸 수 = 쓸 수 있는 최대 자리수. 더 짧게 써도 된다. */}
-            <span>수험번호 최대 자리수</span>
-            <input name="idDigits" type="number" min={3} max={9} defaultValue={5} />
+          {/*
+            수험번호는 학생 출결번호이고 학원 전체가 5자리로 쓴다. 시험마다
+            다르게 정할 수 있게 두면, 같은 학생의 번호가 시험마다 다른 자리수로
+            찍혀 성적표를 학생과 이어 붙이지 못한다. 그래서 고정한다.
+          */}
+          <label className="fixed-field">
+            <span>수험번호 자리수</span>
+            <strong>5자리 (학생 출결번호)</strong>
           </label>
           <label>
             <span>문항 열당 개수</span>
