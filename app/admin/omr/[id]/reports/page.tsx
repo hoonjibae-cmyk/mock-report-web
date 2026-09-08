@@ -35,6 +35,7 @@ export default async function OmrReportsPage(context: { params: Promise<{ id: st
       initialScans={scans}
       setupError={setupError}
       canCreate={hasPermission(user, "createReports")}
+      canExport={hasPermission(user, "exportReports")}
     />
   );
 }
