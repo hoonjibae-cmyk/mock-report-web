@@ -131,7 +131,7 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
       <div className="admin-shell">
         <header className="admin-header">
           <div className="brand-lockup">
-            <AcademyLogo size="large" />
+            <AcademyLogo size="large" href="/admin" />
             <div>
               <strong>주관식 채점</strong>
               <span>목동유쌤영어학원</span>
@@ -160,7 +160,7 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
       {/* 이 화면은 스캔 검수와 성적표 사이에 있다. 양쪽으로 오갈 길을 둔다. */}
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo size="large" />
+          <AcademyLogo size="large" href="/admin" />
           <div>
             <strong>주관식 채점</strong>
             <span>

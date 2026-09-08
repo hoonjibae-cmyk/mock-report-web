@@ -80,7 +80,7 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
     <>
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo />
+          <AcademyLogo href="/admin" />
           <div>
             <strong>OMR 리포트</strong>
             <span>

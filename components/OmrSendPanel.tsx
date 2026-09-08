@@ -179,7 +179,7 @@ export default function OmrSendPanel({
       <div className="admin-shell">
         <header className="admin-header">
           <div className="brand-lockup">
-            <AcademyLogo size="large" />
+            <AcademyLogo size="large" href="/admin" />
             <div>
               <strong>성적표 발송</strong>
               <span>목동유쌤영어학원</span>
@@ -218,7 +218,7 @@ export default function OmrSendPanel({
     <div className="admin-shell">
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo size="large" />
+          <AcademyLogo size="large" href="/admin" />
           <div>
             <strong>성적표 발송</strong>
             <span>

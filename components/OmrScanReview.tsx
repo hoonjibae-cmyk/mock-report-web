@@ -425,7 +425,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
       <div className="admin-shell">
         <header className="admin-header">
           <div className="brand-lockup">
-            <AcademyLogo size="large" />
+            <AcademyLogo size="large" href="/admin" />
             <div>
               <strong>스캔 판독 · 검수</strong>
               <span>목동유쌤영어학원</span>
@@ -442,7 +442,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     <div className="admin-shell">
       <header className="admin-header">
         <div className="brand-lockup">
-          <AcademyLogo size="large" />
+          <AcademyLogo size="large" href="/admin" />
           <div>
             <strong>스캔 판독 · 검수</strong>
             <span>
