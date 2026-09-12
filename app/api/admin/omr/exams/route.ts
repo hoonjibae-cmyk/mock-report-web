@@ -53,6 +53,10 @@ export async function POST(request: Request) {
     if (body.perColumn != null && Number.isInteger(Number(body.perColumn))) {
       omrConfig.per_column = Number(body.perColumn);
     }
+    // 종이에 찍히는 제목. 비워 보내면 저장하지 않고 답안지에 시험 제목이 찍힌다.
+    if (typeof body.sheetTitle === "string" && body.sheetTitle.trim()) {
+      omrConfig.sheet_title = body.sheetTitle.trim().slice(0, 60);
+    }
     if (typeof body.period === "string" && body.period.trim()) omrConfig.period = body.period.trim();
     if (typeof body.subjectLabel === "string" && body.subjectLabel.trim()) {
       omrConfig.subject_label = body.subjectLabel.trim();

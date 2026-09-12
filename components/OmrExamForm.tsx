@@ -8,6 +8,8 @@ import {
   MOCK_SUBJECTS,
   FIXED_ID_DIGITS,
   USER_QUESTION_COUNT,
+  defaultPerColumn,
+  defaultSheetTitle,
   type ExamType,
   type MockSubject,
 } from "@/lib/omr-types";
@@ -71,6 +73,7 @@ export default function OmrExamForm() {
       idDigits: FIXED_ID_DIGITS,
       omrStyle: String(fd.get("omrStyle") || "exam"),
       perColumn: Number(fd.get("perColumn")) || undefined,
+      sheetTitle: String(fd.get("sheetTitle") || "").trim(),
       essayCount: Number(fd.get("essayCount")) || 0,
       period: String(fd.get("period") || ""),
       subjectLabel: String(fd.get("subjectLabel") || ""),
@@ -98,6 +101,15 @@ export default function OmrExamForm() {
     ? { q: subjectDefault.questions, subjectLabel: subjectDefault.subjectLabel, period: subjectDefault.period }
     : TYPE_DEFAULTS[type];
   const fixedCount = !USER_QUESTION_COUNT[type];
+  const sheetTitleDefault = defaultSheetTitle(type);
+  // '15 · 15 · 15' 처럼 열이 어떻게 나뉘는지 그대로 보여 준다 — 숫자 하나만
+  // 적혀 있으면 마지막 열이 휑해지는지 아닌지 알 수 없다.
+  const columnSplit = (() => {
+    const per = defaultPerColumn(type);
+    const sizes: number[] = [];
+    for (let left = numQuestions; left > 0; left -= per) sizes.push(Math.min(per, left));
+    return sizes.join(" · ") + `  (${sizes.length}열)`;
+  })();
 
   return (
     <div className="admin-shell">
@@ -154,6 +166,29 @@ export default function OmrExamForm() {
             required
             placeholder={isMock ? `예: 3월 전국 모의고사 · ${subjectDefault.label}` : "예: 4월 월말평가 · 영어"}
           />
+          <small className="hint">목록과 성적표에 쓰는 이름입니다. 회차를 알아볼 수 있게 적어 주세요.</small>
+        </label>
+
+        {/*
+          답안지 제목을 시험 제목과 나눠 둔 이유 — 토요모의고사처럼 미리 뽑아
+          두고 몇 주에 걸쳐 쓰는 답안지가 있기 때문이다. 목록에서 찾으려면 시험
+          제목에 '9월 11일'을 적어야 하지만, 그 날짜가 종이에 찍히면 다음 주에
+          그 종이를 못 쓴다.
+        */}
+        <label>
+          <span>답안지 제목</span>
+          <input
+            // 유형을 바꾸면 그 유형의 기본값으로 다시 채워지도록 key를 묶는다
+            key={`sheet-title-${type}`}
+            name="sheetTitle"
+            defaultValue={sheetTitleDefault}
+            placeholder="비우면 시험 제목이 그대로 찍힙니다"
+          />
+          <small className="hint">
+            {sheetTitleDefault
+              ? "답안지를 미리 넉넉히 뽑아 두고 여러 회차에 나눠 쓸 수 있도록, 날짜가 없는 이름을 기본값으로 넣었습니다. 바꾸셔도 됩니다."
+              : "종이에 찍히는 제목입니다. 비워 두면 위의 시험 제목을 그대로 씁니다."}
+          </small>
         </label>
 
         <div className="form-row">
@@ -187,7 +222,19 @@ export default function OmrExamForm() {
           </label>
           <label>
             <span>문항 열당 개수</span>
-            <input name="perColumn" type="number" min={5} max={30} defaultValue={20} />
+            <input
+              // 유형을 바꾸면 그 유형의 기본값으로 다시 채워진다
+              key={`per-column-${type}`}
+              name="perColumn"
+              type="number"
+              min={5}
+              max={30}
+              defaultValue={defaultPerColumn(type)}
+            />
+            <small className="hint">
+              한 열에 담는 문항 수입니다. {numQuestions}문항을 {defaultPerColumn(type)}개씩 나누면{" "}
+              {columnSplit}이 됩니다.
+            </small>
           </label>
         </div>
 

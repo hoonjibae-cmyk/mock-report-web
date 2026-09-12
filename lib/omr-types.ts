@@ -14,6 +14,41 @@ export const EXAM_TYPE_LABELS: Record<ExamType, string> = {
   inclass: "인클래스 테스트",
 };
 
+/**
+ * 시험 유형별 답안지 기본값 — 화면에서 바꿀 수 있는 '처음 값'이다.
+ *
+ * 토요모의고사를 미리 뽑아 두고 쓰기 위한 값들
+ * ------------------------------------------
+ * 토요모의고사는 매주 같은 배치로 나가므로, 답안지를 넉넉히 인쇄해 두고 몇
+ * 주에 걸쳐 나눠 쓴다. 그러려면 두 가지가 필요하다.
+ *
+ *   sheetTitle  답안지에 찍히는 제목. 시험 제목('9월 11일 토모')을 그대로
+ *               찍으면 다음 주에 그 종이를 못 쓴다 — 판독은 되지만 학생
+ *               손에 지난주 날짜가 적힌 종이가 간다. 그래서 주차를 타지
+ *               않는 이름을 기본값으로 둔다.
+ *   perColumn   한 열에 담는 문항 수. 45문항을 20씩 끊으면 20·20·5로
+ *               마지막 열이 휑하다. 15씩이면 15·15·15로 세 열이 고르다.
+ *
+ * 판독 호환은 **배치 지문**(문항 수·보기 수·수험번호 자리수·열당 문항 수·
+ * 스타일·서술형 수)으로만 판단하고 제목은 보지 않는다. 그래서 제목을 바꿔도
+ * 미리 뽑아 둔 답안지는 그대로 쓸 수 있지만, **열당 문항 수를 바꾸면 지문이
+ * 달라져 예전에 뽑아 둔 답안지와 호환되지 않는다**(판독 화면이 그 사실을
+ * 알려 준다).
+ */
+export const SHEET_DEFAULTS: Partial<Record<ExamType, { sheetTitle?: string; perColumn?: number }>> = {
+  saturday: { sheetTitle: "토요모의고사 OMR 답안지", perColumn: 15 },
+};
+
+/** 이 유형의 답안지 기본 제목(없으면 시험 제목을 쓴다) */
+export function defaultSheetTitle(type: ExamType): string {
+  return SHEET_DEFAULTS[type]?.sheetTitle ?? "";
+}
+
+/** 이 유형의 기본 '문항 열당 개수' */
+export function defaultPerColumn(type: ExamType): number {
+  return SHEET_DEFAULTS[type]?.perColumn ?? 20;
+}
+
 // 문항수를 유저가 고르는 유형(범용). mock/saturday는 정해진 구성.
 export const USER_QUESTION_COUNT: Record<ExamType, boolean> = {
   mock: false,
@@ -52,6 +87,14 @@ export interface OmrConfig {
   period?: string;
   subject_label?: string;
   essay_count?: number;
+  /**
+   * 답안지에 찍히는 제목. 비어 있으면 시험 제목을 쓴다.
+   *
+   * 시험 제목과 나눠 둔 이유는, 미리 뽑아 두고 몇 주에 걸쳐 쓰는 답안지가
+   * 있기 때문이다. 시험 제목에는 '9월 11일'처럼 그 회차를 적어야 목록에서
+   * 찾을 수 있지만, 종이에는 그 날짜가 없어야 다음 주에도 쓸 수 있다.
+   */
+  sheet_title?: string;
   [key: string]: unknown;
 }
 
