@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { readScans } from "@/lib/omr-api";
-import { getExam, sheetSpecFor } from "@/lib/omr-exams";
+import { sheetSpecFor } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { essayCountOf } from "@/lib/omr-scoring";
 import {
   downloadScanFile,
@@ -104,7 +105,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
     return NextResponse.json({ ok: true, scans: await listScans(id) });
   } catch (error) {
@@ -123,7 +124,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const form = await request.formData();

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { normalizePermissions } from "@/lib/access";
+import { defaultPermissionsFor, normalizePermissions } from "@/lib/access";
 import { hashUserPassword } from "@/lib/crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { validateManagedPassword } from "@/lib/users";
@@ -47,7 +47,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     .from("app_users")
     .update(updates)
     .eq("id", id)
-    .select("id,username,display_name,is_active,permissions,last_login_at,created_at,updated_at")
+    .select("id,username,display_name,is_active,permissions,last_login_at,created_at,updated_at,hr_department")
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "사용자 계정을 찾을 수 없습니다." }, { status: 404 });
@@ -59,7 +59,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       username: data.username,
       displayName: data.display_name,
       active: data.is_active,
-      permissions: normalizePermissions(data.permissions),
+      permissions: normalizePermissions(data.permissions, defaultPermissionsFor(data.hr_department)),
       lastLoginAt: data.last_login_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at,

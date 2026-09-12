@@ -8,7 +8,8 @@ import {
   parseAcceptedAnswers,
   type EssayAnswer,
 } from "@/lib/essay-grading";
-import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
+import { updateExamAnswerKey } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { downloadEssayCrop, listScans, updateScan, type OmrScan } from "@/lib/omr-scans";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
 import { scriptOf, transcribeMany, TranscribeNotConfiguredError } from "@/lib/omr-transcribe";
@@ -40,7 +41,7 @@ function gradableScans(scans: OmrScan[]): OmrScan[] {
   return scans.filter((scan) => scan.status === "reviewed" && scan.studentId);
 }
 
-function buildGroups(exam: Awaited<ReturnType<typeof getExam>>, scans: OmrScan[]) {
+function buildGroups(exam: Awaited<ReturnType<typeof getVisibleExam>>, scans: OmrScan[]) {
   if (!exam) return [];
   const count = essayCountOf(exam);
   return essayNumbers(exam, count).map((no) => {
@@ -93,7 +94,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
     if (essayCountOf(exam) === 0) {
       return NextResponse.json({ error: "이 시험에는 주관식 문항이 없습니다." }, { status: 400 });
@@ -121,7 +122,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
     const count = essayCountOf(exam);
     if (count === 0) {
@@ -296,7 +297,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       else delete answerKey[String(no)];
       await updateExamAnswerKey(id, answerKey);
 
-      const fresh = await getExam(id);
+      const fresh = await getVisibleExam(id);
       return NextResponse.json({
         ok: true,
         questions: serialize(buildGroups(fresh, scans), scans),

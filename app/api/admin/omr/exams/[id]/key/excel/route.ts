@@ -7,7 +7,8 @@ import {
   serializeChoices,
   type AnswerKeyValue,
 } from "@/lib/omr-answers";
-import { getExam, updateExamAnswerKey } from "@/lib/omr-exams";
+import { updateExamAnswerKey } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { essayCountOf, normalizeDifficulty, pointFor } from "@/lib/omr-scoring";
 import { makeXlsx } from "@/lib/xlsx-lite";
 
@@ -34,7 +35,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const essayCount = essayCountOf(exam);
@@ -112,7 +113,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const form = await request.formData();

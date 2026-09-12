@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { getExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import {
   getExamOverview,
   listCommentStudents,
@@ -17,7 +17,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
     const [overview, students] = await Promise.all([getExamOverview(id), listCommentStudents(id)]);
     // reportData는 응답 크기가 크므로 목록에서는 제외
@@ -42,7 +42,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));

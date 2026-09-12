@@ -1,4 +1,4 @@
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { canViewExamType, getCurrentUser, hasPermission } from "@/lib/auth";
 import { listExams } from "@/lib/omr-exams";
 import OmrDashboard from "@/components/OmrDashboard";
 import { EXAM_TYPE_LABELS, type ExamType, type OmrExam } from "@/lib/omr-types";
@@ -24,7 +24,8 @@ export default async function OmrExamsPage({
   let setupError = "";
   if (hasPermission(user, "viewReports")) {
     try {
-      exams = await listExams();
+      // 반배치고사는 볼 수 있는 사람에게만 목록에 나온다 — 목록에 없으면 버튼도 없다
+      exams = (await listExams()).filter((exam) => canViewExamType(user, exam.examType));
     } catch (error) {
       setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";
     }

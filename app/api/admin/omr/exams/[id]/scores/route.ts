@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { getExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { buildScoreSheet, type ScoreSource } from "@/lib/omr-score-export";
 import { makeXlsx } from "@/lib/xlsx-lite";
@@ -21,7 +21,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const supabase = getSupabaseAdmin();

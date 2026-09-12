@@ -1,5 +1,5 @@
 import MyClassView from "@/components/MyClassView";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { canViewExamType, getCurrentUser, hasPermission } from "@/lib/auth";
 import { groupByExam, type ExamGroup } from "@/lib/homeroom";
 import { listHomeroomReports } from "@/lib/reports";
 
@@ -19,7 +19,10 @@ export default async function MyClassPage() {
   let setupError = "";
   if (hasPermission(user, "viewReports")) {
     try {
-      groups = groupByExam(await listHomeroomReports(user.displayName));
+      groups = groupByExam(
+        await listHomeroomReports(user.displayName),
+        canViewExamType(user, "placement"),
+      );
     } catch (error) {
       setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";
     }

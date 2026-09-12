@@ -4,7 +4,7 @@
 // 안내를 보낼 뿐이다. 판단과 적용을 나눠 둔 것은, 판단만 따로 시험하기
 // 위해서다(누구를 잠글지가 이 프로그램에서 가장 되돌리기 어렵다).
 
-import { DEFAULT_USER_PERMISSIONS } from "@/lib/access";
+import { defaultPermissionsFor } from "@/lib/access";
 import { fetchHrStaff, notifyStaff } from "@/lib/hr-directory";
 import { planSync, type ExistingAccount, type HrStaff, type SyncPlan } from "@/lib/hr-sync";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -82,7 +82,9 @@ async function applyPlan(plan: SyncPlan): Promise<{ created: number; updated: nu
       hr_department: item.staff.department,
       managed_by_hr: true,
       is_active: true,
-      permissions: DEFAULT_USER_PERMISSIONS,
+      // 반배치고사 열람은 부서로 정해진다 — 교육운영팀은 열리고 교수부는 닫힌 채 시작한다.
+      // 다시 동기화할 때는 권한을 건드리지 않으므로, 계정 관리에서 사람에게 열어 준 값이 남는다.
+      permissions: defaultPermissionsFor(item.staff.department),
     });
     if (error) problems.push(`${item.staff.name} 계정 생성 실패: ${error.message}`);
     else created += 1;

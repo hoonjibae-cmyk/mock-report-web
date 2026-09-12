@@ -71,6 +71,15 @@ test("시험별로 묶을 때 반배치고사는 통째로 빠진다", () => {
   assert.deepEqual(groups.map((g) => g.examId), ["sat"]);
 });
 
+test("'반배치고사 열람'이 열린 계정은 내 반의 반배치고사도 본다", () => {
+  const rows = [
+    report({ examId: "sat", examType: "saturday" }),
+    report({ examId: "place", examType: "placement", examTitle: "9월 반배치고사" }),
+  ];
+  assert.deepEqual(groupByExam(rows, false).map((g) => g.examId), ["sat"]);
+  assert.deepEqual(groupByExam(rows, true).map((g) => g.examId).sort(), ["place", "sat"]);
+});
+
 test("중지된 성적표는 반 목록에 나오지 않는다", () => {
   const groups = groupByExam([
     report({ studentKey: "1", studentName: "강여울" }),

@@ -3,7 +3,8 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import readXlsxFile from "read-excel-file/node";
 import { authorizeApi } from "@/lib/api-auth";
-import { getExam, updateExamAnswerKey, updateMockReference } from "@/lib/omr-exams";
+import { updateExamAnswerKey, updateMockReference } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { parseMockReference } from "@/lib/mock-reference";
 import { mockSubjectOf } from "@/lib/omr-types";
 import type { AnswerKeyValue } from "@/lib/omr-answers";
@@ -43,7 +44,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
     if (exam.examType !== "mock") {
       return NextResponse.json(

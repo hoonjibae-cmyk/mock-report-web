@@ -2,7 +2,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import GenericReport, { type ReportComments } from "@/components/GenericReport";
 import PinGate from "@/components/PinGate";
 import ReportView from "@/components/ReportView";
-import { getCurrentUser, hasPermission, hasReportAccess } from "@/lib/auth";
+import { canViewExamType, getCurrentUser, hasPermission, hasReportAccess } from "@/lib/auth";
 import { getExamOverview, parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { getReportByToken, recordReportView } from "@/lib/reports";
@@ -36,8 +36,14 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   // 로그인한 직원은 PIN 없이 연다. PIN은 링크가 밖으로 샜을 때를 막는 자물쇠지
   // 직원을 막는 것이 아니다 — 담임이 제 반 성적표를 보려고 학부모 번호를 알아
   // 와야 한다면 '내 반' 화면은 쓸 수 없다.
+  // 다만 그 사람이 볼 수 없는 유형(반배치고사)이면 직원이라도 바깥 사람과 같다 —
+  // 동료에게 링크를 받아 열어도 PIN 앞에서 멈춘다.
   const staff = await getCurrentUser();
-  const staffViewing = Boolean(staff && hasPermission(staff, "viewReports"));
+  const body: unknown = row.report_data;
+  const reportType = isGenericReport(body) ? body.examType : "mock";
+  const staffViewing = Boolean(
+    staff && hasPermission(staff, "viewReports") && canViewExamType(staff, reportType),
+  );
 
   if (row.pin_required && !staffViewing && !(await hasReportAccess(token))) {
     // gatePhoneHint 를 거쳐 넘긴다. 예전 성적표는 뒤 4자리가 드러난 형식으로

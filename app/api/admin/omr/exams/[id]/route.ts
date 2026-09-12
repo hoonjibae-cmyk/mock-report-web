@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { deleteExam, getExam } from "@/lib/omr-exams";
+import { deleteExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (auth.response) return auth.response;
   const { id } = await context.params;
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
     return NextResponse.json({ exam });
   } catch (error) {

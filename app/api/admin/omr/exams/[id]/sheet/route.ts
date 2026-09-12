@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { generateSheet, OmrApiNotConfiguredError } from "@/lib/omr-api";
-import { getExam, sheetSpecFor } from "@/lib/omr-exams";
+import { sheetSpecFor } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { readCachedSheet, sheetCacheKey, sheetCachePath, writeCachedSheet } from "@/lib/omr-sheet-cache";
 
 export const runtime = "nodejs";
@@ -54,7 +55,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return errorPage("시험을 찾을 수 없습니다.", "목록에서 다시 선택해 주세요.", 404);
 
     const spec = sheetSpecFor(exam);

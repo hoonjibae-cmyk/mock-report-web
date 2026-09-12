@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import ReportsManager from "@/components/ReportsManager";
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { canViewExamType, getCurrentUser, hasPermission } from "@/lib/auth";
 import { listAdminReports } from "@/lib/reports";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
 
@@ -25,7 +25,10 @@ export default async function ReportsPage({
   let setupError = "";
   if (hasPermission(currentUser, "viewReports")) {
     try {
-      reports = await listAdminReports();
+      // 반배치고사 성적표는 볼 수 있는 사람에게만 — 하위 메뉴의 '반배치고사'는 남지만 비어 보인다
+      reports = (await listAdminReports()).filter((report) =>
+        canViewExamType(currentUser, report.examType),
+      );
     } catch (error) {
       setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";
     }
