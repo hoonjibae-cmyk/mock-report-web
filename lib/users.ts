@@ -1,4 +1,4 @@
-import { DEFAULT_USER_PERMISSIONS, normalizePermissions, type UserPermissions } from "@/lib/access";
+import { DEFAULT_USER_PERMISSIONS, defaultPermissionsFor, normalizePermissions, type UserPermissions } from "@/lib/access";
 import { hashUserPassword } from "@/lib/crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -54,7 +54,7 @@ function mapUser(row: Record<string, unknown>): ManagedUser {
     username: String(row.username),
     displayName: String(row.display_name),
     active: row.is_active !== false,
-    permissions: normalizePermissions(row.permissions),
+    permissions: normalizePermissions(row.permissions, defaultPermissionsFor(row.hr_department)),
     lastLoginAt: (row.last_login_at as string | null) ?? null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),

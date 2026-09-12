@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
-import { getExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { deleteScan, getScan, updateScan } from "@/lib/omr-scans";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ scanI
   try {
     const scan = await getScan(scanId);
     if (!scan) return NextResponse.json({ error: "판독 결과를 찾을 수 없습니다." }, { status: 404 });
-    const exam = await getExam(scan.examId);
+    const exam = await getVisibleExam(scan.examId);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));

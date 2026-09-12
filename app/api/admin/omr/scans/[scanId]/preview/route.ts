@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
+import { getVisibleExam } from "@/lib/exam-access";
 import { createSignedViewUrl, getScan, SCAN_RETENTION_DAYS } from "@/lib/omr-scans";
 
 export const runtime = "nodejs";
@@ -18,6 +19,10 @@ export async function GET(_request: Request, context: { params: Promise<{ scanId
   try {
     const scan = await getScan(scanId);
     if (!scan) return NextResponse.json({ error: "판독 결과를 찾을 수 없습니다." }, { status: 404 });
+    // 이 답안지가 속한 시험을 볼 수 없는 사람에게는 답안지도 없는 것이다(반배치고사)
+    if (!(await getVisibleExam(scan.examId))) {
+      return NextResponse.json({ error: "판독 결과를 찾을 수 없습니다." }, { status: 404 });
+    }
     if (!scan.previewPath) {
       return NextResponse.json(
         {

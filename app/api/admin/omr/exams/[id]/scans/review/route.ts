@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { getExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { listScans, updateScan } from "@/lib/omr-scans";
 import { summarizeReview } from "@/lib/omr-review";
 import { lookupStudents } from "@/lib/student-directory";
@@ -20,7 +20,7 @@ export const maxDuration = 120;
  */
 
 async function buildSummary(examId: string) {
-  const exam = await getExam(examId);
+  const exam = await getVisibleExam(examId);
   if (!exam) return null;
 
   const scans = await listScans(examId);

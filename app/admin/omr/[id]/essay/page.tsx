@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
-import { getExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { essayCountOf } from "@/lib/omr-scoring";
 import EssayGrader from "@/components/EssayGrader";
 
@@ -14,7 +14,7 @@ export default async function OmrEssayPage(context: { params: Promise<{ id: stri
   const { id } = await context.params;
 
   let setupError = "";
-  const exam = await getExam(id).catch((error) => {
+  const exam = await getVisibleExam(id).catch((error) => {
     setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";
     return null;
   });

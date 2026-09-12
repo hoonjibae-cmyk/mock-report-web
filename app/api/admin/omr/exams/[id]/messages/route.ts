@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { getExam } from "@/lib/omr-exams";
+import { getVisibleExam } from "@/lib/exam-access";
 import { lookupStudents, directoryConfigured } from "@/lib/student-directory";
 import { messagingConfigured, sendAlimtalk, MessagingNotConfiguredError } from "@/lib/messaging/solapi";
 import { listExamMessages, recordMessages, type RecipientType } from "@/lib/report-messages";
@@ -75,7 +75,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const { lookup, targets } = await prepare(id);
@@ -120,7 +120,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
 
   try {
-    const exam = await getExam(id);
+    const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
 
     const siteUrl = siteBaseUrl();

@@ -163,11 +163,14 @@ export function summarizeClass(rows: readonly HomeroomReport[]): ClassSummary {
 /**
  * 성적표들을 시험별로 묶는다. 담임에게 열지 않는 유형은 여기서 걸러진다.
  * 시험은 최근 것이 위, 학생은 석차 순.
+ *
+ * canSeePlacement — 이 계정에 '반배치고사 열람'이 열려 있으면 반배치고사도
+ * 제 반 것은 보인다(교육운영팀, 지정된 교수부 계정).
  */
-export function groupByExam(rows: readonly HomeroomReport[]): ExamGroup[] {
+export function groupByExam(rows: readonly HomeroomReport[], canSeePlacement = false): ExamGroup[] {
   const byExam = new Map<string, HomeroomReport[]>();
   for (const row of rows) {
-    if (!teacherCanSeeExamType(row.examType)) continue;
+    if (!teacherCanSeeExamType(row.examType) && !(row.examType === "placement" && canSeePlacement)) continue;
     if (!row.active) continue;
     const key = row.examId ?? `no-exam:${row.examTitle}`;
     const list = byExam.get(key) ?? [];

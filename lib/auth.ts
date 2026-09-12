@@ -1,5 +1,12 @@
 import { cookies } from "next/headers";
-import { ADMIN_PERMISSIONS, normalizePermissions, type UserPermissionKey, type UserPermissions } from "@/lib/access";
+import {
+  ADMIN_PERMISSIONS,
+  defaultPermissionsFor,
+  normalizePermissions,
+  type UserPermissionKey,
+  type UserPermissions,
+} from "@/lib/access";
+import type { ExamType } from "@/lib/omr-types";
 import { signPayload, verifyPayload, verifyUserPassword } from "@/lib/crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -52,7 +59,7 @@ export async function authenticateUser(usernameInput: string, password: string):
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("app_users")
-    .select("id,username,display_name,password_hash,is_active,permissions,role")
+    .select("id,username,display_name,password_hash,is_active,permissions,role,hr_department")
     .eq("username", username)
     .maybeSingle();
 
@@ -72,15 +79,29 @@ function fromRow(row: {
   display_name: string;
   permissions?: unknown;
   role?: unknown;
+  hr_department?: unknown;
 }): CurrentUser {
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
     role: row.role === "admin" ? "admin" : "user",
-    permissions: normalizePermissions(row.permissions),
+    // 반배치고사 열람처럼 부서에 따라 기본값이 다른 권한이 있어 부서를 함께 넘긴다
+    permissions: normalizePermissions(row.permissions, defaultPermissionsFor(row.hr_department)),
     source: "database",
   };
+}
+
+/**
+ * 이 사람이 이 유형의 시험(과 그 성적표)을 볼 수 있는가.
+ *
+ * 반배치고사만 따로 잠근다 — 반을 새로 짜는 자료라 편성 전에 새면 안 된다.
+ * 총괄(경영지원)은 언제나 보고, 나머지는 계정의 '반배치고사 열람'을 따른다.
+ * 다른 유형은 성적표를 볼 수 있는 사람이면 누구나 본다.
+ */
+export function canViewExamType(user: CurrentUser, type: ExamType): boolean {
+  if (type !== "placement") return true;
+  return user.role === "admin" || user.permissions.viewPlacement;
 }
 
 async function touchLastLogin(id: string): Promise<void> {
@@ -106,7 +127,7 @@ export async function authenticateByEmail(email: string): Promise<CurrentUser | 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("app_users")
-    .select("id,username,display_name,is_active,permissions,role")
+    .select("id,username,display_name,is_active,permissions,role,hr_department")
     .ilike("email", address)
     .maybeSingle();
 
@@ -165,7 +186,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("app_users")
-    .select("id,username,display_name,is_active,permissions,role")
+    .select("id,username,display_name,is_active,permissions,role,hr_department")
     .eq("id", payload.userId)
     .maybeSingle();
   if (error || !data || !data.is_active) return null;
