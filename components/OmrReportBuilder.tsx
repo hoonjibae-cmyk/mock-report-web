@@ -26,7 +26,12 @@ interface Draft {
   name: string;
   school: string;
   phone: string;
+  /** 학생 관리 프로그램의 담임·반 — 담임 선생님이 '내 반'에서 제 학생을 찾는 열쇠 */
+  teacher: string;
+  className: string;
 }
+
+const EMPTY_DRAFT: Draft = { name: "", school: "", phone: "", teacher: "", className: "" };
 
 export default function OmrReportBuilder({
   exam,
@@ -90,7 +95,10 @@ export default function OmrReportBuilder({
         return;
       }
 
-      const found = data.students as Record<string, { name: string; school: string; grade: string; parentPhone: string }>;
+      const found = data.students as Record<
+        string,
+        { name: string; school: string; grade: string; parentPhone: string; teacher?: string; className?: string }
+      >;
       let filled = 0;
       setDrafts((prev) => {
         const next = { ...prev };
@@ -103,6 +111,9 @@ export default function OmrReportBuilder({
             name: current.name.trim() || info.name,
             school: current.school.trim() || [info.school, info.grade].filter(Boolean).join(" "),
             phone: current.phone.trim() || info.parentPhone,
+            // 담임·반은 학생 관리 프로그램이 원본이다. 성적표에 같이 남겨 담임이 제 반을 찾는다.
+            teacher: current.teacher.trim() || (info.teacher ?? ""),
+            className: current.className.trim() || (info.className ?? ""),
           };
           filled += 1;
         }
@@ -176,9 +187,9 @@ export default function OmrReportBuilder({
             if (next[scan.id]) continue;
             const suggestion = scan.studentId ? suggestions[scan.studentId] : undefined;
             next[scan.id] = {
+              ...EMPTY_DRAFT,
               name: suggestion?.name ?? "",
               school: suggestion?.school ?? "",
-              phone: "",
             };
           }
           return next;
@@ -189,13 +200,13 @@ export default function OmrReportBuilder({
   }, [exam?.id]);
 
   function draftFor(scan: OmrScan): Draft {
-    return drafts[scan.id] ?? { name: "", school: "", phone: "" };
+    return drafts[scan.id] ?? EMPTY_DRAFT;
   }
 
   function setDraft(scanId: string, patch: Partial<Draft>) {
     setDrafts((prev) => ({
       ...prev,
-      [scanId]: { ...(prev[scanId] ?? { name: "", school: "", phone: "" }), ...patch },
+      [scanId]: { ...(prev[scanId] ?? EMPTY_DRAFT), ...patch },
     }));
   }
 
@@ -245,6 +256,8 @@ export default function OmrReportBuilder({
             name: draftFor(scan).name,
             school: draftFor(scan).school,
             phone: draftFor(scan).phone,
+            teacher: draftFor(scan).teacher,
+            className: draftFor(scan).className,
           })),
         }),
       });
@@ -510,6 +523,7 @@ export default function OmrReportBuilder({
                     <th>이름 *</th>
                     <th>학교 · 학년</th>
                     <th>학부모 연락처(선택 · PIN용)</th>
+                    <th>담임 · 반</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -551,6 +565,26 @@ export default function OmrReportBuilder({
                             style={{ width: 150 }}
                             onChange={(e) => setDraft(scan.id, { phone: e.target.value })}
                           />
+                        </td>
+                        <td>
+                          {/* 담임 선생님이 '내 반'에서 이 학생을 찾는 열쇠다. 인사 프로그램의 이름과 같아야 한다. */}
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <input
+                              value={draft.teacher}
+                              disabled={!canCreate}
+                              placeholder="담임"
+                              title="학생 관리 프로그램의 담임. 인사 프로그램의 이름과 같아야 그 선생님의 '내 반'에 보입니다."
+                              style={{ width: 90 }}
+                              onChange={(e) => setDraft(scan.id, { teacher: e.target.value })}
+                            />
+                            <input
+                              value={draft.className}
+                              disabled={!canCreate}
+                              placeholder="반"
+                              style={{ width: 100 }}
+                              onChange={(e) => setDraft(scan.id, { className: e.target.value })}
+                            />
+                          </div>
                         </td>
                       </tr>
                     );

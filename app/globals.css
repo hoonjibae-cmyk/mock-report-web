@@ -2313,3 +2313,44 @@ body.report-layout-a4 .a4-report-root { display: block; }
   .group-line { align-items: flex-start; flex-direction: column; gap: 8px; }
   .group-meta { flex-wrap: wrap; gap: 9px; }
 }
+
+/* 내 반 — 담임이 제 학생들의 성적표와 시험별 반 요약을 보는 곳 */
+.my-class-exam {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.my-class-exam > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 16px;
+}
+.my-class-exam > summary::-webkit-details-marker { display: none; }
+.my-class-exam[open] > summary { border-bottom: 1px solid var(--line); }
+.my-class-exam-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.my-class-exam-head > div:first-child { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.my-class-exam-head strong { font-size: 15px; color: var(--navy-deep); }
+.my-class-body { padding: 14px 16px 16px; }
+/* 영역별 반 성취율 — 전체 성취율과의 차이를 부호로 바로 읽히게 */
+.my-class-areas { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.my-class-area {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--blue-soft);
+  font-size: 13px;
+}
+.my-class-area-name { font-weight: 700; color: var(--navy); }
+.my-class-area strong { font-size: 15px; color: var(--navy-deep); }
+.my-class-area .up { color: #1a7f4b; }
+.my-class-area .down { color: #b3261e; }
+.my-class-body td { white-space: nowrap; }

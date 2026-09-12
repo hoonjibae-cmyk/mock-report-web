@@ -24,6 +24,9 @@ interface StudentInput {
   name: string;
   school?: string;
   phone?: string;
+  /** 학생 관리 프로그램의 담임 — 담임 선생님의 '내 반' 화면이 이 값으로 찾는다 */
+  teacher?: string;
+  className?: string;
 }
 
 /** 학생 식별 제안 + 이 시험의 기존 성적표 현황 */
@@ -300,6 +303,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         student_key: key,
         scan_path: scan.scanPath,
         teacher_comment: commentByKey.get(key) ?? null,
+        // 발행 시점의 담임·반을 남긴다 — 나중에 반이 바뀌어도 이 성적표는 그때 담임 것이다
+        homeroom_teacher: input.teacher?.trim() || null,
+        class_name: input.className?.trim() || null,
       };
     });
 
