@@ -101,14 +101,50 @@ export function maskPhone(raw: string | null | undefined): string {
 }
 
 /**
+ * 같은 번호가 한 묶음에 두 번 들어가지 않도록 수신자를 회차로 나눈다.
+ *
+ * 솔라피는 한 번의 발송 요청 안에 같은 수신번호가 둘 이상이면 하나만 보내고
+ * 나머지를 실패 처리한다(상태코드 1026, '중복 수신번호'). 쌍둥이는 두 아이의
+ * 성적표가 한 학부모 번호로 나가므로 한 묶음으로 보내면 반드시 한 아이가
+ * 떨어진다. 그래서 번호별 n번째 수신자를 n번째 회차에 담는다 — 1회차에는
+ * 모든 번호가 한 번씩, 2회차에는 두 번째로 나온 번호만.
+ */
+export function splitDuplicatePhones(recipients: AlimtalkRecipient[]): AlimtalkRecipient[][] {
+  const rounds: AlimtalkRecipient[][] = [];
+  const seen = new Map<string, number>();
+  for (const r of recipients) {
+    const key = String(r.phone ?? "").replace(/\D/g, "");
+    const n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    (rounds[n] ??= []).push(r);
+  }
+  return rounds;
+}
+
+/**
  * 알림톡을 보낸다. 실패하면 문자로 대체 발송된다(disableSms=false).
  *
  * 한 건이 실패해도 나머지는 나가야 하므로, 통째로 예외를 던지지 않고
  * 수신자별 성공·실패를 돌려준다. 설정 자체가 없을 때만 예외다.
+ *
+ * 같은 번호는 회차를 나눠 따로 요청한다(splitDuplicatePhones). 결과는 넘겨받은
+ * 순서대로 돌려준다.
  */
 export async function sendAlimtalk(recipients: AlimtalkRecipient[]): Promise<AlimtalkResult[]> {
   if (recipients.length === 0) return [];
   const config = readConfig();
+  const byKey = new Map<string, AlimtalkResult>();
+  for (const round of splitDuplicatePhones(recipients)) {
+    for (const result of await sendGroup(round, config)) byKey.set(result.key, result);
+  }
+  return recipients.map((r) => byKey.get(r.key)!);
+}
+
+/** 한 묶음(같은 번호가 없는 수신자들)을 한 번의 요청으로 보낸다 */
+async function sendGroup(
+  recipients: AlimtalkRecipient[],
+  config: ReturnType<typeof readConfig>,
+): Promise<AlimtalkResult[]> {
 
   const body = {
     messages: recipients.map((r) => ({

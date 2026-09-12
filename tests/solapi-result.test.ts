@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sendAlimtalk } from "../lib/messaging/solapi";
+import { sendAlimtalk, splitDuplicatePhones } from "../lib/messaging/solapi";
 
 const ENV = {
   SOLAPI_API_KEY: "k",
@@ -130,26 +130,59 @@ test("요청 자체가 거부되면 전원 실패다", async () => {
   }
 });
 
-test("쌍둥이 — 같은 번호로 두 건을 보내면 결과도 두 건 각각 돌아온다", async () => {
-  // 대행사 응답은 번호 기준이다. 번호로 합치면 둘 중 하나의 결과가 사라지고,
-  // 사라진 쪽은 '확인 필요'로 남아 선생님이 다시 보내게 된다 — 학부모는 같은
-  // 아이의 성적표를 두 번 받는다.
+test("쌍둥이 — 같은 번호는 회차를 나눠, 한 요청에는 번호가 한 번씩만 들어간다", () => {
+  // 솔라피는 한 요청 안의 중복 수신번호를 하나만 보내고 나머지를 실패 처리한다(1026)
+  const rounds = splitDuplicatePhones([
+    { phone: "01055556666", key: "a", variables: {} },
+    { phone: "01011112222", key: "x", variables: {} },
+    { phone: "010-5555-6666", key: "b", variables: {} },
+    { phone: "01055556666", key: "c", variables: {} },
+  ]);
+  assert.deepEqual(rounds.map((r) => r.map((x) => x.key)), [["a", "x"], ["b"], ["c"]]);
+});
+
+/** 요청마다 다른 응답을 주고, 보낸 본문을 남긴다 */
+async function withResponses(bodies: unknown[], run: (sent: Array<{ to: string }[]>) => Promise<void>) {
+  const realFetch = globalThis.fetch;
+  const realEnv: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(ENV)) {
+    realEnv[key] = process.env[key];
+    process.env[key] = value;
+  }
+  const sent: Array<{ to: string }[]> = [];
+  const queue = [...bodies];
+  globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
+    const req = JSON.parse(String(init?.body ?? "{}")) as { messages?: Array<{ to: string }> };
+    sent.push(req.messages ?? []);
+    return new Response(JSON.stringify(queue.shift() ?? {}), { status: 200 });
+  }) as typeof fetch;
+  try {
+    await run(sent);
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const [key, value] of Object.entries(realEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test("쌍둥이 — 두 아이의 성적표가 같은 번호로 각각 나가고 결과도 각각 돌아온다", async () => {
   const twins = [
     { phone: "01055556666", key: "r-a:parent", variables: {} },
     { phone: "01055556666", key: "r-b:parent", variables: {} },
   ];
-  await withResponse(
-    {
-      groupInfo: { count: { total: 2 } },
-      messageList: [
-        { messageId: "M-1", to: "01055556666", type: "ATA", statusCode: "2000" },
-        { messageId: "M-2", to: "01055556666", type: "ATA", statusCode: "2000" },
-      ],
-    },
-    async () => {
+  await withResponses(
+    [
+      { messageList: [{ messageId: "M-1", to: "01055556666", type: "ATA" }] },
+      { messageList: [{ messageId: "M-2", to: "01055556666", type: "ATA" }] },
+    ],
+    async (sent) => {
       const results = await sendAlimtalk(twins);
+      assert.equal(sent.length, 2, "요청이 둘로 나뉘어야 한다");
+      assert.deepEqual(sent.map((m) => m.length), [1, 1], "한 요청에 같은 번호가 둘 들어가면 안 된다");
       assert.deepEqual(
-        results.map((r) => [r.key, r.ok, r.messageId]).sort(),
+        results.map((r) => [r.key, r.ok, r.messageId]),
         [
           ["r-a:parent", true, "M-1"],
           ["r-b:parent", true, "M-2"],
@@ -159,23 +192,19 @@ test("쌍둥이 — 같은 번호로 두 건을 보내면 결과도 두 건 각�
   );
 });
 
-test("쌍둥이 — 같은 번호 중 한 건만 실패하면 딱 그 한 건만 실패로 적는다", async () => {
+test("쌍둥이 — 한 아이만 실패하면 딱 그 아이만 실패로 적는다", async () => {
   const twins = [
     { phone: "01055556666", key: "r-a:parent", variables: {} },
     { phone: "01055556666", key: "r-b:parent", variables: {} },
   ];
-  await withResponse(
-    {
-      failedMessageList: [{ to: "01055556666", statusMessage: "수신 거부" }],
-      messageList: [{ messageId: "M-2", to: "01055556666", type: "ATA" }],
-    },
+  await withResponses(
+    [
+      { failedMessageList: [{ to: "01055556666", statusMessage: "수신 거부" }] },
+      { messageList: [{ messageId: "M-2", to: "01055556666", type: "ATA" }] },
+    ],
     async () => {
       const results = await sendAlimtalk(twins);
-      const failed = results.filter((r) => !r.ok);
-      const sent = results.filter((r) => r.ok);
-      assert.equal(failed.length, 1, "실패는 한 건뿐이어야 한다");
-      assert.equal(sent.length, 1, "나머지 한 건은 접수된 것이다");
-      assert.notEqual(failed[0].key, sent[0].key);
+      assert.deepEqual(results.map((r) => [r.key, r.ok]), [["r-a:parent", false], ["r-b:parent", true]]);
     },
   );
 });
