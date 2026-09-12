@@ -129,3 +129,53 @@ test("요청 자체가 거부되면 전원 실패다", async () => {
     for (const key of Object.keys(ENV)) delete process.env[key];
   }
 });
+
+test("쌍둥이 — 같은 번호로 두 건을 보내면 결과도 두 건 각각 돌아온다", async () => {
+  // 대행사 응답은 번호 기준이다. 번호로 합치면 둘 중 하나의 결과가 사라지고,
+  // 사라진 쪽은 '확인 필요'로 남아 선생님이 다시 보내게 된다 — 학부모는 같은
+  // 아이의 성적표를 두 번 받는다.
+  const twins = [
+    { phone: "01055556666", key: "r-a:parent", variables: {} },
+    { phone: "01055556666", key: "r-b:parent", variables: {} },
+  ];
+  await withResponse(
+    {
+      groupInfo: { count: { total: 2 } },
+      messageList: [
+        { messageId: "M-1", to: "01055556666", type: "ATA", statusCode: "2000" },
+        { messageId: "M-2", to: "01055556666", type: "ATA", statusCode: "2000" },
+      ],
+    },
+    async () => {
+      const results = await sendAlimtalk(twins);
+      assert.deepEqual(
+        results.map((r) => [r.key, r.ok, r.messageId]).sort(),
+        [
+          ["r-a:parent", true, "M-1"],
+          ["r-b:parent", true, "M-2"],
+        ],
+      );
+    },
+  );
+});
+
+test("쌍둥이 — 같은 번호 중 한 건만 실패하면 딱 그 한 건만 실패로 적는다", async () => {
+  const twins = [
+    { phone: "01055556666", key: "r-a:parent", variables: {} },
+    { phone: "01055556666", key: "r-b:parent", variables: {} },
+  ];
+  await withResponse(
+    {
+      failedMessageList: [{ to: "01055556666", statusMessage: "수신 거부" }],
+      messageList: [{ messageId: "M-2", to: "01055556666", type: "ATA" }],
+    },
+    async () => {
+      const results = await sendAlimtalk(twins);
+      const failed = results.filter((r) => !r.ok);
+      const sent = results.filter((r) => r.ok);
+      assert.equal(failed.length, 1, "실패는 한 건뿐이어야 한다");
+      assert.equal(sent.length, 1, "나머지 한 건은 접수된 것이다");
+      assert.notEqual(failed[0].key, sent[0].key);
+    },
+  );
+});
