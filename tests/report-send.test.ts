@@ -271,3 +271,32 @@ test("번호 정규화는 휴대전화만 통과시킨다", () => {
   assert.equal(normalizePhone(null), null);
   assert.equal(maskPhone("01012345678"), "010-****-5678");
 });
+
+test("쌍둥이 — 이름이 다른 두 학생은 같은 학부모 번호로 각각 나간다", () => {
+  // 한 집에 자녀가 둘이면 학부모는 성적표를 두 번 받아야 한다. 번호가 같다고
+  // 하나로 합치면 한 아이의 성적표가 사라진다.
+  const twins = [
+    report({ id: "r-a", token: "tok-a", studentName: "김하늘", studentKey: "1031" }),
+    report({ id: "r-b", token: "tok-b", studentName: "김바다", studentKey: "1032" }),
+  ];
+  const dir = directory(
+    student({ examNumber: "1031", name: "김하늘", parentPhone: "010-5555-6666" }),
+    student({ examNumber: "1032", name: "김바다", parentPhone: "010-5555-6666" }),
+  );
+  const targets = buildSendTargets({ ...base, reports: twins, directory: dir });
+  assert.equal(targets[0].parent.blocked, null);
+  assert.equal(targets[1].parent.blocked, null);
+
+  const { send, rejected } = resolveSelections(
+    [
+      { reportId: "r-a", recipientType: "parent" },
+      { reportId: "r-b", recipientType: "parent" },
+    ],
+    targets,
+    dir,
+  );
+  assert.equal(rejected.length, 0);
+  assert.deepEqual(send.map((s) => s.studentName), ["김하늘", "김바다"]);
+  assert.equal(send[0].phone, send[1].phone, "같은 번호로 둘 다 나가야 한다");
+  assert.notEqual(send[0].token, send[1].token, "각자 제 성적표 링크여야 한다");
+});

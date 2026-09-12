@@ -185,7 +185,9 @@ export async function sendAlimtalk(recipients: AlimtalkRecipient[]): Promise<Ali
     list.push(r);
     byPhone.set(key, list);
   }
-  // 같은 번호가 둘 이상이면(학부모=학생 번호) 순서대로 나눠 준다.
+  // 같은 번호가 둘 이상이면 순서대로 나눠 준다 — 학부모 번호와 학생 번호가 같은
+  // 집도 있고, 쌍둥이는 두 학생의 성적표가 한 학부모 번호로 나간다. 번호로
+  // 합치면 둘 중 하나의 결과가 사라지므로, 번호마다 줄을 세워 하나씩 짝짓는다.
   const take = (phone: unknown): AlimtalkRecipient | undefined =>
     byPhone.get(matchKey(phone as string))?.shift();
 
