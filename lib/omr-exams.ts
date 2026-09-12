@@ -193,9 +193,16 @@ export async function deleteExam(id: string): Promise<void> {
 // 시험 → OMR API 답안지 스펙
 export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
   const cfg = exam.omrConfig ?? {};
+  // 종이에 찍히는 제목은 시험 제목과 다를 수 있다 — 미리 뽑아 두고 여러 회차에
+  // 걸쳐 쓰는 답안지는 회차 이름이 적혀 있으면 안 된다. 정해 둔 값이 없으면
+  // 지금까지처럼 시험 제목을 쓴다(예전에 만든 시험의 답안지가 바뀌지 않는다).
+  const sheetTitle =
+    typeof cfg.sheet_title === "string" && cfg.sheet_title.trim()
+      ? cfg.sheet_title.trim()
+      : exam.title;
   return {
     exam_id: exam.id,
-    title: exam.title,
+    title: sheetTitle,
     num_questions: exam.numQuestions,
     num_choices: exam.numChoices,
     id_digits: exam.idDigits,
