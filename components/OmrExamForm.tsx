@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useOmrWarmup } from "@/components/useOmrWarmup";
 import {
   EXAM_TYPE_LABELS,
   MOCK_SUBJECTS,
@@ -42,11 +43,95 @@ export default function OmrExamForm() {
       ? MOCK_SUBJECTS.find((s) => s.value === "english")!.questions
       : TYPE_DEFAULTS[initialType].q,
   );
+  const [perColumn, setPerColumn] = useState(defaultPerColumn(initialType));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // 답안지 미리보기 — 설정을 바꾸면 손을 뗀 뒤 0.5초 있다가 다시 그린다.
+  // 판독 서버는 15분 놀면 잠들므로 화면에 들어오자마자 깨워 둔다.
+  useOmrWarmup(true);
+  const formRef = useRef<HTMLFormElement>(null);
+  const previewTimer = useRef<number | null>(null);
+  const previewAbort = useRef<AbortController | null>(null);
+  // 같은 설정은 다시 부르지 않는다 — 설정 JSON → 이미지 주소
+  const previewCache = useRef<Map<string, string>>(new Map());
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<"idle" | "loading" | "error">("idle");
+  const [previewError, setPreviewError] = useState("");
+
+  /** 지금 폼에 적힌 값으로 미리보기 설정을 만든다 */
+  const readPreviewSpec = useCallback(() => {
+    const fd = formRef.current ? new FormData(formRef.current) : null;
+    const get = (name: string) => String(fd?.get(name) ?? "").trim();
+    const sheetTitle = get("sheetTitle") || get("title") || "OMR 답안지";
+    return {
+      title: sheetTitle,
+      numQuestions,
+      numChoices: Number(get("numChoices")) || 5,
+      perColumn: perColumn || defaultPerColumn(type),
+      essayCount: Number(get("essayCount")) || 0,
+      period: get("period"),
+      subjectLabel: get("subjectLabel"),
+    };
+  }, [numQuestions, type, perColumn]);
+
+  const drawPreview = useCallback(async () => {
+    const spec = readPreviewSpec();
+    const key = JSON.stringify(spec);
+    const cached = previewCache.current.get(key);
+    if (cached) {
+      setPreviewUrl(cached);
+      setPreviewState("idle");
+      setPreviewError("");
+      return;
+    }
+    previewAbort.current?.abort();
+    const controller = new AbortController();
+    previewAbort.current = controller;
+    setPreviewState("loading");
+    try {
+      const res = await fetch("/api/admin/omr/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(spec),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        // 서버를 깨우는 중이면 잠시 뒤 한 번 더 그린다
+        if (data.retry) {
+          previewTimer.current = window.setTimeout(() => void drawPreview(), 4000);
+        }
+        throw new Error(data.error || "답안지 미리보기를 그리지 못했습니다.");
+      }
+      const url = URL.createObjectURL(await res.blob());
+      previewCache.current.set(key, url);
+      setPreviewUrl(url);
+      setPreviewState("idle");
+      setPreviewError("");
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setPreviewState("error");
+      setPreviewError(err instanceof Error ? err.message : "답안지 미리보기를 그리지 못했습니다.");
+    }
+  }, [readPreviewSpec]);
+
+  const schedulePreview = useCallback(() => {
+    if (previewTimer.current) window.clearTimeout(previewTimer.current);
+    previewTimer.current = window.setTimeout(() => void drawPreview(), 500);
+  }, [drawPreview]);
+
+  // 처음 열 때, 그리고 유형·문항 수처럼 폼 밖에서 바뀌는 값이 움직일 때도 다시 그린다
+  useEffect(() => {
+    schedulePreview();
+    return () => {
+      if (previewTimer.current) window.clearTimeout(previewTimer.current);
+    };
+  }, [schedulePreview, type, numQuestions, mockSubject]);
+
   function onType(next: ExamType) {
     setType(next);
+    setPerColumn(defaultPerColumn(next));
     setNumQuestions(
       next === "mock" ? subjectDefaults(mockSubject).questions : TYPE_DEFAULTS[next].q,
     );
@@ -105,7 +190,7 @@ export default function OmrExamForm() {
   // '15 · 15 · 15' 처럼 열이 어떻게 나뉘는지 그대로 보여 준다 — 숫자 하나만
   // 적혀 있으면 마지막 열이 휑해지는지 아닌지 알 수 없다.
   const columnSplit = (() => {
-    const per = defaultPerColumn(type);
+    const per = Math.max(1, perColumn);
     const sizes: number[] = [];
     for (let left = numQuestions; left > 0; left -= per) sizes.push(Math.min(per, left));
     return sizes.join(" · ") + `  (${sizes.length}열)`;
@@ -123,7 +208,8 @@ export default function OmrExamForm() {
         <Link className="button ghost" href="/admin/omr">← 목록</Link>
       </header>
 
-      <form className="panel upload-form" onSubmit={submit}>
+      <div className="exam-form-layout">
+      <form className="panel upload-form" onSubmit={submit} onChange={schedulePreview} ref={formRef}>
         <div className="section-heading">
           <div>
             <p className="eyebrow">NEW EXAM</p>
@@ -223,17 +309,15 @@ export default function OmrExamForm() {
           <label>
             <span>문항 열당 개수</span>
             <input
-              // 유형을 바꾸면 그 유형의 기본값으로 다시 채워진다
-              key={`per-column-${type}`}
               name="perColumn"
               type="number"
               min={5}
               max={30}
-              defaultValue={defaultPerColumn(type)}
+              value={perColumn}
+              onChange={(e) => setPerColumn(Number(e.target.value) || 0)}
             />
             <small className="hint">
-              한 열에 담는 문항 수입니다. {numQuestions}문항을 {defaultPerColumn(type)}개씩 나누면{" "}
-              {columnSplit}이 됩니다.
+              한 열에 담는 문항 수입니다. {numQuestions}문항을 {perColumn}개씩 나누면 {columnSplit}이 됩니다.
             </small>
           </label>
         </div>
@@ -292,6 +376,45 @@ export default function OmrExamForm() {
           {loading ? "생성 중…" : "시험 만들기"}
         </button>
       </form>
+
+      {/*
+        답안지 미리보기 — 왼쪽 설정을 바꾸면 그대로 따라 그려진다. 실제 답안지를
+        그리는 코드와 같은 코드로 그리므로, 여기 보이는 것이 인쇄되는 것이다.
+      */}
+      <aside className="panel sheet-preview" aria-live="polite">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">PREVIEW</p>
+            <h2>답안지 미리보기</h2>
+            <p className="subtle">
+              설정을 바꾸면 따라 바뀝니다. 문항 수 · 보기 수 · 열당 개수 · 서술형 수 · 답안지
+              제목 · 영역 표기 · 교시가 답안지에 반영됩니다.
+            </p>
+          </div>
+        </div>
+        <div className={`sheet-preview-frame${previewState === "loading" ? " loading" : ""}`}>
+          {previewUrl ? (
+            // 판독 서버가 그린 PNG를 그대로 보인다. next/image 는 외부 최적화가 필요 없다.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="현재 설정으로 그린 OMR 답안지" />
+          ) : (
+            <div className="sheet-preview-empty">
+              {previewState === "error" ? previewError : "답안지를 그리는 중…"}
+            </div>
+          )}
+          {previewState === "loading" && previewUrl ? (
+            <span className="sheet-preview-badge">다시 그리는 중…</span>
+          ) : null}
+          {previewState === "error" && previewUrl ? (
+            <span className="sheet-preview-badge error">{previewError}</span>
+          ) : null}
+        </div>
+        <p className="subtle">
+          미리보기는 100dpi로 작게 그린 것입니다. 인쇄용 PDF는 시험을 만든 뒤 '답안지 PDF'에서
+          받습니다.
+        </p>
+      </aside>
+      </div>
     </div>
   );
 }
