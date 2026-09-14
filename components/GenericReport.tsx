@@ -302,23 +302,23 @@ export default function GenericReport({
               <strong>{score.raw}</strong>
               <small>/ {score.max}점</small>
             </div>
+            {/*
+              석차와 상위 %는 학부모·학생에게 싣지 않는다. 몇 등인지는 아이를
+              줄 세우는 숫자라 학원 방침으로 뺐다. 자기 위치는 학원 평균과
+              표준점수로 충분히 읽힌다. 석차는 성적표 본문(report_data)에 그대로
+              남아 있어 선생님 화면('내 반')에서는 본다.
+            */}
             {report.grade != null ? (
               <div>
                 <span>등급</span>
                 <strong>{report.grade}</strong>
                 <small>등급 (절대평가)</small>
               </div>
-            ) : (
-              <div>
-                <span>상위</span>
-                <strong>{report.topPercent}%</strong>
-                <small>응시 {cohort.count}명 기준</small>
-              </div>
-            )}
+            ) : null}
             <div>
-              <span>학원 석차</span>
-              <strong>{report.rank}</strong>
-              <small>/ {cohort.count}명</small>
+              <span>학원 평균</span>
+              <strong>{cohort.mean}</strong>
+              <small>응시 {cohort.count}명</small>
             </div>
             <div>
               <span>표준점수</span>
@@ -641,7 +641,7 @@ export default function GenericReport({
             <strong>{report.academy}</strong>
           </div>
           <div>
-            <p>본 성적표는 OMR 답안을 자동 판독·채점한 결과이며, 석차·표준점수는 학원 응시 집단 기준입니다.</p>
+            <p>본 성적표는 OMR 답안을 자동 판독·채점한 결과이며, 평균·표준점수는 학원 응시 집단 기준입니다.</p>
             <p>
               문의는 학원으로 연락 주세요.
               {report.appVersion ? ` · 시스템 v${report.appVersion}` : ""}
