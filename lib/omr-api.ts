@@ -64,6 +64,26 @@ export async function generateSheet(spec: OmrSheetSpec): Promise<GenerateSheetRe
   return (await res.json()) as GenerateSheetResult;
 }
 
+/**
+ * 설정만 보고 답안지 한 장을 PNG로 받는다 — 시험을 만들기 전 미리보기.
+ *
+ * /generate 와 같은 코드로 그리므로 실제 답안지와 같은 모습이다. 설정이
+ * 종이에 안 맞으면 판독 서버가 422와 안내문을 주고, 그 문장을 그대로 던진다.
+ */
+export async function previewSheet(spec: OmrSheetSpec): Promise<ArrayBuffer> {
+  const res = await fetch(`${apiBase()}/preview`, {
+    method: "POST",
+    headers: apiHeaders(),
+    body: JSON.stringify(spec),
+    // 미리보기는 기다리게 두지 않는다 — 잠든 서버는 깨우기가 따로 돈다
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    throw new Error(await apiErrorMessage(res, "답안지 미리보기 실패"));
+  }
+  return res.arrayBuffer();
+}
+
 export interface ReadResultRow {
   filename: string;
   student_id: string | null;

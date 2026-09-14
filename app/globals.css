@@ -2359,3 +2359,36 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .send-contact { display: flex; flex-direction: column; gap: 4px; }
 .send-history { display: flex; flex-direction: column; gap: 2px; }
 .send-table td { vertical-align: top; }
+
+/* 새 시험 만들기 — 왼쪽 설정, 오른쪽 답안지 미리보기 */
+.exam-form-layout { display: grid; gap: 18px; align-items: start; }
+@media (min-width: 1100px) {
+  .exam-form-layout { grid-template-columns: minmax(0, 1fr) minmax(360px, 46%); }
+  /* 긴 폼을 내려도 미리보기는 자리에 남는다 — 바꾼 값이 어떻게 보이는지 바로 확인한다 */
+  .sheet-preview { position: sticky; top: 16px; }
+}
+.sheet-preview-frame {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f4f6fa;
+  overflow: hidden;
+  /* A4 가로 비율 — 이미지가 오기 전에도 자리가 흔들리지 않는다 */
+  aspect-ratio: 297 / 210;
+}
+.sheet-preview-frame img { display: block; width: 100%; height: 100%; object-fit: contain; transition: opacity 0.15s; }
+.sheet-preview-frame.loading img { opacity: 0.55; }
+.sheet-preview-empty {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 20px; text-align: center;
+  color: var(--muted); font-size: 13.5px; line-height: 1.7;
+}
+.sheet-preview-badge {
+  position: absolute; top: 10px; right: 10px;
+  padding: 5px 10px; border-radius: 999px;
+  background: rgba(20, 33, 61, 0.82); color: #fff;
+  font-size: 12px; font-weight: 700;
+  max-width: calc(100% - 20px);
+}
+.sheet-preview-badge.error { background: #b3261e; }
