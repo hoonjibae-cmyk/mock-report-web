@@ -37,7 +37,7 @@ const COMMON_RULES = `반드시 지킬 작성 원칙:
 - 학원 담임 선생님이 직접 쓴 글처럼 자연스러운 존댓말로 작성합니다. AI, 인공지능, 자동 생성 같은 표현은 절대 쓰지 않습니다.
 - 제공된 수치만 근거로 하고, 확인되지 않은 학습 태도나 습관을 사실처럼 단정하지 않습니다.
 - 따뜻하되 구체적으로 씁니다. 막연한 칭찬·격려("잘했어요", "화이팅")만으로 채우지 않습니다.
-- 학원 자체 시험이므로 학원 평균·석차·표준점수 언급은 자연스럽게 허용됩니다.
+- 학원 자체 시험이므로 학원 평균·표준점수 언급은 자연스럽게 허용됩니다. 석차·상위 %는 성적표에 싣지 않으므로 글에도 쓰지 않습니다.
 - **한글로만 씁니다. 한자는 한 글자도 쓰지 않습니다.** 之間·等·約 같은 표기 대신
   '사이', '등', '약'처럼 한글로 적습니다. 숫자와 %, 영어 고유명사는 그대로 써도 됩니다.`;
 
@@ -172,8 +172,6 @@ export async function draftStudentComment(
     studentName: report.student.name,
     score: report.score,
     cohort: report.cohort,
-    rank: report.rank,
-    topPercent: report.topPercent,
     standardScore: report.standardScore,
     growth: report.growth.map((point) => ({ date: point.date, standardScore: point.standardScore })),
     weakItems: weakDetail,
@@ -207,7 +205,7 @@ export async function draftStudentComment(
         content: `당신은 영어학원 담임 선생님을 돕는 보조 작가입니다. 학생 개인 성적표에 실릴 담임 의견 초안을 작성합니다. 읽는 사람은 학부모입니다.
 
 ${COMMON_RULES}
-- overall(종합 평가)은 6~9문장으로 작성합니다: 이번 시험에서의 성취(점수·석차·표준점수 흐름) → 수업에서 관찰된 강점(displayKeywords 반영) → 이번 시험에서 드러난 보완점(weakItems·weaveKeywords를 다듬어 반영) → 다음 달 학습 방향과 격려.
+- overall(종합 평가)은 6~9문장으로 작성합니다: 이번 시험에서의 성취(점수·학원 평균 대비·표준점수 흐름) → 수업에서 관찰된 강점(displayKeywords 반영) → 이번 시험에서 드러난 보완점(weakItems·weaveKeywords를 다듬어 반영) → 다음 달 학습 방향과 격려.
 - areas는 입력으로 받은 areas의 **모든 영역**에 대해 하나씩, 순서를 유지해 작성합니다. area 값은 받은 그대로 돌려줍니다.
 - 각 영역 서술은 3~5문장입니다. "N문항 중 M문항을 맞혔습니다"처럼 그 영역의 득점 사실로 시작한 뒤, contents(세부 유형별 성취)를 근거로 무엇을 잘했고 무엇이 아쉬운지 구체적으로 씁니다.
 - 성취율이 반 평균보다 낮은 영역은 감추지 말고 무엇을 보완할지 분명히 적되, 학부모가 읽기에 건설적인 표현을 씁니다.
