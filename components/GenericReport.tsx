@@ -517,16 +517,21 @@ export default function GenericReport({
           <section className="analysis-card">
             <div className="card-title-row">
               <h4>우선 복습 문항</h4>
-              <span>틀린 문항 중 반 정답률이 낮은 순</span>
+              <span>틀린 문항 중 반 정답률이 높은 순</span>
             </div>
             <table className="report-table">
               <thead>
                 <tr><th>문항</th><th>영역</th><th>내 표기</th><th>정답</th><th>배점</th><th>반 정답률 · 난이도</th></tr>
               </thead>
               <tbody>
+                {/*
+                  반 정답률이 높은 것부터 — 남들은 다 맞힌 문항을 놓친 것이 먼저다.
+                  그 문항은 조금만 손보면 바로 점수가 되고, 반 정답률이 낮은 문항은
+                  어차피 어려웠던 것이라 뒤로 미뤄도 된다. 아래 설명과 같은 순서다.
+                */}
                 {wrongItems
                   .slice()
-                  .sort((a, b) => a.correctRate - b.correctRate)
+                  .sort((a, b) => b.correctRate - a.correctRate)
                   .slice(0, 8)
                   .map((item) => (
                     <tr key={item.no}>
