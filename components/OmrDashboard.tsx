@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
+import { canDeleteOwned } from "@/lib/ownership";
 import FilterBar, { type FilterGroup } from "@/components/FilterBar";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
 import {
@@ -343,7 +344,7 @@ export default function OmrDashboard({
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/send`}>
                           발송
                         </Link>
-                        {canDelete ? (
+                        {canDelete && canDeleteOwned({ ...currentUser, permissions: { deleteReports: true } }, exam.createdByUsername) ? (
                           <button
                             className="button tiny danger"
                             disabled={busy === exam.id}

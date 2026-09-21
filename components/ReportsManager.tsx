@@ -1,5 +1,7 @@
 "use client";
 
+import { canDeleteOwned, NOT_OWNER_MESSAGE } from "@/lib/ownership";
+
 import { useMemo, useState } from "react";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import FilterBar, { type FilterGroup } from "@/components/FilterBar";
@@ -242,8 +244,17 @@ export default function ReportsManager({
   }
 
   /** 한 시험의 묶음을 통째로 지운다(같은 시험을 여러 번 올렸으면 여럿) */
+  /** 이 성적표(묶음)를 내가 지울 수 있는가 — 만든 사람 또는 총괄 */
+  const canDeleteRow = (report: AdminReport) =>
+    canDeleteOwned(
+      { username: currentUser.username, role: currentUser.role, permissions },
+      report.createdByUsername,
+    );
+  const canDeleteGroup = (group: ReportGroup) => group.rows.every(canDeleteRow);
+
   async function deleteGroup(group: ReportGroup) {
     if (!permissions.deleteReports) return setError("성적표 삭제 권한이 없습니다.");
+    if (!canDeleteGroup(group)) return setError(NOT_OWNER_MESSAGE);
     const confirmed = window.confirm(
       `‘${group.label}’의 성적표 ${group.rows.length}건을 모두 삭제할까요?\n` +
         "학생 명단과 모든 기존 링크가 함께 삭제되며 복구할 수 없습니다.",
@@ -353,6 +364,7 @@ export default function ReportsManager({
 
   async function deleteReport(report: AdminReport) {
     if (!permissions.deleteReports) return setError("성적표 삭제 권한이 없습니다.");
+    if (!canDeleteRow(report)) return setError(NOT_OWNER_MESSAGE);
     const confirmed = window.confirm(
       `${report.studentName} 학생의 성적표를 완전히 삭제할까요?\n삭제 후 기존 웹링크는 즉시 열리지 않으며 복구할 수 없습니다.`,
     );
@@ -372,7 +384,8 @@ export default function ReportsManager({
 
 
   async function deleteAllReports() {
-    if (!permissions.deleteReports || !reports.length) return;
+    // 남의 것까지 한꺼번에 지우므로 총괄만
+    if (currentUser.role !== "admin" || !reports.length) return;
     const typed = window.prompt(
       `현재 저장된 성적표 ${reports.length}건과 모든 링크를 완전히 삭제합니다.\n계속하려면 ‘전체삭제’를 입력하세요.`,
     );
@@ -409,7 +422,7 @@ export default function ReportsManager({
             </div>
             <div className="toolbar">
               {permissions.exportReports ? <a className="button secondary" href="/api/admin/export">전체 CSV</a> : null}
-              {permissions.deleteReports ? <button className="button danger" onClick={deleteAllReports} disabled={!reports.length}>전체삭제</button> : null}
+              {currentUser.role === "admin" ? <button className="button danger" onClick={deleteAllReports} disabled={!reports.length}>전체삭제</button> : null}
             </div>
           </div>
 
@@ -478,7 +491,7 @@ export default function ReportsManager({
                             <span className="muted">
                               {new Date(group.latestAt).toLocaleDateString("ko-KR")}
                             </span>
-                            {permissions.deleteReports ? (
+                            {permissions.deleteReports && canDeleteGroup(group) ? (
                               <button className="inline-delete" onClick={() => deleteGroup(group)}>
                                 이 시험 삭제
                               </button>
@@ -501,7 +514,7 @@ export default function ReportsManager({
                               <a className="button tiny ghost" href={`${report.url}?layout=a4`} target="_blank" rel="noreferrer">A4</a>
                               <button className="button tiny secondary" onClick={() => copyLink(report.url, report.id)}>{copied === report.id ? "복사됨" : "복사"}</button>
                               {permissions.manageReports ? <><button className="button tiny ghost" onClick={() => changeReport(report, report.active ? "deactivate" : "activate")}>{report.active ? "중지" : "활성화"}</button><button className="button tiny ghost" onClick={() => changeReport(report, "regenerate")}>새 링크</button></> : null}
-                              {permissions.deleteReports ? <button className="button tiny danger" onClick={() => deleteReport(report)}>삭제</button> : null}
+                              {permissions.deleteReports && canDeleteRow(report) ? <button className="button tiny danger" onClick={() => deleteReport(report)}>삭제</button> : null}
                             </div></td>
                           </tr>
                         ))

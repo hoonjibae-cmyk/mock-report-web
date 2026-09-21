@@ -19,6 +19,8 @@ export interface AdminReportListItem {
   lastViewedAt: string | null;
   createdAt: string;
   createdByName: string;
+  /** 묶음을 만든 계정 — 삭제는 만든 사람과 총괄만 할 수 있다 */
+  createdByUsername: string | null;
   /**
    * 이 성적표가 속한 OMR 시험의 유형. 전국 모의고사 엑셀로 만든 성적표는
    * 연결된 시험이 없어(exam_id null) 국영수 모의고사로 본다.
@@ -37,7 +39,7 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
   const { data, error } = await supabase
     .from("student_reports")
     .select(
-      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name),exams(exam_type)",
+      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name,created_by_username),exams(exam_type)",
     )
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -59,6 +61,7 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
     lastViewedAt: row.last_viewed_at,
     createdAt: row.created_at,
     createdByName: row.report_batches?.created_by_name ?? "관리자",
+    createdByUsername: row.report_batches?.created_by_username ?? null,
     // PostgREST는 관계를 객체 또는 배열로 돌려줄 수 있어 둘 다 받는다.
     // 연결된 시험이 없는 성적표(전국 모의고사 엑셀)는 국영수로 본다.
     examType: examTypeOf(row.exams),
