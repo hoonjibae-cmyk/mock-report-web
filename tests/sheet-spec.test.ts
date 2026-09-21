@@ -39,6 +39,7 @@ function exam(over: Partial<OmrExam> = {}, cfg: OmrConfig = {}): OmrExam {
     gradeCuts: [],
     useTeacherComment: false,
     createdByName: "김선생",
+    createdByUsername: "teacher",
     createdAt: "2026-09-08T01:00:00.000Z",
     ...over,
   };

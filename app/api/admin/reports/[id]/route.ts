@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { createPublicToken } from "@/lib/crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { canDeleteOwned, NOT_OWNER_MESSAGE } from "@/lib/ownership";
 import { siteBaseUrl } from "@/lib/utils";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -45,11 +46,17 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   try {
     const { data: report, error: readError } = await supabase
       .from("student_reports")
-      .select("id,batch_id,student_name")
+      .select("id,batch_id,student_name,report_batches(created_by_username)")
       .eq("id", id)
       .maybeSingle();
     if (readError) throw readError;
     if (!report) return NextResponse.json({ error: "삭제할 성적표를 찾을 수 없습니다." }, { status: 404 });
+    // 성적표의 주인은 그 묶음을 만든 사람이다. PostgREST 는 관계를 객체 또는 배열로 준다.
+    const batchRel = Array.isArray(report.report_batches) ? report.report_batches[0] : report.report_batches;
+    const owner = (batchRel as { created_by_username?: string | null } | null)?.created_by_username ?? null;
+    if (!canDeleteOwned(auth.user, owner)) {
+      return NextResponse.json({ error: NOT_OWNER_MESSAGE }, { status: 403 });
+    }
 
     const { error: deleteError } = await supabase.from("student_reports").delete().eq("id", id);
     if (deleteError) throw deleteError;

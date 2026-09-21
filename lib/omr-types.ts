@@ -144,6 +144,8 @@ export interface OmrExam {
   gradeCuts: Array<{ grade: number; min: number }>;
   useTeacherComment: boolean;
   createdByName: string | null;
+  /** 만든 계정 — 삭제는 만든 사람과 총괄만 할 수 있다(lib/ownership.ts) */
+  createdByUsername: string | null;
   createdAt: string;
 }
 

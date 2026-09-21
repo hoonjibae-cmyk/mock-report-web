@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { authorizeApi } from "@/lib/api-auth";
+import { authorizeAdminApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
+/** 전체 삭제는 남의 것까지 한꺼번에 지우므로 총괄만 할 수 있다 */
 export async function DELETE() {
-  const auth = await authorizeApi("deleteReports");
+  const auth = await authorizeAdminApi();
   if (auth.response) return auth.response;
 
   const supabase = getSupabaseAdmin();
