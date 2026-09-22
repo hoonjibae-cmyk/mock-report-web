@@ -37,6 +37,8 @@ export interface AppSettings {
   commentStyle: CommentStyle;
   /** 알림톡 시험 발송을 받을 번호(하이픈 없는 숫자) */
   testPhone: string;
+  /** 월말평가 검토 요청이 올라갈 슬랙 채널 ID(예: C0123ABCD). 비어 있으면 알림 없이 상태만 저장 */
+  reviewChannel: string;
   /** 설정 테이블을 읽지 못해 기본값으로 동작 중인지(마이그레이션 안내용) */
   storageReady: boolean;
 }
@@ -84,7 +86,7 @@ export async function readSettings(): Promise<AppSettings> {
     const { data, error } = await supabase
       .from("app_settings")
       .select("key,value")
-      .in("key", [AI_MODEL_KEY, COMMENT_STYLE_KEY, TEST_PHONE_KEY]);
+      .in("key", [AI_MODEL_KEY, COMMENT_STYLE_KEY, TEST_PHONE_KEY, REVIEW_CHANNEL_KEY]);
     if (error) throw new Error(error.message);
     const byKey = new Map((data ?? []).map((row) => [row.key as string, row.value]));
     return {
@@ -95,6 +97,7 @@ export async function readSettings(): Promise<AppSettings> {
       testPhone:
         normalizeTestPhone((byKey.get(TEST_PHONE_KEY) as { phone?: unknown } | undefined)?.phone) ??
         DEFAULT_TEST_PHONE,
+      reviewChannel: normalizeChannel((byKey.get(REVIEW_CHANNEL_KEY) as { channel?: unknown } | undefined)?.channel),
       storageReady: true,
     };
   } catch {
@@ -102,9 +105,46 @@ export async function readSettings(): Promise<AppSettings> {
       aiModel: DEFAULT_AI_MODEL,
       commentStyle: DEFAULT_COMMENT_STYLE,
       testPhone: DEFAULT_TEST_PHONE,
+      reviewChannel: "",
       storageReady: false,
     };
   }
+}
+
+const REVIEW_CHANNEL_KEY = "review_channel";
+
+/** 슬랙 채널 ID 또는 #이름 — 앞뒤 공백만 걷어낸다. 비우면 알림을 끄는 뜻이다 */
+function normalizeChannel(value: unknown): string {
+  return String(value ?? "").trim().slice(0, 80);
+}
+
+/** 월말평가 검토 요청이 올라갈 슬랙 채널 */
+export async function getReviewChannel(): Promise<string> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", REVIEW_CHANNEL_KEY)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return normalizeChannel((data?.value as { channel?: unknown } | null)?.channel);
+  } catch {
+    return "";
+  }
+}
+
+export async function setReviewChannel(value: unknown, updatedBy?: string): Promise<string> {
+  const channel = normalizeChannel(value);
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert(
+      { key: REVIEW_CHANNEL_KEY, value: { channel }, updated_at: new Date().toISOString(), updated_by: updatedBy ?? null },
+      { onConflict: "key" },
+    );
+  if (error) throw new Error(`설정 저장 실패: ${error.message}`);
+  return channel;
 }
 
 /** 휴대전화 번호만 통과시킨다 — 알림톡은 유선번호로 가지 않는다 */

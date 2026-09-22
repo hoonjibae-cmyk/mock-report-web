@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getVisibleExam } from "@/lib/exam-access";
+import { sendAllowed } from "@/lib/review";
 import { lookupStudents, directoryConfigured } from "@/lib/student-directory";
 import { messagingConfigured, sendAlimtalk, MessagingNotConfiguredError } from "@/lib/messaging/solapi";
 import { listExamMessages, recordMessages, type RecipientType } from "@/lib/report-messages";
@@ -122,6 +123,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+    // 월말평가는 운영진 컨펌 전에 나가지 않는다 — 화면이 버튼을 막아도 서버가 한 번 더 막는다
+    if (!sendAllowed(exam)) {
+      return NextResponse.json(
+        { error: "운영진 컨펌 전에는 알림톡을 보낼 수 없습니다. '운영진 검토 요청'을 누르고 컨펌을 기다려 주세요." },
+        { status: 403 },
+      );
+    }
 
     const siteUrl = siteBaseUrl();
     if (!/^https:\/\//.test(siteUrl)) {

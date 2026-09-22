@@ -19,6 +19,7 @@ export default async function SettingsPage() {
       initialAiModel={settings.aiModel}
       initialCommentStyle={settings.commentStyle}
       initialTestPhone={settings.testPhone}
+      initialReviewChannel={settings.reviewChannel}
       storageReady={settings.storageReady}
       directoryConfigured={directoryConfigured()}
       canEdit

@@ -10,6 +10,8 @@ interface Props {
   initialAiModel: AiModelId;
   /** 알림톡 시험 발송을 받을 번호(하이픈 없는 숫자) */
   initialTestPhone: string;
+  /** 월말평가 검토 요청이 올라갈 슬랙 채널 ID */
+  initialReviewChannel: string;
   /** 새 시험에 기본으로 잡을 담임 의견 작성 방식 */
   initialCommentStyle: CommentStyle;
   /** 설정 저장소(app_settings 테이블)가 준비되어 있는가 */
@@ -31,6 +33,7 @@ function formatPhone(value: string): string {
 export default function SettingsPanel({
   initialAiModel,
   initialTestPhone,
+  initialReviewChannel,
   initialCommentStyle,
   storageReady,
   directoryConfigured,
@@ -46,6 +49,29 @@ export default function SettingsPanel({
   const [directoryChecking, setDirectoryChecking] = useState(false);
   // 알림톡 시험 발송 — 학부모 60명에게 보내기 전에 한 번 받아 본다
   const [testPhone, setTestPhone] = useState(formatPhone(initialTestPhone));
+  const [reviewChannel, setReviewChannel] = useState(initialReviewChannel);
+  const [channelSaving, setChannelSaving] = useState(false);
+  const [channelStatus, setChannelStatus] = useState("");
+
+  async function saveReviewChannel() {
+    setChannelSaving(true);
+    setChannelStatus("");
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewChannel }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "저장하지 못했습니다.");
+      setReviewChannel(data.settings?.reviewChannel ?? reviewChannel);
+      setChannelStatus(data.settings?.reviewChannel ? "저장했습니다. 이제 검토 요청이 이 채널로 갑니다." : "비웠습니다. 검토 요청은 상태만 저장되고 슬랙 알림은 나가지 않습니다.");
+    } catch (err) {
+      setChannelStatus(err instanceof Error ? err.message : "저장하지 못했습니다.");
+    } finally {
+      setChannelSaving(false);
+    }
+  }
   const [testSaving, setTestSaving] = useState(false);
   const [testSending, setTestSending] = useState(false);
   const [testStatus, setTestStatus] = useState("");
@@ -294,6 +320,40 @@ export default function SettingsPanel({
             </p>
           </div>
         )}
+      </div>
+
+      {/*
+        월말평가 검토 요청이 올라갈 곳. 채널 ID 는 슬랙에서 채널 → 세부정보 맨 아래에
+        있다(C 로 시작). 봇이 그 채널에 초대되어 있어야 글을 올릴 수 있다.
+      */}
+      <div className="panel" style={{ marginTop: 20 }}>
+        <div className="section-heading wrap">
+          <div>
+            <p className="eyebrow">REVIEW</p>
+            <h2>월말평가 운영진 검토 채널</h2>
+            <p className="subtle">
+              담임 선생님이 <strong>운영진 검토 요청</strong>을 누르면 이 슬랙 채널에 알림이 갑니다.
+              채널 ID(C로 시작)를 넣고, 인사 프로그램의 슬랙 봇을 그 채널에 초대해 두세요. 비워 두면
+              알림 없이 검토 상태만 저장됩니다.
+            </p>
+          </div>
+        </div>
+        <div className="test-send">
+          <label htmlFor="review-channel">슬랙 채널 ID</label>
+          <div className="test-send-row">
+            <input
+              id="review-channel"
+              value={reviewChannel}
+              placeholder="예: C0123ABCDEF"
+              disabled={!canEdit}
+              onChange={(e) => setReviewChannel(e.target.value)}
+            />
+            <button className="button secondary" type="button" disabled={!canEdit || channelSaving} onClick={saveReviewChannel}>
+              {channelSaving ? "저장 중…" : "채널 저장"}
+            </button>
+          </div>
+          {channelStatus ? <p className="status-message">{channelStatus}</p> : null}
+        </div>
       </div>
 
       {/*

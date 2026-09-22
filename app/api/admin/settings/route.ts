@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { readSettings, setAiModel, setCommentStyle, setTestPhone } from "@/lib/app-settings";
+import { readSettings, setAiModel, setCommentStyle, setReviewChannel, setTestPhone } from "@/lib/app-settings";
 
 export const runtime = "nodejs";
 
@@ -25,6 +25,10 @@ export async function PUT(request: Request) {
     if (body.testPhone !== undefined) {
       const testPhone = await setTestPhone(body.testPhone, auth.user.username);
       return NextResponse.json({ ok: true, settings: { testPhone, storageReady: true } });
+    }
+    if (body.reviewChannel !== undefined) {
+      const reviewChannel = await setReviewChannel(body.reviewChannel, auth.user.username);
+      return NextResponse.json({ ok: true, settings: { reviewChannel, storageReady: true } });
     }
     if (body.commentStyle !== undefined) {
       const commentStyle = await setCommentStyle(body.commentStyle, auth.user.username);

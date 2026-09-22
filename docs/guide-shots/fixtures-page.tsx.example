@@ -16,6 +16,7 @@ import OmrSendPanel from "@/components/OmrSendPanel";
 import EssayGrader from "@/components/EssayGrader";
 import type { OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
+import { EMPTY_REVIEW } from "@/lib/review";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ function exam(over: Partial<OmrExam> = {}): OmrExam {
     useTeacherComment: true,
     createdByName: "김선생",
     createdByUsername: "teacher",
+    review: EMPTY_REVIEW,
     createdAt: "2026-09-08T01:00:00.000Z",
     ...over,
   };

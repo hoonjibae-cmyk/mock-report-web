@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { sheetSpecFor } from "../lib/omr-exams";
+import { EMPTY_REVIEW } from "../lib/review";
 import {
   defaultPerColumn,
   defaultSheetTitle,
@@ -40,6 +41,7 @@ function exam(over: Partial<OmrExam> = {}, cfg: OmrConfig = {}): OmrExam {
     useTeacherComment: false,
     createdByName: "김선생",
     createdByUsername: "teacher",
+    review: EMPTY_REVIEW,
     createdAt: "2026-09-08T01:00:00.000Z",
     ...over,
   };

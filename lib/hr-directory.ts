@@ -104,6 +104,26 @@ export interface NotifyResult {
  * 실패해도 예외를 던지지 않는다 — 안내 한 건이 안 갔다고 동기화 전체를
  * 멈출 이유가 없고, 못 보낸 사람은 다음에 다시 시도한다.
  */
+/** 슬랙 채널(예: 운영진 채널)에 글을 올린다 — 사람이 아니라 방에 보낸다 */
+export async function notifyChannel(channel: string, text: string): Promise<NotifyResult> {
+  try {
+    const res = await fetch(`${hrBase()}/api/slack/notify`, {
+      method: "POST",
+      headers: { ...hrHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ channel, text }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const data = (await res.json().catch(() => ({}))) as NotifyResult;
+    return { delivered: data.delivered === true, reason: data.reason, error: data.error };
+  } catch (error) {
+    return {
+      delivered: false,
+      reason: "network",
+      error: error instanceof Error ? error.message : "슬랙 채널 알림을 보내지 못했습니다.",
+    };
+  }
+}
+
 export async function notifyStaff(empNo: string, text: string): Promise<NotifyResult> {
   try {
     const res = await fetch(`${hrBase()}/api/slack/notify`, {
