@@ -205,6 +205,26 @@ export default async function Shots({
   if (s === "8") {
     return <OmrReportBuilder exam={e} initialScans={SCANS.slice(0, 8)} setupError="" canCreate canExport />;
   }
-  if (s === "9") return <OmrSendPanel exam={e} canSend setupError="" />;
+  if (s === "9") {
+    return (
+      <OmrSendPanel
+        exam={exam({
+          examType: "monthly",
+          title: "9월 월말평가 · 중2",
+          review: {
+            status: "requested",
+            requestedAt: "2026-09-22T03:20:00.000Z",
+            requestedBy: "teacher",
+            requestedByName: "김선생",
+            approvedAt: null,
+            approvedBy: null,
+            approvedByName: null,
+          },
+        })}
+        canSend
+        setupError=""
+      />
+    );
+  }
   return <p>알 수 없는 화면: {s}</p>;
 }

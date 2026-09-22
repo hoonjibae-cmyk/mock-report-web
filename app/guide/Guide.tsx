@@ -12,7 +12,7 @@ type Step = (typeof data.steps)[number];
 const markers: Record<string, number[][]> = {
   create: [[2,21],[49,35],[49,53]], key: [[3,27],[3,42],[88,10]],
   scan: [[3,27],[33,27],[3,50]], reports: [[38,11],[78,24],[90,24]],
-  comments: [[2,25],[2,60],[90,39]], send: [[2,18],[2,36],[88,82]],
+  comments: [[2,25],[2,60],[90,39]], send: [[2,24],[84,53],[93,53]],
 };
 function Screen({ step }: { step: Step }) {
   return <div className={s.imageCanvas}><Image src={step.image} alt={step.caption} width={step.width} height={step.height} sizes="(max-width: 800px) 100vw, 1200px" unoptimized loading="lazy" />{markers[step.id]?.map(([x,y],i) => <span key={i} className={s.marker} style={{left:`${x}%`,top:`${y}%`}} aria-hidden>{i+1}</span>)}</div>;
@@ -70,7 +70,7 @@ export default function Guide() {
           <a href="#help" aria-current={active === "help" ? "location" : undefined}>막혔을 때 · FAQ</a>
         </nav>
         <div className={s.navTip}><b>이 세 가지만 기억하세요</b><p>출결번호 <strong>5자리</strong><br/>스캔 <strong>흑백 · 200dpi</strong><br/>PDF <strong>30쪽 이하</strong></p></div>
-        <small className={s.version}>화면 확인 2026.09.09 · v1.25.1</small>
+        <small className={s.version}>화면 확인 2026.09.22 · v1.33.1</small>
       </aside>
       <main id="content" className={s.main}>
         <section id="start" data-guide-section className={s.hero}>
@@ -83,7 +83,7 @@ export default function Guide() {
         <section className={s.startCard}>
           <div className={s.startIcon} aria-hidden>↗</div><div><h2>먼저, 학원 슬랙 계정으로 로그인하세요.</h2><p><a href="/login">로그인 화면</a>에서 <b>슬랙으로 로그인</b>을 누르세요. 로그인 후 왼쪽 메뉴의 <b>OMR 시험</b>에서 시작합니다.</p><small>서술형이 없으면 6단계, 담임 의견을 쓰지 않으면 8단계는 건너뛰세요.</small></div>
         </section>
-        <div className={s.readingNote}><span aria-hidden>i</span><p><b>화면은 눌러서 크게 볼 수 있어요.</b> 실제 캡처 6장과 가상 데이터로 만든 기존 예시 3장을 구분해 표시했습니다. 성적표를 먼저 만든 뒤 학생별 담임 의견을 작성하세요.</p></div>
+        <div className={s.readingNote}><span aria-hidden>i</span><p><b>화면은 눌러서 크게 볼 수 있어요.</b> 실제 캡처 6장과 가상 데이터로 만든 기존 예시 3장을 구분해 표시했습니다. 성적표를 먼저 만든 뒤 학생별 담임 의견을 작성하세요. 담임 의견을 사용하는 월말평가는 운영진 컨펌 후 알림톡을 보냅니다.</p></div>
         {data.steps.map((step, index) => <section key={step.id} id={step.id} data-guide-section className={s.step}>
           <div className={s.stepHead}><span className={s.number}>{String(index+1).padStart(2,"0")}</span><div><div className={s.stepMeta}>{step.group}{step.optional && <span>{step.optional}</span>}</div><h2>{step.title}</h2></div></div>
           <p className={s.intro}>{step.intro}</p>
@@ -103,11 +103,11 @@ export default function Guide() {
         </section>)}
         <section id="checklist" data-guide-section className={s.checklist}>
           <span className={s.eyebrow}>BEFORE YOU SEND</span><h2>보내기 전, 마지막 확인.</h2><p>실제 발송 화면에서 아래 항목을 확인해 주세요.</p>
-          {['학생 이름과 출결번호가 정확합니다.','정답·검수·주관식 채점이 모두 끝났습니다.','성적표의 점수와 담임 의견을 확인했습니다.','시험명·응시일·수신자와 연락처를 확인했습니다.','이미 보낸 대상의 중복 발송 여부를 확인했습니다.'].map(item => <label key={item}><input type="checkbox" checked={checked.includes(item)} onChange={e => setChecked(prev => e.target.checked ? [...prev,item] : prev.filter(v => v !== item))}/><span>{item}</span></label>)}
-          <small aria-live="polite">{checked.length} / 5개 확인 · 이 체크는 가이드 안에서만 적용되며 발송하지 않습니다.</small>
+          {['학생 이름과 출결번호가 정확합니다.','정답·검수·주관식 채점이 모두 끝났습니다.','성적표의 점수와 담임 의견을 확인했습니다.','담임 의견을 사용하는 월말평가는 운영진 컨펌을 받았습니다.','시험명·응시일·수신자와 연락처를 확인했습니다.','이미 보낸 대상의 중복 발송 여부를 확인했습니다.'].map(item => <label key={item}><input type="checkbox" checked={checked.includes(item)} onChange={e => setChecked(prev => e.target.checked ? [...prev,item] : prev.filter(v => v !== item))}/><span>{item}</span></label>)}
+          <small aria-live="polite">{checked.length} / 6개 확인 · 이 체크는 가이드 안에서만 적용되며 발송하지 않습니다.</small>
         </section>
         <section id="help" data-guide-section className={s.help}><span className={s.overline}>QUICK HELP</span><h2>어디에서 막히셨나요?</h2><label className={s.search}><span aria-hidden>⌕</span><input value={query} onChange={e => setQuery(e.target.value)} placeholder="예: 성적표, 수험번호, 엑셀" aria-label="자주 묻는 질문 검색"/>{query && <button onClick={() => setQuery("")} aria-label="검색어 지우기">×</button>}</label><p className={s.result} aria-live="polite">{faqs.length}개의 도움말</p>{faqs.map(f => <details key={f.q} className={s.faq}><summary>{f.q}<span aria-hidden>+</span></summary><p>{f.a}</p><a href={`#${f.step}`}>해당 단계로 이동 →</a></details>)}{!faqs.length && <p className={s.empty}>일치하는 도움말이 없습니다. 더 짧은 단어로 검색하거나 운영진에게 문의해 주세요.</p>}</section>
-        <footer className={s.footer}><b>목동유쌤영어학원 · OMR 리포트</b><p>화면이 다르거나 해결되지 않는 문제가 있으면 시험 제목과 오류 문구를 운영진에게 알려 주세요.</p><small>기존 사용설명서와 실제 프로그램(v1.25.1), 소스 코드 기준으로 정리했습니다. · 2026.09.09</small><a href="#start">처음으로 ↑</a></footer>
+        <footer className={s.footer}><b>목동유쌤영어학원 · OMR 리포트</b><p>화면이 다르거나 해결되지 않는 문제가 있으면 시험 제목과 오류 문구를 운영진에게 알려 주세요.</p><small>기존 사용설명서와 실제 프로그램(v1.33.1), 소스 코드 기준으로 정리했습니다. · 2026.09.22</small><a href="#start">처음으로 ↑</a></footer>
       </main>
     </div>
     <div className={s.mobileNav}><span>{count > 0 ? `${String(count).padStart(2,"0")} / 09` : "사용 가이드"}</span><a href="#start">목차 ↑</a><a href="#help">도움말</a></div>
