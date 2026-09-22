@@ -2,6 +2,7 @@
 
 import type { AnswerKeyValue } from "@/lib/omr-answers";
 import type { MockReference } from "@/lib/mock-reference";
+import type { ExamReview } from "@/lib/review";
 
 export type ExamType = "mock" | "saturday" | "monthly" | "placement" | "inclass";
 export type ReportFamily = "A_rich" | "B_english" | "C_generic";
@@ -147,6 +148,8 @@ export interface OmrExam {
   /** 만든 계정 — 삭제는 만든 사람과 총괄만 할 수 있다(lib/ownership.ts) */
   createdByUsername: string | null;
   createdAt: string;
+  /** 운영진 검토 상태 — 월말평가는 컨펌 전에 알림톡이 나가지 않는다(lib/review.ts) */
+  review: ExamReview;
 }
 
 // Python OMR API `/generate` 요청 스펙

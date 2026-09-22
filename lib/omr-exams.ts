@@ -1,6 +1,7 @@
 // 시험(exams) 저장소 — Supabase service-role 경유
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import type { ExamReview, ReviewStatus } from "@/lib/review";
 import type { AnswerKeyValue, MarkValue } from "@/lib/omr-answers";
 import type { MockReference } from "@/lib/mock-reference";
 import {
@@ -33,6 +34,13 @@ interface ExamRow {
   created_by_name: string | null;
   created_by_username: string | null;
   created_at: string;
+  review_status?: string | null;
+  review_requested_by?: string | null;
+  review_requested_by_name?: string | null;
+  review_requested_at?: string | null;
+  review_approved_by?: string | null;
+  review_approved_by_name?: string | null;
+  review_approved_at?: string | null;
 }
 
 /** 마이그레이션 미실행으로 컬럼이 없을 때, 실행할 파일을 알려준다. */
@@ -41,6 +49,7 @@ function describeExamDbError(message: string): string {
   if (missingColumn) {
     const column = missingColumn[1];
     const guide: Record<string, string> = {
+      review_status: "supabase/migration_v13_review.sql",
       question_meta: "supabase/migration_v2_omr.sql",
       points: "supabase/migration_v2_omr.sql",
       overview_comment: "supabase/migration_v2_omr.sql",
@@ -76,11 +85,22 @@ function mapExam(row: ExamRow): OmrExam {
     createdByName: row.created_by_name,
     createdByUsername: row.created_by_username ?? null,
     createdAt: row.created_at,
+    review: {
+      status: (["none", "requested", "approved"] as const).includes(row.review_status as ReviewStatus)
+        ? (row.review_status as ReviewStatus)
+        : "none",
+      requestedBy: row.review_requested_by ?? null,
+      requestedByName: row.review_requested_by_name ?? null,
+      requestedAt: row.review_requested_at ?? null,
+      approvedBy: row.review_approved_by ?? null,
+      approvedByName: row.review_approved_by_name ?? null,
+      approvedAt: row.review_approved_at ?? null,
+    },
   };
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -182,6 +202,29 @@ export async function updateMockReference(
         ? "시험 기반 정보 저장 공간이 아직 없습니다. Supabase → SQL Editor 에서 supabase/migration_v6_mock_reference.sql 을 실행해 주세요."
         : `시험 기반 정보 저장 실패: ${message}`,
     );
+  }
+  return mapExam(data as ExamRow);
+}
+
+/** 운영진 검토 상태 저장 */
+export async function updateExamReview(id: string, review: ExamReview): Promise<OmrExam> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("exams")
+    .update({
+      review_status: review.status,
+      review_requested_by: review.requestedBy,
+      review_requested_by_name: review.requestedByName,
+      review_requested_at: review.requestedAt,
+      review_approved_by: review.approvedBy,
+      review_approved_by_name: review.approvedByName,
+      review_approved_at: review.approvedAt,
+    })
+    .eq("id", id)
+    .select(SELECT)
+    .single();
+  if (error || !data) {
+    throw new Error(`검토 상태 저장 실패 — ${describeExamDbError(error?.message ?? "알 수 없는 오류")}`);
   }
   return mapExam(data as ExamRow);
 }

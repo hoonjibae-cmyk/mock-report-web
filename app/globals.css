@@ -2392,3 +2392,8 @@ body.report-layout-a4 .a4-report-root { display: block; }
   max-width: calc(100% - 20px);
 }
 .sheet-preview-badge.error { background: #b3261e; }
+
+/* 운영진 검토 게이트 — 상태가 색으로 먼저 읽히게 */
+.review-gate.none { border-left: 4px solid #d97706; }
+.review-gate.requested { border-left: 4px solid #1558b0; }
+.review-gate.approved { border-left: 4px solid #1a7f4b; }

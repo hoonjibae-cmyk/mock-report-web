@@ -19,6 +19,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import { ACADEMY_NAME, ACADEMY_PHONE, EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { RecipientType } from "@/lib/report-messages";
 import type { RecipientSlot, SendTarget, TargetCounts } from "@/lib/report-send";
+import { formatWhen, reviewRequired, sendAllowed, type ExamReview } from "@/lib/review";
 
 interface Setup {
   messagingConfigured: boolean;
@@ -109,6 +110,10 @@ export default function OmrSendPanel({
   const [examDateText, setExamDateText] = useState("");
 
   const [mode, setMode] = useState<SendMode>("parent");
+  // 운영진 검토(월말평가) — 컨펌 전에는 보내기 버튼이 잠긴다
+  const [review, setReview] = useState<ExamReview>(exam?.review ?? { status: "none", requestedBy: null, requestedByName: null, requestedAt: null, approvedBy: null, approvedByName: null, approvedAt: null });
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewNotices, setReviewNotices] = useState<string[]>([]);
   /** 고른 학생의 reportId — 한 학생을 고르면 모드에 따라 한 곳 또는 두 곳에 나간다 */
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -228,6 +233,37 @@ export default function OmrSendPanel({
     }
   }
 
+  async function requestReview() {
+    if (!exam) return;
+    const again = review.status === "approved";
+    const ok = window.confirm(
+      (again
+        ? "이미 컨펌된 시험입니다. 다시 요청하면 컨펌이 풀리고 알림톡 발송이 다시 잠깁니다.\n"
+        : "") +
+        "운영진 슬랙 채널에 검토 요청을 보냅니다. 운영진이 컨펌하면 슬랙으로 알려 드리고 알림톡 발송이 열립니다.\n\n진행할까요?",
+    );
+    if (!ok) return;
+    setReviewBusy(true);
+    setReviewNotices([]);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "검토 요청을 보내지 못했습니다.");
+      setReview(data.review);
+      setReviewNotices(data.notices ?? []);
+      setMessage("운영진에게 검토를 요청했습니다. 컨펌되면 슬랙으로 알려 드립니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "검토 요청을 보내지 못했습니다.");
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
   if (!exam) {
     return (
       <div className="admin-shell">
@@ -266,6 +302,9 @@ export default function OmrSendPanel({
   if (setup?.directoryError) blockers.push(setup.directoryError);
 
   const sample = pickedTargets[0] ?? sendable[0] ?? targets[0];
+  const needsReview = reviewRequired(exam.examType);
+  const reviewOk = sendAllowed({ examType: exam.examType, review });
+  const whenText = formatWhen;
   const modeSummary = (m: SendMode): string => {
     if (!counts) return "확인 중…";
     const p = counts.parent;
@@ -314,6 +353,46 @@ export default function OmrSendPanel({
           <p className="subtle">
             준비가 끝나기 전에도 아래에서 <strong>누구에게 나갈지와 문구</strong>는 확인할 수 있습니다.
           </p>
+        </section>
+      ) : null}
+
+      {/* 월말평가 — 담임 의견까지 쓴 뒤 운영진이 한 번 보고 컨펌해야 나간다 */}
+      {needsReview ? (
+        <section className={`panel review-gate ${review.status}`}>
+          <div className="section-heading wrap">
+            <div>
+              <p className="eyebrow">운영진 검토</p>
+              <h2>
+                {review.status === "approved"
+                  ? "컨펌됨 — 보낼 수 있습니다"
+                  : review.status === "requested"
+                    ? "검토 기다리는 중"
+                    : "운영진 검토가 필요합니다"}
+              </h2>
+              <p className="subtle">
+                {review.status === "approved"
+                  ? `${review.approvedByName} · ${whenText(review.approvedAt)} 컨펌. 요청: ${review.requestedByName} · ${whenText(review.requestedAt)}`
+                  : review.status === "requested"
+                    ? `${review.requestedByName} · ${whenText(review.requestedAt)} 요청. 운영진이 성적표를 확인하고 컨펌하면 슬랙으로 알려 드리고 이 화면의 발송이 열립니다.`
+                    : "월말평가 성적표는 담임 의견까지 쓴 뒤 운영진이 한 번 확인하고 나갑니다. 담임 의견을 저장했으면 검토를 요청해 주세요. 컨펌 전에는 알림톡 보내기가 잠겨 있습니다."}
+              </p>
+            </div>
+            {canSend ? (
+              <div className="toolbar" style={{ flexWrap: "wrap" }}>
+                <Link className="button ghost" href={`/admin/omr/${exam.id}/review`}>검토 화면 보기</Link>
+                <button
+                  className={`button ${review.status === "none" ? "primary" : "secondary"}`}
+                  disabled={reviewBusy}
+                  onClick={requestReview}
+                >
+                  {reviewBusy ? "요청 중…" : review.status === "none" ? "운영진 검토 요청" : "다시 요청"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {reviewNotices.map((n) => (
+            <p key={n} className="form-error block">{n}</p>
+          ))}
         </section>
       ) : null}
 
@@ -480,10 +559,11 @@ export default function OmrSendPanel({
             </p>
             <button
               className="button primary"
-              disabled={selections.length === 0 || sending || blockers.length > 0}
+              disabled={selections.length === 0 || sending || blockers.length > 0 || !reviewOk}
               onClick={send}
+              title={!reviewOk ? "운영진 컨펌 전에는 보낼 수 없습니다." : undefined}
             >
-              {sending ? "보내는 중…" : `알림톡 보내기 (${selections.length})`}
+              {sending ? "보내는 중…" : !reviewOk ? "운영진 컨펌 후 보낼 수 있습니다" : `알림톡 보내기 (${selections.length})`}
             </button>
           </div>
         ) : (
