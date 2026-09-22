@@ -4,6 +4,7 @@ import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getVisibleExam } from "@/lib/exam-access";
 import { getExamOverview } from "@/lib/omr-comments";
 import { listReviewStudents } from "@/lib/reports";
+import { canApproveReview } from "@/lib/review";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function OmrReviewPage(context: { params: Promise<{ id: str
       exam={exam}
       students={students}
       overview={{ status: overview?.status === "final" ? "final" : "draft", text: overview?.final ?? null }}
-      canApprove={user.role === "admin"}
+      canApprove={canApproveReview(user)}
     />
   );
 }

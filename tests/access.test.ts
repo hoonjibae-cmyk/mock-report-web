@@ -52,3 +52,11 @@ test("fallback 을 주지 않으면 반배치고사는 닫힌다", () => {
   assert.equal(DEFAULT_USER_PERMISSIONS.viewPlacement, false);
   assert.equal(normalizePermissions({}).viewPlacement, false);
 });
+
+test("월말평가 검토 컨펌은 경영지원만 기본으로 켜져 있다 — 교수부장은 계정 관리에서 켠다", () => {
+  assert.equal(defaultPermissionsFor("경영지원").approveReview, true);
+  assert.equal(defaultPermissionsFor("교수부").approveReview, false);
+  assert.equal(defaultPermissionsFor("교육운영팀").approveReview, false);
+  // 교수부장 계정에 켜 준 값은 저장된 값이 이긴다
+  assert.equal(normalizePermissions({ approveReview: true }, defaultPermissionsFor("교수부")).approveReview, true);
+});

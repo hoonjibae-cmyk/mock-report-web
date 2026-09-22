@@ -50,6 +50,11 @@ export function sendAllowed(exam: { examType: ExamType; review: Pick<ExamReview,
   return !reviewRequired(exam.examType) || exam.review.status === "approved";
 }
 
+/** 이 사람이 컨펌할 수 있는가 — 총괄이거나, 계정에 '월말평가 검토 컨펌'이 켜진 사람 */
+export function canApproveReview(user: { role: "admin" | "user"; permissions: { approveReview: boolean } }): boolean {
+  return user.role === "admin" || user.permissions.approveReview === true;
+}
+
 export interface Actor {
   username: string;
   displayName: string;
