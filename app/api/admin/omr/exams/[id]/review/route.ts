@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { authorizeAdminApi, authorizeApi } from "@/lib/api-auth";
+import { authorizeApi } from "@/lib/api-auth";
 import { getReviewChannel } from "@/lib/app-settings";
 import { getVisibleExam } from "@/lib/exam-access";
 import { hrConfigured, notifyChannel, notifyStaff } from "@/lib/hr-directory";
 import { updateExamReview } from "@/lib/omr-exams";
-import { reviewApprovedText, reviewRequestText, reviewRequired, transition } from "@/lib/review";
+import { canApproveReview, reviewApprovedText, reviewRequestText, reviewRequired, transition } from "@/lib/review";
 import { countExamStudents } from "@/lib/reports";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { siteBaseUrl } from "@/lib/utils";
@@ -26,9 +26,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const action = body.action === "approve" ? "approve" : body.action === "request" ? "request" : null;
   if (!action) return NextResponse.json({ error: "action 은 request 또는 approve 여야 합니다." }, { status: 400 });
 
-  // 컨펌은 총괄만, 요청은 성적표를 만드는 사람이면 누구나
-  const auth = action === "approve" ? await authorizeAdminApi() : await authorizeApi("createReports");
+  // 요청은 성적표를 만드는 사람이면 누구나. 컨펌은 총괄이거나 '월말평가 검토 컨펌'이 켜진 사람(교수부장 등).
+  const auth = await authorizeApi("createReports");
   if (auth.response) return auth.response;
+  if (action === "approve" && !canApproveReview(auth.user)) {
+    return NextResponse.json(
+      { error: "컨펌 권한이 없습니다. 계정 관리에서 '월말평가 검토 컨펌'이 켜진 사람만 컨펌할 수 있습니다." },
+      { status: 403 },
+    );
+  }
 
   try {
     const exam = await getVisibleExam(id);

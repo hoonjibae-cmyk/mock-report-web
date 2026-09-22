@@ -11,6 +11,7 @@ import test from "node:test";
 
 import {
   EMPTY_REVIEW,
+  canApproveReview,
   formatWhen,
   reviewRequired,
   sendAllowed,
@@ -85,4 +86,10 @@ test("시각 표기는 로케일과 무관하게 한국 시간 'YYYY-MM-DD HH:mm
   assert.equal(formatWhen("2026-09-22T01:10:00.000Z"), "2026-09-22 10:10");
   assert.equal(formatWhen(null), "");
   assert.equal(formatWhen("garbage"), "");
+});
+
+test("컨펌은 총괄이거나 '월말평가 검토 컨펌'이 켜진 사람만", () => {
+  assert.equal(canApproveReview({ role: "admin", permissions: { approveReview: false } }), true);
+  assert.equal(canApproveReview({ role: "user", permissions: { approveReview: true } }), true, "교수부장");
+  assert.equal(canApproveReview({ role: "user", permissions: { approveReview: false } }), false);
 });

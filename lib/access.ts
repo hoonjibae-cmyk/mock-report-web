@@ -6,6 +6,7 @@ export const USER_PERMISSION_KEYS = [
   "exportReports",
   "downloadTemplate",
   "viewPlacement",
+  "approveReview",
 ] as const;
 
 export type UserPermissionKey = (typeof USER_PERMISSION_KEYS)[number];
@@ -25,6 +26,13 @@ export interface UserPermissions {
    * 닫혀 있고, 계정 관리에서 사람을 골라 연다.
    */
   viewPlacement: boolean;
+  /**
+   * 월말평가 운영진 검토를 컨펌할 수 있는가.
+   *
+   * 컨펌하는 사람은 부서가 아니라 역할로 정해진다(교수부장처럼). 총괄은 기본으로
+   * 켜져 있고, 그 외에는 계정 관리에서 사람을 골라 켠다.
+   */
+  approveReview: boolean;
 }
 
 /**
@@ -45,6 +53,7 @@ export const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   downloadTemplate: true,
   // 부서를 모르면 닫는다 — 열어 두면 새어 나가고, 닫아 두면 요청이 온다
   viewPlacement: false,
+  approveReview: false,
 };
 
 export const ADMIN_PERMISSIONS: UserPermissions = {
@@ -55,6 +64,7 @@ export const ADMIN_PERMISSIONS: UserPermissions = {
   exportReports: true,
   downloadTemplate: true,
   viewPlacement: true,
+  approveReview: true,
 };
 
 export const PERMISSION_LABELS: Record<UserPermissionKey, string> = {
@@ -65,12 +75,18 @@ export const PERMISSION_LABELS: Record<UserPermissionKey, string> = {
   exportReports: "링크 CSV 다운로드",
   downloadTemplate: "입력 템플릿 다운로드",
   viewPlacement: "반배치고사 열람",
+  approveReview: "월말평가 검토 컨펌",
 };
 
 /** 부서를 알 때의 기본 권한 — 인사 연동으로 계정을 만들 때와, 값이 저장되지 않은 계정을 읽을 때 쓴다 */
 export function defaultPermissionsFor(department: unknown): UserPermissions {
   const dept = String(department ?? "").trim();
-  return { ...DEFAULT_USER_PERMISSIONS, viewPlacement: PLACEMENT_OPEN_DEPARTMENTS.has(dept) };
+  // 컨펌은 경영지원만 기본으로 켠다 — 교수부장 같은 역할은 계정 관리에서 사람에게 켠다
+  return {
+    ...DEFAULT_USER_PERMISSIONS,
+    viewPlacement: PLACEMENT_OPEN_DEPARTMENTS.has(dept),
+    approveReview: dept === "경영지원",
+  };
 }
 
 /**
@@ -95,5 +111,7 @@ export function normalizePermissions(
     downloadTemplate: source.downloadTemplate !== false,
     viewPlacement:
       typeof source.viewPlacement === "boolean" ? source.viewPlacement : fallback.viewPlacement,
+    approveReview:
+      typeof source.approveReview === "boolean" ? source.approveReview : fallback.approveReview,
   };
 }

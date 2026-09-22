@@ -11,7 +11,7 @@ interface Props {
   exam: OmrExam;
   students: ReviewStudentRow[];
   overview: { status: "draft" | "final"; text: string | null };
-  /** 컨펌은 총괄만 */
+  /** 컨펌 — 총괄이거나 계정에 '월말평가 검토 컨펌'이 켜진 사람(교수부장 등) */
   canApprove: boolean;
 }
 
