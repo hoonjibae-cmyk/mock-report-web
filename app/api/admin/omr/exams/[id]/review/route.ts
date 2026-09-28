@@ -3,8 +3,9 @@ import { authorizeApi } from "@/lib/api-auth";
 import { getReviewChannel } from "@/lib/app-settings";
 import { getVisibleExam } from "@/lib/exam-access";
 import { hrConfigured, notifyChannel, notifyStaff } from "@/lib/hr-directory";
+import { getExamOverview, parseTeacherComment, saveExamOverview, saveTeacherComment } from "@/lib/omr-comments";
 import { updateExamReview } from "@/lib/omr-exams";
-import { canApproveReview, reviewApprovedText, reviewRequestText, reviewRequired, transition } from "@/lib/review";
+import { canApproveReview, reviewApprovedText, reviewRequestText, reviewRequired, transition, type ReviewEdit } from "@/lib/review";
 import { countExamStudents } from "@/lib/reports";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { siteBaseUrl } from "@/lib/utils";
@@ -94,6 +95,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
               examTitle: exam.title,
               approverName: auth.user.displayName,
               link: `${base}/admin/omr/${id}/send`,
+              // 검수 중 고친 것이 있으면 담임이 슬랙에서 바로 본다
+              edits: saved.review.edits,
             }),
           );
           if (!result.delivered) {
@@ -110,5 +113,88 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       { error: error instanceof Error ? error.message : "검토 처리 오류" },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * 검수자가 그 자리에서 고친다 — 철자·띄어쓰기 같은 사소한 것.
+ *
+ * 검토 기다리는 중(requested)에만 고칠 수 있다. 컨펌된 뒤 고치면 담임이 모른 채
+ * 나가고, 요청 전에 고치면 담임이 아직 쓰는 글을 건드리는 셈이다. 고친 내역은
+ * 시험 행에 남겨 컨펌 DM에 실린다. 확정(final)된 글만 고친다 — 초안은 담임이
+ * 아직 다듬는 중이다.
+ *
+ *   PATCH { target: "overview", text } | { target: "student", reportId, text }
+ */
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  const auth = await authorizeApi("createReports");
+  if (auth.response) return auth.response;
+  if (!canApproveReview(auth.user)) {
+    return NextResponse.json({ error: "검수 권한이 없습니다. '월말평가 검토 컨펌'이 켜진 사람만 고칠 수 있습니다." }, { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const target = body.target === "overview" ? "overview" : body.target === "student" ? "student" : null;
+  const text = String(body.text ?? "").trim();
+  const reportId = typeof body.reportId === "string" ? body.reportId : null;
+  if (!target || !text) return NextResponse.json({ error: "고칠 대상과 내용이 필요합니다." }, { status: 400 });
+  if (text.length > 4000) return NextResponse.json({ error: "4000자 이하로 써 주세요." }, { status: 400 });
+  if (target === "student" && !reportId) return NextResponse.json({ error: "어느 학생인지(reportId)가 없습니다." }, { status: 400 });
+
+  try {
+    const exam = await getVisibleExam(id);
+    if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+    if (exam.review.status !== "requested") {
+      return NextResponse.json(
+        { error: "검토 기다리는 중일 때만 고칠 수 있습니다. 컨펌된 뒤라면 담임 선생님이 고쳐서 다시 요청해야 합니다." },
+        { status: 409 },
+      );
+    }
+
+    let before = "";
+    let studentName: string | null = null;
+    if (target === "overview") {
+      const overview = await getExamOverview(id);
+      if (overview.status !== "final" || !overview.final) {
+        return NextResponse.json({ error: "총평이 아직 확정되지 않았습니다. 담임 선생님이 확정한 뒤 고칠 수 있습니다." }, { status: 409 });
+      }
+      before = overview.final;
+      if (before.trim() === text) return NextResponse.json({ error: "바뀐 내용이 없습니다." }, { status: 400 });
+      await saveExamOverview(id, { ...overview, final: text });
+    } else {
+      const supabase = getSupabaseAdmin();
+      const { data: row, error } = await supabase
+        .from("student_reports")
+        .select("id,student_name,teacher_comment,exam_id")
+        .eq("id", reportId!)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!row || row.exam_id !== id) return NextResponse.json({ error: "이 시험의 성적표가 아닙니다." }, { status: 404 });
+      const comment = parseTeacherComment(row.teacher_comment);
+      if (comment.status !== "final" || !comment.personalFinal) {
+        return NextResponse.json({ error: "이 학생의 의견은 아직 확정되지 않았습니다. 담임 선생님이 확정한 뒤 고칠 수 있습니다." }, { status: 409 });
+      }
+      before = comment.personalFinal;
+      studentName = (row.student_name as string) ?? null;
+      if (before.trim() === text) return NextResponse.json({ error: "바뀐 내용이 없습니다." }, { status: 400 });
+      await saveTeacherComment(reportId!, { ...comment, personalFinal: text }, auth.user.displayName);
+    }
+
+    const edit: ReviewEdit = {
+      target,
+      reportId: target === "student" ? reportId : null,
+      studentName,
+      before,
+      after: text,
+      editedBy: auth.user.username,
+      editedByName: auth.user.displayName,
+      at: new Date().toISOString(),
+    };
+    const saved = await updateExamReview(id, { ...exam.review, edits: [...exam.review.edits, edit] });
+    return NextResponse.json({ ok: true, review: saved.review, edit });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "수정 저장 오류" }, { status: 500 });
   }
 }

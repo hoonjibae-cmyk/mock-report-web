@@ -1,7 +1,7 @@
 // 시험(exams) 저장소 — Supabase service-role 경유
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import type { ExamReview, ReviewStatus } from "@/lib/review";
+import type { ExamReview, ReviewEdit, ReviewStatus } from "@/lib/review";
 import type { AnswerKeyValue, MarkValue } from "@/lib/omr-answers";
 import type { MockReference } from "@/lib/mock-reference";
 import {
@@ -41,6 +41,7 @@ interface ExamRow {
   review_approved_by?: string | null;
   review_approved_by_name?: string | null;
   review_approved_at?: string | null;
+  review_edits?: unknown;
 }
 
 /** 마이그레이션 미실행으로 컬럼이 없을 때, 실행할 파일을 알려준다. */
@@ -50,6 +51,7 @@ function describeExamDbError(message: string): string {
     const column = missingColumn[1];
     const guide: Record<string, string> = {
       review_status: "supabase/migration_v13_review.sql",
+      review_edits: "supabase/migration_v14_review_edits.sql",
       question_meta: "supabase/migration_v2_omr.sql",
       points: "supabase/migration_v2_omr.sql",
       overview_comment: "supabase/migration_v2_omr.sql",
@@ -95,12 +97,13 @@ function mapExam(row: ExamRow): OmrExam {
       approvedBy: row.review_approved_by ?? null,
       approvedByName: row.review_approved_by_name ?? null,
       approvedAt: row.review_approved_at ?? null,
+      edits: Array.isArray(row.review_edits) ? (row.review_edits as ReviewEdit[]) : [],
     },
   };
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at,review_edits";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -219,6 +222,7 @@ export async function updateExamReview(id: string, review: ExamReview): Promise<
       review_approved_by: review.approvedBy,
       review_approved_by_name: review.approvedByName,
       review_approved_at: review.approvedAt,
+      review_edits: review.edits ?? [],
     })
     .eq("id", id)
     .select(SELECT)

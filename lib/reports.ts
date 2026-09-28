@@ -158,6 +158,8 @@ export interface ReviewStudentRow {
   commentStatus: "final" | "draft" | "none";
   /** 확정된 개별 의견의 앞부분 — 표에서 훑을 수 있게 */
   commentPreview: string | null;
+  /** 개별 의견 전문(확정·초안 모두) — 검수자가 그 자리에서 고칠 때 쓴다 */
+  commentText: string | null;
   viewCount: number;
   createdAt: string;
 }
@@ -196,6 +198,7 @@ export async function listReviewStudents(examId: string): Promise<ReviewStudentR
       max: isGenericReport(body) ? body.score.max : 0,
       commentStatus: text ? (comment.status === "final" ? "final" : "draft") : "none",
       commentPreview: text ? (text.length > 40 ? `${text.slice(0, 40)}…` : text) : null,
+      commentText: text || null,
       viewCount: (row.view_count as number) ?? 0,
       createdAt: row.created_at as string,
     });

@@ -12,7 +12,9 @@ import test from "node:test";
 import {
   EMPTY_REVIEW,
   canApproveReview,
+  describeEdits,
   formatWhen,
+  reviewApprovedText,
   reviewRequired,
   sendAllowed,
   transition,
@@ -73,6 +75,7 @@ test("컨펌 뒤에 다시 요청하면 컨펌이 풀린다 — 의견을 고쳤
     approvedBy: "boss",
     approvedByName: "경영지원",
     approvedAt: "2026-09-22T02:00:00.000Z",
+    edits: [],
   };
   const r = transition(approved, "request", teacher, "2026-09-22T03:00:00.000Z");
   assert.ok("review" in r);
@@ -92,4 +95,43 @@ test("컨펌은 총괄이거나 '월말평가 검토 컨펌'이 켜진 사람만
   assert.equal(canApproveReview({ role: "admin", permissions: { approveReview: false } }), true);
   assert.equal(canApproveReview({ role: "user", permissions: { approveReview: true } }), true, "교수부장");
   assert.equal(canApproveReview({ role: "user", permissions: { approveReview: false } }), false);
+});
+
+test("검수 중 고친 내역은 컨펌까지 남고, 새로 요청하면 비운다", () => {
+  const edit = { target: "student" as const, reportId: "r1", studentName: "강여울", before: "어휘 학습이 꾸준 합니다.", after: "어휘 학습이 꾸준합니다.", editedBy: "head", editedByName: "교수부장", at: "2026-09-22T01:30:00.000Z" };
+  const requested = { ...EMPTY_REVIEW, status: "requested" as const, requestedBy: "kim", requestedByName: "김선생", requestedAt: "2026-09-22T01:00:00.000Z", edits: [edit] };
+  const approved = transition(requested, "approve", { username: "head", displayName: "교수부장" });
+  assert.ok("review" in approved);
+  assert.equal(approved.review.edits.length, 1, "컨펌해도 고친 내역은 남아야 DM에 실린다");
+  const again = transition(approved.review, "request", teacher);
+  assert.ok("review" in again);
+  assert.equal(again.review.edits.length, 0, "새 회차는 빈 손으로 시작한다");
+});
+
+test("컨펌 DM에 고친 내역이 학생 이름과 전후 문장으로 실린다", () => {
+  const text = reviewApprovedText({
+    examTitle: "9월 월말평가",
+    approverName: "교수부장",
+    link: "https://report.yussam.com/admin/omr/x/send",
+    edits: [
+      { target: "student", reportId: "r1", studentName: "강여울", before: "꾸준 합니다", after: "꾸준합니다", editedBy: "h", editedByName: "교수부장", at: "" },
+      { target: "overview", reportId: null, studentName: null, before: "이번달", after: "이번 달", editedBy: "h", editedByName: "교수부장", at: "" },
+    ],
+  });
+  assert.match(text, /고친 내용 2건/);
+  assert.match(text, /강여울: “꾸준 합니다” → “꾸준합니다”/);
+  assert.match(text, /총평: “이번달” → “이번 달”/);
+});
+
+test("고친 내역이 없으면 DM은 예전과 같다", () => {
+  const text = reviewApprovedText({ examTitle: "9월 월말평가", approverName: "교수부장", link: "L" });
+  assert.doesNotMatch(text, /고친 내용/);
+});
+
+test("긴 문장은 앞부분만 싣고, 열 건이 넘으면 나머지 건수를 말한다", () => {
+  const long = "가".repeat(200);
+  const edits = Array.from({ length: 12 }, (_, i) => ({ target: "student" as const, reportId: `r${i}`, studentName: `학생${i}`, before: long, after: long + "!", editedBy: "h", editedByName: "h", at: "" }));
+  const text = describeEdits(edits);
+  assert.match(text, /외 2건/);
+  assert.ok(!text.includes("가".repeat(100)), "200자를 그대로 싣지 않는다");
 });

@@ -12,6 +12,19 @@ import type { ExamType } from "@/lib/omr-types";
 
 export type ReviewStatus = "none" | "requested" | "approved";
 
+/** 검수 중 고친 한 건 — 담임에게 무엇이 바뀌었는지 알려 주는 근거 */
+export interface ReviewEdit {
+  /** overview = 총평, student = 학생 개별 의견 */
+  target: "overview" | "student";
+  reportId: string | null;
+  studentName: string | null;
+  before: string;
+  after: string;
+  editedBy: string;
+  editedByName: string;
+  at: string;
+}
+
 export interface ExamReview {
   status: ReviewStatus;
   requestedBy: string | null;
@@ -20,6 +33,8 @@ export interface ExamReview {
   approvedBy: string | null;
   approvedByName: string | null;
   approvedAt: string | null;
+  /** 이번 검토 회차에 검수자가 고친 것들. 새로 요청하면 비운다 */
+  edits: ReviewEdit[];
 }
 
 export const EMPTY_REVIEW: ExamReview = {
@@ -30,6 +45,7 @@ export const EMPTY_REVIEW: ExamReview = {
   approvedBy: null,
   approvedByName: null,
   approvedAt: null,
+  edits: [],
 };
 
 /** 발송 전에 운영진 검토를 거쳐야 하는 유형 */
@@ -84,6 +100,8 @@ export function transition(
         approvedBy: null,
         approvedByName: null,
         approvedAt: null,
+        // 이전 회차의 수정은 이미 알려 준 것 — 새 회차는 빈 손으로 시작한다
+        edits: [],
       },
     };
   }
@@ -118,11 +136,38 @@ export function reviewRequestText(input: {
   );
 }
 
-/** 담임에게 보내는 컨펌 안내 DM */
-export function reviewApprovedText(input: { examTitle: string; approverName: string; link: string }): string {
+/** 슬랙에 한 줄로 실을 만큼만 — 길면 앞부분만 */
+function clip(text: string, max = 60): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+}
+
+/**
+ * 검수 중 고친 내역을 사람이 읽을 글로. 담임이 "뭐가 바뀌었지?"를 슬랙에서
+ * 바로 보게 한다. 열 건이 넘으면 나머지는 검토 화면에서 보라고 한다.
+ */
+export function describeEdits(edits: readonly ReviewEdit[], max = 10): string {
+  if (edits.length === 0) return "";
+  const lines = edits.slice(0, max).map((e) => {
+    const who = e.target === "overview" ? "총평" : (e.studentName ?? "학생");
+    return `• ${who}: “${clip(e.before)}” → “${clip(e.after)}”`;
+  });
+  const more = edits.length > max ? `\n• 외 ${edits.length - max}건 — 검토 화면에서 전부 볼 수 있습니다.` : "";
+  return `검수 중 고친 내용 ${edits.length}건:\n${lines.join("\n")}${more}`;
+}
+
+/** 담임에게 보내는 컨펌 안내 DM — 검수 중 고친 것이 있으면 함께 알린다 */
+export function reviewApprovedText(input: {
+  examTitle: string;
+  approverName: string;
+  link: string;
+  edits?: readonly ReviewEdit[];
+}): string {
+  const edited = describeEdits(input.edits ?? []);
   return (
     `✅ *${input.examTitle}* 성적표가 컨펌되었습니다 (${input.approverName}).\n` +
     `이제 알림톡을 보내실 수 있습니다.\n` +
+    (edited ? `\n${edited}\n` : "") +
     `${input.link}`
   );
 }
