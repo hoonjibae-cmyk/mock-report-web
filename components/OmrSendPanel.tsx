@@ -19,7 +19,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import { ACADEMY_NAME, ACADEMY_PHONE, EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { RecipientType } from "@/lib/report-messages";
 import type { RecipientSlot, SendTarget, TargetCounts } from "@/lib/report-send";
-import { formatWhen, reviewRequired, sendAllowed, type ExamReview } from "@/lib/review";
+import { EMPTY_REVIEW, formatWhen, reviewRequired, sendAllowed, type ExamReview } from "@/lib/review";
 
 interface Setup {
   messagingConfigured: boolean;
@@ -111,7 +111,7 @@ export default function OmrSendPanel({
 
   const [mode, setMode] = useState<SendMode>("parent");
   // 운영진 검토(월말평가) — 컨펌 전에는 보내기 버튼이 잠긴다
-  const [review, setReview] = useState<ExamReview>(exam?.review ?? { status: "none", requestedBy: null, requestedByName: null, requestedAt: null, approvedBy: null, approvedByName: null, approvedAt: null });
+  const [review, setReview] = useState<ExamReview>(exam?.review ?? EMPTY_REVIEW);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewNotices, setReviewNotices] = useState<string[]>([]);
   /** 고른 학생의 reportId — 한 학생을 고르면 모드에 따라 한 곳 또는 두 곳에 나간다 */
