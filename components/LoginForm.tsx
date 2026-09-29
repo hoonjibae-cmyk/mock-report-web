@@ -8,9 +8,11 @@ interface Props {
   slackReady: boolean;
   /** 슬랙에서 되돌아오며 실려 온 오류 */
   initialError?: string;
+  /** 로그인 뒤 갈 곳(이미 검사된 사이트 안 경로) */
+  next?: string;
 }
 
-export default function LoginForm({ slackReady, initialError = "" }: Props) {
+export default function LoginForm({ slackReady, initialError = "", next = "/admin" }: Props) {
   const router = useRouter();
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -33,7 +35,7 @@ export default function LoginForm({ slackReady, initialError = "" }: Props) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "로그인에 실패했습니다.");
-      router.replace("/admin");
+      router.replace(next);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "로그인에 실패했습니다.");
@@ -45,7 +47,7 @@ export default function LoginForm({ slackReady, initialError = "" }: Props) {
   if (!showPassword) {
     return (
       <div className="login-form">
-        <a className="button slack-login full" href="/api/auth/slack/start">
+        <a className="button slack-login full" href={`/api/auth/slack/start?next=${encodeURIComponent(next)}`}>
           <span className="slack-mark" aria-hidden="true" />
           슬랙으로 로그인
         </a>

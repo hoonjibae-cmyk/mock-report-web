@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { authenticateByEmail, setSessionCookie } from "@/lib/auth";
-import { SLACK_STATE_COOKIE, exchangeCode, stateMatches } from "@/lib/slack-auth";
+import { safeNextPath } from "@/lib/login-next";
+import { SLACK_NEXT_COOKIE, SLACK_STATE_COOKIE, exchangeCode, stateMatches } from "@/lib/slack-auth";
 import { siteBaseUrl } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -11,7 +12,24 @@ function backToLogin(message: string) {
   const base = siteBaseUrl().replace(/\/$/, "");
   const res = NextResponse.redirect(`${base}/login?error=${encodeURIComponent(message)}`);
   res.cookies.set(SLACK_STATE_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
+  res.cookies.set(SLACK_NEXT_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
   return res;
+}
+
+/** 요청 쿠키에서 하나를 꺼낸다 */
+function readCookie(request: Request, name: string): string | undefined {
+  const raw = request.headers
+    .get("cookie")
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+  if (raw === undefined) return undefined;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return undefined;
+  }
 }
 
 /** 슬랙에서 돌아오는 자리 */
@@ -24,14 +42,9 @@ export async function GET(request: Request) {
   }
 
   const state = params.get("state");
-  const cookieState = request.headers
-    .get("cookie")
-    ?.split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${SLACK_STATE_COOKIE}=`))
-    ?.slice(SLACK_STATE_COOKIE.length + 1);
+  const cookieState = readCookie(request, SLACK_STATE_COOKIE);
 
-  if (!stateMatches(cookieState ? decodeURIComponent(cookieState) : undefined, state)) {
+  if (!stateMatches(cookieState, state)) {
     // 남이 만든 로그인 요청을 우리가 처리하는 것을 막는 자리다.
     return backToLogin("로그인 요청이 확인되지 않았습니다. 다시 시도해 주세요.");
   }
@@ -67,7 +80,10 @@ export async function GET(request: Request) {
   }
 
   await setSessionCookie(user);
-  const res = NextResponse.redirect(`${siteBaseUrl().replace(/\/$/, "")}/admin`);
+  // 로그인 전에 가려던 곳(검토 화면 등)이 있으면 거기로, 없으면 메인으로
+  const next = safeNextPath(readCookie(request, SLACK_NEXT_COOKIE));
+  const res = NextResponse.redirect(`${siteBaseUrl().replace(/\/$/, "")}${next}`);
   res.cookies.set(SLACK_STATE_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
+  res.cookies.set(SLACK_NEXT_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
   return res;
 }
