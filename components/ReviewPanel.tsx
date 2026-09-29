@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import { formatWhen, type ExamReview, type ReviewEdit } from "@/lib/review";
@@ -20,28 +20,33 @@ const when = formatWhen;
 /**
  * 읽다가 바로 고치는 글 상자.
  *
- * 평소에는 글로 보이고, '수정'을 누르면 그 자리가 입력창이 된다. 검수자가
- * 철자·띄어쓰기 같은 사소한 것을 담임에게 되돌려 보내지 않고 직접 바로잡기
- * 위한 것이다. 내용이 그대로면 저장하지 않는다 — 고친 내역에 빈 줄이 남지 않게.
+ * 평소에는 테두리 상자 안의 글로 보이고, '수정'을 누르면 같은 상자가 입력창이
+ * 된다 — 화면이 튀지 않게. 검수자가 철자·띄어쓰기 같은 사소한 것을 담임에게
+ * 되돌려 보내지 않고 직접 바로잡기 위한 것이다. 내용이 그대로면 저장하지
+ * 않는다 — 고친 내역에 빈 줄이 남지 않게.
  */
 function EditableText({
   text,
   canEdit,
-  compact,
+  chip,
+  placeholder,
   onSave,
 }: {
-  text: string;
+  text: string | null;
   canEdit: boolean;
-  compact?: boolean;
+  /** 상자 머리에 붙는 상태 표시(확정/초안 등) */
+  chip: ReactNode;
+  /** 글이 없을 때 대신 보이는 안내 */
+  placeholder: string;
   onSave: (next: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(text);
+  const [draft, setDraft] = useState(text ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   function start() {
-    setDraft(text);
+    setDraft(text ?? "");
     setError("");
     setEditing(true);
   }
@@ -52,7 +57,7 @@ function EditableText({
       setError("내용을 비울 수는 없습니다.");
       return;
     }
-    if (next === text.trim()) {
+    if (next === (text ?? "").trim()) {
       setEditing(false);
       return;
     }
@@ -68,38 +73,40 @@ function EditableText({
     }
   }
 
-  if (editing) {
-    return (
-      <div className="review-edit">
+  return (
+    <div className={`review-box${editing ? " editing" : ""}${text ? "" : " empty"}`}>
+      <div className="review-box-head">
+        {chip}
+        <span className="review-box-actions">
+          {editing ? (
+            <>
+              <button className="button ghost small" type="button" disabled={saving} onClick={() => setEditing(false)}>
+                취소
+              </button>
+              <button className="button primary small" type="button" disabled={saving} onClick={save}>
+                {saving ? "저장 중…" : "저장"}
+              </button>
+            </>
+          ) : canEdit && text ? (
+            <button className="button ghost small" type="button" onClick={start} title="철자·띄어쓰기를 바로잡습니다">
+              수정
+            </button>
+          ) : null}
+        </span>
+      </div>
+      {editing ? (
         <textarea
           value={draft}
           // 글 길이에 맞춰 연다 — 긴 의견을 세 줄 창에서 스크롤하며 고치게 두지 않는다
-          rows={Math.min(16, Math.max(compact ? 3 : 4, Math.ceil(draft.length / 60) + 1))}
+          rows={Math.min(18, Math.max(4, Math.ceil(draft.length / 95) + 1))}
           onChange={(e) => setDraft(e.target.value)}
           disabled={saving}
           autoFocus
         />
-        {error ? <p className="form-error">{error}</p> : null}
-        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-          <button className="button primary small" disabled={saving} onClick={save}>
-            {saving ? "저장 중…" : "저장"}
-          </button>
-          <button className="button ghost small" disabled={saving} onClick={() => setEditing(false)}>
-            취소
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`review-text${compact ? " compact" : ""}`}>
-      <span style={{ whiteSpace: "pre-wrap" }}>{text}</span>
-      {canEdit ? (
-        <button className="button ghost small" type="button" onClick={start} title="철자·띄어쓰기를 바로잡습니다">
-          수정
-        </button>
-      ) : null}
+      ) : (
+        <p className="review-box-body">{text || placeholder}</p>
+      )}
+      {error ? <p className="form-error">{error}</p> : null}
     </div>
   );
 }
@@ -265,20 +272,25 @@ export default function ReviewPanel({ exam, students: initialStudents, overview:
         ) : null}
       </section>
 
-      {overview.text ? (
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">총평 ({overview.status === "final" ? "확정" : "초안"})</p>
-            </div>
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">총평</p>
+            <h2>반 전체 성적표 맨 위에 실리는 글입니다</h2>
           </div>
-          <EditableText
-            text={overview.text}
-            canEdit={canEdit && overview.status === "final"}
-            onSave={saveOverview}
-          />
-        </section>
-      ) : null}
+        </div>
+        <EditableText
+          text={overview.text}
+          canEdit={canEdit && overview.status === "final"}
+          chip={
+            <span className={`status-chip ${overview.status === "final" ? "active" : "danger"}`}>
+              {overview.status === "final" ? "총평 확정" : "총평 초안 — 성적표에 실리지 않음"}
+            </span>
+          }
+          placeholder="담임 선생님이 아직 총평을 쓰지 않았습니다."
+          onSave={saveOverview}
+        />
+      </section>
 
       {edits.length > 0 ? (
         <section className="panel">
@@ -328,25 +340,24 @@ export default function ReviewPanel({ exam, students: initialStudents, overview:
                   {s.className ? ` · ${s.className}` : ""}
                 </span>
                 <span className="review-student-score">
-                  <strong>{s.raw}</strong> / {s.max}
+                  <strong>{s.raw}</strong>
+                  <span className="subtle"> / {s.max}점</span>
                 </span>
-                <span className={`status-chip ${s.commentStatus === "final" ? "active" : s.commentStatus === "draft" ? "danger" : "inactive"}`}>
-                  {s.commentStatus === "final" ? "의견 확정" : s.commentStatus === "draft" ? "의견 초안" : "의견 없음"}
-                </span>
-                <span className="subtle review-student-views">
+                <span className={`subtle review-student-views${s.viewCount > 0 ? " seen" : ""}`}>
                   학부모 열람 {s.viewCount > 0 ? `${s.viewCount}회` : "아직"}
                 </span>
               </div>
-              {s.commentText && s.commentStatus === "final" ? (
-                <EditableText
-                  text={s.commentText}
-                  canEdit={canEdit}
-                  compact
-                  onSave={(text) => saveStudent(s.reportId, text)}
-                />
-              ) : s.commentText ? (
-                <p className="review-student-draft">{s.commentText}</p>
-              ) : null}
+              <EditableText
+                text={s.commentText}
+                canEdit={canEdit && s.commentStatus === "final"}
+                chip={
+                  <span className={`status-chip ${s.commentStatus === "final" ? "active" : s.commentStatus === "draft" ? "danger" : "inactive"}`}>
+                    {s.commentStatus === "final" ? "의견 확정" : s.commentStatus === "draft" ? "의견 초안 — 성적표에 실리지 않음" : "의견 없음"}
+                  </span>
+                }
+                placeholder="담임 선생님이 아직 의견을 쓰지 않았습니다."
+                onSave={(text) => saveStudent(s.reportId, text)}
+              />
             </li>
           ))}
         </ul>
