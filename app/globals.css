@@ -2399,16 +2399,36 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .review-gate.approved { border-left: 4px solid #1a7f4b; }
 
 /* 검수 화면 — 그 자리에서 고치기와 고친 내역 */
-.review-text { display: flex; align-items: flex-start; gap: 8px; }
-.review-text > span { flex: 1; min-width: 0; line-height: 1.7; }
-.review-edit { display: grid; gap: 6px; }
-.review-edit textarea { width: 100%; min-width: 260px; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
-.review-table td { vertical-align: top; }
-.review-table td:nth-child(4) { min-width: 320px; white-space: normal; }
-.review-edits { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.review-edits li { display: grid; grid-template-columns: 90px 1fr auto 1fr; gap: 10px; align-items: baseline; font-size: 13.5px; line-height: 1.6; }
-.review-edits li > .subtle { grid-column: 1 / -1; font-size: 12px; }
+/* 본문은 읽기 좋은 폭(약 78자)까지만 — 넓은 화면에서 한 줄이 끝없이 길어지지 않게 */
+.review-text { display: flex; align-items: flex-start; gap: 12px; max-width: 78ch; }
+.review-text > span { flex: 1; min-width: 0; line-height: 1.8; }
+.review-text > .button { flex: none; }
+.review-edit { display: grid; gap: 6px; max-width: 78ch; }
+.review-edit textarea { width: 100%; min-width: 260px; font: inherit; line-height: 1.7; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+
+/* 학생별 카드 — 한 줄에 학생 정보, 그 아래 의견 본문 */
+.review-students { list-style: none; margin: 0; padding: 0; }
+.review-students > li { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+.review-students > li:first-child { border-top: 0; padding-top: 4px; }
+.review-student-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 14px; }
+.review-student-head .status-chip { margin: 0 !important; }
+.review-student-name { font-weight: 800; font-size: 16px; color: var(--navy-deep); text-decoration: underline; text-decoration-color: rgba(20, 40, 80, 0.25); text-underline-offset: 3px; }
+.review-student-score strong { font-size: 15px; color: var(--navy-deep); }
+.review-student-views { margin-left: auto; font-size: 13px; }
+.review-student-draft { margin: 0; max-width: 78ch; line-height: 1.8; color: var(--muted); white-space: pre-wrap; }
+
+/* 고친 내역 */
+.review-edits { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.review-edits li { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 4px 12px; font-size: 13.5px; line-height: 1.7; max-width: 100ch; }
+.review-edits li > strong { grid-row: 1 / span 2; }
+.review-edits li > .subtle { grid-column: 2; font-size: 12px; }
+.review-edits .review-diff { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .review-before { color: #b3261e; text-decoration: line-through; text-decoration-color: rgba(179, 38, 30, 0.5); }
 .review-after { color: #1a7f4b; }
 .review-arrow { color: var(--muted); }
-@media (max-width: 720px) { .review-edits li { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  .review-edits li { grid-template-columns: 1fr; }
+  .review-edits li > strong { grid-row: auto; }
+  .review-edits li > .subtle, .review-edits .review-diff { grid-column: 1; }
+  .review-student-views { margin-left: 0; }
+}

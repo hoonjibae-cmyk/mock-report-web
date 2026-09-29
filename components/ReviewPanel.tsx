@@ -73,7 +73,8 @@ function EditableText({
       <div className="review-edit">
         <textarea
           value={draft}
-          rows={compact ? 3 : 6}
+          // 글 길이에 맞춰 연다 — 긴 의견을 세 줄 창에서 스크롤하며 고치게 두지 않는다
+          rows={Math.min(16, Math.max(compact ? 3 : 4, Math.ceil(draft.length / 60) + 1))}
           onChange={(e) => setDraft(e.target.value)}
           disabled={saving}
           autoFocus
@@ -291,9 +292,11 @@ export default function ReviewPanel({ exam, students: initialStudents, overview:
             {edits.map((e, i) => (
               <li key={`${e.at}-${i}`}>
                 <strong>{e.target === "overview" ? "총평" : (e.studentName ?? "학생")}</strong>
-                <span className="review-before">{e.before}</span>
-                <span className="review-arrow">→</span>
-                <span className="review-after">{e.after}</span>
+                <span className="review-diff">
+                  <span className="review-before">{e.before}</span>
+                  <span className="review-arrow">→</span>
+                  <span className="review-after">{e.after}</span>
+                </span>
                 <span className="subtle review-meta">
                   {e.editedByName} · {when(e.at)}
                 </span>
@@ -310,53 +313,43 @@ export default function ReviewPanel({ exam, students: initialStudents, overview:
             <h2>학생 이름을 누르면 학부모가 받을 성적표가 그대로 열립니다</h2>
           </div>
         </div>
-        <div className="table-scroll">
-          <table className="admin-table review-table">
-            <thead>
-              <tr>
-                <th>학생</th>
-                <th>학교 · 반</th>
-                <th>점수</th>
-                <th>담임 의견</th>
-                <th>학부모 열람</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((s) => (
-                <tr key={s.reportId}>
-                  <td>
-                    <Link href={`/r/${s.token}`} target="_blank" rel="noreferrer">
-                      <strong>{s.studentName}</strong>
-                    </Link>
-                  </td>
-                  <td>
-                    {s.school || "-"}
-                    {s.className ? <span className="subtle"> · {s.className}</span> : null}
-                  </td>
-                  <td>
-                    <strong>{s.raw}</strong> / {s.max}
-                  </td>
-                  <td>
-                    <span className={`status-chip ${s.commentStatus === "final" ? "active" : s.commentStatus === "draft" ? "danger" : "inactive"}`}>
-                      {s.commentStatus === "final" ? "확정" : s.commentStatus === "draft" ? "초안" : "없음"}
-                    </span>
-                    {s.commentText && canEdit && s.commentStatus === "final" ? (
-                      <EditableText
-                        text={s.commentText}
-                        canEdit
-                        compact
-                        onSave={(text) => saveStudent(s.reportId, text)}
-                      />
-                    ) : s.commentPreview ? (
-                      <span className="subtle"> {s.commentPreview}</span>
-                    ) : null}
-                  </td>
-                  <td>{s.viewCount > 0 ? `${s.viewCount}회` : "아직"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* 표가 아니라 카드 목록이다 — 의견 본문이 길어 표로 두면 이름·학교 칸이
+            글자 단위로 쪼개진다. 한 줄에 학생 정보를 모으고, 본문은 그 아래 읽기
+            좋은 폭으로 놓는다. */}
+        <ul className="review-students">
+          {students.map((s) => (
+            <li key={s.reportId}>
+              <div className="review-student-head">
+                <Link href={`/r/${s.token}`} target="_blank" rel="noreferrer" className="review-student-name">
+                  {s.studentName}
+                </Link>
+                <span className="subtle">
+                  {s.school || "-"}
+                  {s.className ? ` · ${s.className}` : ""}
+                </span>
+                <span className="review-student-score">
+                  <strong>{s.raw}</strong> / {s.max}
+                </span>
+                <span className={`status-chip ${s.commentStatus === "final" ? "active" : s.commentStatus === "draft" ? "danger" : "inactive"}`}>
+                  {s.commentStatus === "final" ? "의견 확정" : s.commentStatus === "draft" ? "의견 초안" : "의견 없음"}
+                </span>
+                <span className="subtle review-student-views">
+                  학부모 열람 {s.viewCount > 0 ? `${s.viewCount}회` : "아직"}
+                </span>
+              </div>
+              {s.commentText && s.commentStatus === "final" ? (
+                <EditableText
+                  text={s.commentText}
+                  canEdit={canEdit}
+                  compact
+                  onSave={(text) => saveStudent(s.reportId, text)}
+                />
+              ) : s.commentText ? (
+                <p className="review-student-draft">{s.commentText}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );
