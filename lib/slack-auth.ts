@@ -23,6 +23,8 @@
 import { signPayload, verifyPayload } from "@/lib/crypto";
 
 export const SLACK_STATE_COOKIE = "ys_mock_oauth_state";
+/** 슬랙에 다녀오는 동안 기억해 두는 "로그인 뒤 갈 곳" */
+export const SLACK_NEXT_COOKIE = "ys_mock_oauth_next";
 
 const AUTH_ENDPOINT = "https://slack.com/openid/connect/authorize";
 const TOKEN_ENDPOINT = "https://slack.com/api/openid.connect.token";
