@@ -2399,27 +2399,33 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .review-gate.approved { border-left: 4px solid #1a7f4b; }
 
 /* 검수 화면 — 그 자리에서 고치기와 고친 내역 */
-/* 본문은 읽기 좋은 폭(약 78자)까지만 — 넓은 화면에서 한 줄이 끝없이 길어지지 않게 */
-.review-text { display: flex; align-items: flex-start; gap: 12px; max-width: 78ch; }
-.review-text > span { flex: 1; min-width: 0; line-height: 1.8; }
-.review-text > .button { flex: none; }
-.review-edit { display: grid; gap: 6px; max-width: 78ch; }
-.review-edit textarea { width: 100%; min-width: 260px; font: inherit; line-height: 1.7; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+/* 글 상자: 읽을 때와 고칠 때 같은 테두리 상자 — '수정'을 눌러도 화면이 튀지 않는다 */
+.review-box { border: 1px solid var(--line); border-radius: 14px; background: #fbfcfe; padding: 12px 18px 16px; display: grid; gap: 8px; transition: border-color 0.15s, box-shadow 0.15s; }
+.review-box.editing { border-color: var(--navy-deep, #1b2b4b); background: #fff; box-shadow: 0 0 0 3px rgba(27, 43, 75, 0.08); }
+.review-box.empty { background: transparent; border-style: dashed; }
+.review-box-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 32px; }
+.review-box-head .status-chip { margin: 0 !important; }
+.review-box-actions { display: flex; gap: 6px; flex: none; }
+.review-box-body { margin: 0; font-size: 15px; line-height: 1.85; color: var(--ink, #1f2937); white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+.review-box.empty .review-box-body { color: var(--muted); font-size: 14px; }
+.review-box textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; line-height: 1.85; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; resize: vertical; word-break: keep-all; }
+.review-box textarea:focus { outline: none; border-color: var(--navy-deep, #1b2b4b); }
 
-/* 학생별 카드 — 한 줄에 학생 정보, 그 아래 의견 본문 */
+/* 학생별 카드 — 왼쪽 열에 학생 정보, 오른쪽에 의견 상자를 넓게 */
 .review-students { list-style: none; margin: 0; padding: 0; }
-.review-students > li { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+.review-students > li { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 12px 28px; align-items: start; padding: 20px 0; border-top: 1px solid var(--line); }
 .review-students > li:first-child { border-top: 0; padding-top: 4px; }
-.review-student-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 14px; }
-.review-student-head .status-chip { margin: 0 !important; }
-.review-student-name { font-weight: 800; font-size: 16px; color: var(--navy-deep); text-decoration: underline; text-decoration-color: rgba(20, 40, 80, 0.25); text-underline-offset: 3px; }
-.review-student-score strong { font-size: 15px; color: var(--navy-deep); }
-.review-student-views { margin-left: auto; font-size: 13px; }
-.review-student-draft { margin: 0; max-width: 78ch; line-height: 1.8; color: var(--muted); white-space: pre-wrap; }
+.review-students > li:last-child { padding-bottom: 4px; }
+.review-student-head { display: grid; gap: 4px; align-content: start; font-size: 14px; padding-top: 6px; }
+.review-student-name { font-weight: 800; font-size: 18px; color: var(--navy-deep); text-decoration: underline; text-decoration-color: rgba(20, 40, 80, 0.25); text-underline-offset: 4px; width: fit-content; }
+.review-student-score { margin-top: 6px; }
+.review-student-score strong { font-size: 22px; font-weight: 800; color: var(--navy-deep); letter-spacing: -0.01em; }
+.review-student-views { font-size: 13px; margin-top: 2px; }
+.review-student-views.seen { color: #1a7f4b; }
 
 /* 고친 내역 */
 .review-edits { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.review-edits li { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 4px 12px; font-size: 13.5px; line-height: 1.7; max-width: 100ch; }
+.review-edits li { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 4px 12px; font-size: 14px; line-height: 1.7; padding: 12px 18px; border: 1px solid var(--line); border-radius: 14px; background: #fbfcfe; }
 .review-edits li > strong { grid-row: 1 / span 2; }
 .review-edits li > .subtle { grid-column: 2; font-size: 12px; }
 .review-edits .review-diff { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px 10px; }
@@ -2430,5 +2436,10 @@ body.report-layout-a4 .a4-report-root { display: block; }
   .review-edits li { grid-template-columns: 1fr; }
   .review-edits li > strong { grid-row: auto; }
   .review-edits li > .subtle, .review-edits .review-diff { grid-column: 1; }
-  .review-student-views { margin-left: 0; }
+  .review-students > li { grid-template-columns: 1fr; gap: 10px; }
+  .review-student-head { grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 10px; }
+  .review-student-head .review-student-name { grid-column: 1 / -1; }
+  .review-student-score { margin-top: 0; }
+  .review-student-score strong { font-size: 17px; }
+  .review-box { padding: 10px 14px 14px; }
 }
