@@ -1,5 +1,6 @@
 "use client";
 
+import { attendanceSummary } from "@/lib/attendance";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
@@ -12,6 +13,9 @@ interface Props {
   setupError: string;
   canCreate: boolean;
   canExport: boolean;
+  /** 반별 재원생 명단(학생 관리 프로그램) — 반 인원 대비 응시 현황에 쓴다 */
+  rosters?: Array<{ className: string; students: Array<{ examNumber: string; name: string }> }>;
+  rosterError?: string | null;
 }
 
 interface CreatedLink {
@@ -39,6 +43,8 @@ export default function OmrReportBuilder({
   setupError,
   canCreate,
   canExport,
+  rosters = [],
+  rosterError = null,
 }: Props) {
   const reviewed = useMemo(
     () => initialScans.filter((scan) => scan.status === "reviewed" && scan.studentId),
@@ -211,6 +217,23 @@ export default function OmrReportBuilder({
   }
 
   const namedCount = reviewed.filter((scan) => draftFor(scan).name.trim()).length;
+
+  // 반 인원 대비 응시 — 검수 완료 답안지가 있는 학생을 응시로 본다. 이름은 불러온
+  // 학생 정보가 있으면 그것, 없으면 수험번호. 기준 반은 시험을 만들 때 고른 반.
+  const attendance = exam
+    ? attendanceSummary(
+        reviewed.map((scan) => {
+          const d = draftFor(scan);
+          return {
+            studentKey: scan.studentId,
+            studentName: d.name.trim() || `수험번호 ${scan.studentId}`,
+            className: d.className,
+          };
+        }),
+        new Map(rosters.map((r) => [r.className, r.students])),
+        exam.classNames,
+      )
+    : { classes: [], unlisted: [] };
 
   async function uploadEssay() {
     const file = essayRef.current?.files?.[0];
@@ -507,6 +530,64 @@ export default function OmrReportBuilder({
           </p>
         ) : (
           <>
+            {exam.examType === "monthly" || exam.classNames.length > 0 ? (
+              <div className="attendance-box">
+                <div className="attendance-box-head">
+                  <strong>반 인원 · 응시 현황</strong>
+                  <span className="subtle">
+                    반 전체 인원은 학생 관리 프로그램의 지금 재원생 기준 · 검수 완료 답안지가 있으면 응시
+                  </span>
+                </div>
+                {rosterError ? (
+                  <p className="subtle">반 명단을 확인하지 못했습니다 — {rosterError}</p>
+                ) : exam.classNames.length === 0 ? (
+                  <p className="subtle">이 시험은 만들 때 반을 고르지 않아 반 인원과 견줄 수 없습니다.</p>
+                ) : attendance.classes.length === 0 ? (
+                  <p className="subtle">반 명단이 비어 있습니다.</p>
+                ) : (
+                  <div className="table-scroll">
+                    <table className="admin-table attendance-table">
+                      <thead>
+                        <tr>
+                          <th>반</th>
+                          <th>반 전체 인원</th>
+                          <th>시험 응시 인원</th>
+                          <th>미응시 인원 (이름)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attendance.classes.map((c) => (
+                          <tr key={c.className}>
+                            <td>
+                              <strong>{c.className}</strong>
+                            </td>
+                            <td>{c.total}명</td>
+                            <td>{c.present}명</td>
+                            <td>
+                              {c.absent.length === 0 ? (
+                                <span className="attendance-ok">전원 응시</span>
+                              ) : (
+                                <>
+                                  <strong className="attendance-absent">{c.absent.length}명</strong>
+                                  <span className="attendance-names">{c.absent.map((s) => s.name).join(", ")}</span>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {!rosterError && attendance.unlisted.length > 0 ? (
+                  <p className="subtle attendance-unlisted">
+                    명단에 없는 응시자 {attendance.unlisted.length}명: <strong>{attendance.unlisted.join(", ")}</strong> — 반을
+                    옮겼거나 퇴원 처리된 학생, 또는 시험에 고른 반이 아닌 학생일 수 있습니다.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <label className="checkbox-row" style={{ marginBottom: 12 }}>
               <input
                 type="checkbox"

@@ -2,6 +2,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { formatChoices, toChoices } from "@/lib/omr-answers";
 import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
+import { shortDate, trendSentence } from "@/lib/score-history";
 
 /** 열람 시점에 주입되는 담임 의견(성적표 생성 후에도 수정 가능) */
 export interface ReportComments {
@@ -30,92 +31,60 @@ function ratingClass(rating: string): string {
   return "work";
 }
 
-/** 표준점수 성장 추이 — 단일 시리즈 라인, 기준선 100 */
-function GrowthChart({ points }: { points: GrowthPoint[] }) {
+/**
+ * 학부모용 성적 추이 — 회차마다 내 점수와 반 평균을 막대 둘로.
+ *
+ * 숫자를 막대 위에 그대로 적어 축을 읽지 않아도 된다. 표준점수 같은 보정값은
+ * 여기 두지 않는다 — 학부모가 알고 싶은 것은 "몇 점이었고 올랐나"다.
+ */
+function ParentTrendChart({ points }: { points: GrowthPoint[] }) {
   const W = 640;
-  const H = 220;
-  const pad = { l: 44, r: 28, t: 18, b: 40 };
+  const H = 230;
+  const pad = { l: 16, r: 16, t: 34, b: 44 };
   const innerW = W - pad.l - pad.r;
   const innerH = H - pad.t - pad.b;
-
-  const values = points.map((p) => p.standardScore);
-  const yMin = Math.min(80, Math.floor((Math.min(...values) - 8) / 10) * 10);
-  const yMax = Math.max(120, Math.ceil((Math.max(...values) + 8) / 10) * 10);
-  const yTo = (v: number) => pad.t + innerH * (1 - (v - yMin) / (yMax - yMin));
-  const xTo = (i: number) =>
-    pad.l + (points.length === 1 ? innerW / 2 : (innerW * i) / (points.length - 1));
-
-  const gridStep = yMax - yMin > 60 ? 20 : 10;
-  const gridLines: number[] = [];
-  for (let v = yMin; v <= yMax; v += gridStep) gridLines.push(v);
-
-  const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${xTo(i).toFixed(1)},${yTo(p.standardScore).toFixed(1)}`)
-    .join(" ");
-
-  const fmtDate = (d: string) => {
-    const [y, m] = d.split("-");
-    return y && m ? `${y.slice(2)}.${m}` : d;
-  };
+  const yMax = Math.max(100, ...points.map((p) => Math.max(p.raw, p.mean)));
+  const yTo = (v: number) => pad.t + innerH * (1 - v / yMax);
+  const base = H - pad.b;
+  const group = innerW / points.length;
+  const bw = Math.min(34, group * 0.3);
 
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
       role="img"
-      aria-label="표준점수 추이 그래프"
+      aria-label="성적 추이 그래프 — 회차별 내 점수와 반 평균"
       style={{ width: "100%", height: "auto", display: "block" }}
     >
-      {gridLines.map((v) => (
-        <g key={v}>
-          <line x1={pad.l} x2={W - pad.r} y1={yTo(v)} y2={yTo(v)} stroke="#e5eaf1" strokeWidth={1} />
-          <text x={pad.l - 8} y={yTo(v) + 4} textAnchor="end" fontSize={11} fill="#667085">
-            {v}
-          </text>
-        </g>
+      {[0, 25, 50, 75, 100].filter((v) => v <= yMax).map((v) => (
+        <line key={v} x1={pad.l} x2={W - pad.r} y1={yTo(v)} y2={yTo(v)} stroke="#e5eaf1" strokeWidth={1} />
       ))}
-      {/* 기준선 100 = 이번 집단 평균 환산 */}
-      <line
-        x1={pad.l}
-        x2={W - pad.r}
-        y1={yTo(100)}
-        y2={yTo(100)}
-        stroke="#98a2b3"
-        strokeWidth={1.5}
-        strokeDasharray="5 4"
-      />
-      <text x={W - pad.r} y={yTo(100) - 6} textAnchor="end" fontSize={11} fill="#667085">
-        평균(100)
-      </text>
-
-      <path d={path} fill="none" stroke="#183c73" strokeWidth={2.5} strokeLinejoin="round" />
+      {/* 범례 */}
+      <g fontSize={11} fill="#667085">
+        <rect x={W - pad.r - 150} y={8} width={12} height={12} rx={3} fill="#183c73" />
+        <text x={W - pad.r - 133} y={18}>내 점수</text>
+        <rect x={W - pad.r - 76} y={8} width={12} height={12} rx={3} fill="#d5dde9" />
+        <text x={W - pad.r - 59} y={18}>반 평균</text>
+      </g>
       {points.map((p, i) => {
+        const cx = pad.l + group * (i + 0.5);
         const last = i === points.length - 1;
         return (
           <g key={p.examId}>
-            <circle
-              cx={xTo(i)}
-              cy={yTo(p.standardScore)}
-              r={last ? 6 : 4.5}
-              fill={last ? "#183c73" : "#fff"}
-              stroke="#183c73"
-              strokeWidth={2}
-            >
-              <title>{`${p.title} (${p.date}) · 표준점수 ${p.standardScore} · 원점수 ${p.raw}점(평균 ${p.mean}점)`}</title>
-            </circle>
-            {(i === 0 || last) ? (
-              <text
-                x={i === 0 && !last ? xTo(i) + 10 : xTo(i)}
-                y={yTo(p.standardScore) - 12}
-                textAnchor={i === 0 && !last ? "start" : "middle"}
-                fontSize={last ? 13 : 11}
-                fontWeight={last ? 800 : 600}
-                fill={last ? "#102b55" : "#667085"}
-              >
-                {p.standardScore}
-              </text>
-            ) : null}
-            <text x={xTo(i)} y={H - 12} textAnchor="middle" fontSize={11} fill="#667085">
-              {fmtDate(p.date)}
+            <rect x={cx - bw - 2} y={yTo(p.raw)} width={bw} height={Math.max(0, base - yTo(p.raw))} rx={4} fill={last ? "#183c73" : "#4a6a9e"}>
+              <title>{`${p.title} (${p.date}) · 내 점수 ${p.raw}점`}</title>
+            </rect>
+            <rect x={cx + 2} y={yTo(p.mean)} width={bw} height={Math.max(0, base - yTo(p.mean))} rx={4} fill="#d5dde9">
+              <title>{`${p.title} (${p.date}) · 반 평균 ${p.mean}점`}</title>
+            </rect>
+            <text x={cx - bw / 2 - 2} y={yTo(p.raw) - 6} textAnchor="middle" fontSize={last ? 13.5 : 12} fontWeight={800} fill="#102b55">
+              {p.raw}
+            </text>
+            <text x={cx + bw / 2 + 2} y={yTo(p.mean) - 6} textAnchor="middle" fontSize={10.5} fill="#667085">
+              {p.mean}
+            </text>
+            <text x={cx} y={H - 14} textAnchor="middle" fontSize={11.5} fontWeight={last ? 700 : 500} fill="#344054">
+              {shortDate(p.date)}
             </text>
           </g>
         );
@@ -423,16 +392,13 @@ export default function GenericReport({
         {report.growth.length >= 2 ? (
           <section className="analysis-card">
             <div className="card-title-row">
-              <h4>표준점수 성장 추이</h4>
+              <h4>성적 추이</h4>
               <span>
-                {report.examTypeLabel} 기준 · 최근 {report.growth.length}회차 · 회차 난이도 보정
+                {report.examTypeLabel} · 최근 {report.growth.length}회 · 내 점수와 반 평균
               </span>
             </div>
-            <GrowthChart points={report.growth} />
-            <p className="subtle">
-              표준점수는 매회 시험의 난이도 차이를 평균 100, 1표준편차 20으로 환산해 비교하는
-              값입니다. 100보다 크면 그 회차 평균보다 잘한 것입니다.
-            </p>
+            <ParentTrendChart points={report.growth} />
+            <p className="subtle">{trendSentence(report.growth)}</p>
           </section>
         ) : null}
 

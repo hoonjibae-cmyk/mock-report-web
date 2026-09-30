@@ -2,6 +2,7 @@
 // - 시험 총평(응시생 공통): exams.overview_comment jsonb
 // - 학생별 개별 코멘트: student_reports.teacher_comment jsonb
 
+import { dedupeHistory, historyFromReport, type HistoryPoint } from "@/lib/score-history";
 import { wrongItemsOf, type WrongItem } from "@/lib/wrong-items";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { isGenericReport, type GenericReportData } from "@/lib/omr-report-types";
@@ -226,6 +227,8 @@ export interface CommentStudentRow {
     areas: Array<{ area: string; earned: number; possible: number; rate: number; cohortRate: number }>;
   } | null;
   comment: TeacherComment;
+  /** 같은 시험 유형의 지난 회차들(최근 1년, 이번 회차 포함) — 성적 추이 그래프 */
+  history: HistoryPoint[];
   reportData: GenericReportData | null;
 }
 
@@ -251,6 +254,7 @@ export async function listCommentStudents(examId: string): Promise<CommentStuden
       studentName: row.student_name ?? "",
       school: row.school ?? "",
       createdAt: row.created_at,
+      history: [],
       summary: reportData
         ? {
             raw: reportData.score.raw,
@@ -279,6 +283,14 @@ export async function listCommentStudents(examId: string): Promise<CommentStuden
   }
   // 이름순 정렬(검수 순서와 무관하게 찾기 쉽게)
   rows.sort((a, b) => a.studentName.localeCompare(b.studentName, "ko"));
+  // 성적 추이 — 같은 학생·같은 시험 유형의 지난 회차(최근 1년). 성적표에 실린
+  // 3~6회차보다 길게 보려고 따로 모은다.
+  const examType = rows.find((r) => r.reportData)?.reportData?.examType;
+  if (examType) {
+    const histories = await listStudentHistories(rows.map((r) => r.studentKey), examType);
+    for (const r of rows) r.history = histories.get(r.studentKey) ?? [];
+  }
+
   return rows;
 }
 
@@ -299,4 +311,44 @@ export async function saveTeacherComment(
     .eq("id", reportId);
   if (error) throw new Error(`개별 코멘트 저장 실패: ${error.message}`);
   return payload;
+}
+
+/**
+ * 같은 시험 유형의 지난 회차들 — 학생별, 날짜순. 같은 시험이 여러 장이면 마지막 것.
+ *
+ * 만든 날짜로 기간을 자른다(시험일은 성적표 안에만 있어 DB에서 거르지 못한다).
+ * 몇 주 차이는 그래프의 '최근 1년'에서 문제 되지 않는다.
+ */
+export async function listStudentHistories(
+  keys: readonly string[],
+  examType: string,
+  months = 12,
+): Promise<Map<string, HistoryPoint[]>> {
+  const out = new Map<string, HistoryPoint[]>();
+  const ids = [...new Set(keys.map((k) => k.trim()).filter(Boolean))];
+  if (ids.length === 0) return out;
+  const since = new Date();
+  since.setMonth(since.getMonth() - months);
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("student_reports")
+    .select("student_key,exam_id,report_data,created_at")
+    .in("student_key", ids)
+    .not("exam_id", "is", null)
+    .gte("created_at", since.toISOString())
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`성적 추이를 불러오지 못했습니다: ${error.message}`);
+
+  const raw = new Map<string, HistoryPoint[]>();
+  for (const row of data ?? []) {
+    const body: unknown = row.report_data;
+    if (!isGenericReport(body) || body.examType !== examType) continue;
+    const key = row.student_key as string;
+    const list = raw.get(key) ?? [];
+    list.push(historyFromReport(row.exam_id as string, body, row.created_at as string));
+    raw.set(key, list);
+  }
+  for (const [key, list] of raw) out.set(key, dedupeHistory(list));
+  return out;
 }

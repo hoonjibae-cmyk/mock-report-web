@@ -18,9 +18,10 @@ function point(examId: string, date: string, standardScore = 100): GrowthPoint {
 
 const current = point("now", "2026-08-29", 112);
 
-test("기록이 쌓여도 이번 회차 포함 3회차만 남는다", () => {
+test("기록이 쌓여도 이번 회차 포함 6회차만 남는다", () => {
   const growth = recentGrowth(
     [
+      point("e0", "2026-02-27"),
       point("e1", "2026-03-30"),
       point("e2", "2026-04-30"),
       point("e3", "2026-05-30"),
@@ -32,8 +33,8 @@ test("기록이 쌓여도 이번 회차 포함 3회차만 남는다", () => {
   assert.equal(growth.length, GROWTH_LIMIT);
   assert.deepEqual(
     growth.map((p) => p.examId),
-    ["e4", "e5", "now"],
-    "가장 최근 두 회차 + 이번 회차여야 한다",
+    ["e1", "e2", "e3", "e4", "e5", "now"],
+    "가장 최근 다섯 회차 + 이번 회차여야 한다",
   );
 });
 
