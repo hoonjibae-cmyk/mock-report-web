@@ -160,9 +160,12 @@ export function trendData(points: readonly HistoryPoint[], metric: TrendMetric, 
 }
 
 /**
- * 학부모용 한 줄 — 숫자를 읽어 주는 문장.
+ * 학부모용 한 줄 — 이 그래프는 "우리 아이가 올라가고 있나"를 보는 것이다.
  *
- *   "이번 86점. 지난 회차(78점)보다 8점 올랐고, 반 평균(79.5점)보다 6.5점 높습니다."
+ *   "이번 86점. 지난 회차(78점)보다 8점 올랐습니다. 최근 5회 중 가장 높은 점수입니다."
+ *
+ * 반 평균은 그래프에 참고선(막대)으로만 두고 문장으로 견주지 않는다. 지난
+ * 회차보다 내렸을 때도 말하지 않는다 — 성적표가 먼저 꾸짖을 일이 아니다.
  */
 export function trendSentence(points: readonly Pick<GrowthPoint, "raw" | "mean">[]): string {
   if (points.length === 0) return "";
@@ -171,18 +174,8 @@ export function trendSentence(points: readonly Pick<GrowthPoint, "raw" | "mean">
   if (points.length >= 2) {
     const prev = points[points.length - 2];
     const diff = round1(last.raw - prev.raw);
-    parts.push(
-      diff === 0
-        ? `지난 회차(${fmt(prev.raw)}점)와 같고,`
-        : `지난 회차(${fmt(prev.raw)}점)보다 ${fmt(Math.abs(diff))}점 ${diff > 0 ? "올랐고" : "내렸고"},`,
-    );
+    if (diff > 0) parts.push(`지난 회차(${fmt(prev.raw)}점)보다 ${fmt(diff)}점 올랐습니다.`);
   }
-  const gap = round1(last.raw - last.mean);
-  parts.push(
-    gap === 0
-      ? `반 평균(${fmt(last.mean)}점)과 같습니다.`
-      : `반 평균(${fmt(last.mean)}점)보다 ${fmt(Math.abs(gap))}점 ${gap > 0 ? "높습니다" : "낮습니다"}.`,
-  );
   const best = Math.max(...points.map((p) => p.raw));
   if (points.length >= 3 && last.raw >= best && points.filter((p) => p.raw === best).length === 1) {
     parts.push(`최근 ${points.length}회 중 가장 높은 점수입니다.`);
