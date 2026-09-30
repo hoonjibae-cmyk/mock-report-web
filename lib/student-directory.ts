@@ -136,6 +136,80 @@ export async function lookupStudents(examNumbers: string[]): Promise<LookupResul
   }
 }
 
+export interface RosterResult {
+  configured: boolean;
+  /** 반 이름 → 재원생 명단(이름순). 물어본 반은 모두 들어 있다(없는 반은 빈 배열) */
+  rosters: Map<string, Array<{ examNumber: string; name: string; teacher: string }>>;
+  /** 연동 자체가 실패한 경우의 안내 문구 */
+  error?: string;
+}
+
+/**
+ * 반 이름으로 재원생 명단을 가져온다 — 월말평가 검수 때 미응시자를 가려내는 데 쓴다.
+ *
+ * 실패해도 예외를 던지지 않는다. 검수 화면은 명단 없이도 열려야 하고, 못 가져온
+ * 것은 화면에 "확인하지 못했습니다"로 보이면 된다. 규약은 docs/STUDENT_CARD_API.md.
+ */
+export async function fetchClassRosters(classNames: string[]): Promise<RosterResult> {
+  const names = [...new Set(classNames.map((n) => String(n ?? "").trim()).filter(Boolean))];
+  const empty: RosterResult = { configured: directoryConfigured(), rosters: new Map() };
+  if (!empty.configured) return { ...empty, error: "학생 관리 프로그램 연동(STUDENT_API_URL)이 설정되어 있지 않습니다." };
+  if (names.length === 0) return empty;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const key = process.env.STUDENT_API_KEY;
+  if (key) headers["x-api-key"] = key;
+
+  try {
+    const res = await fetch(`${base()}/api/students/roster`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ classNames: names }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { ...empty, error: "학생 관리 프로그램이 인증을 거부했습니다. STUDENT_API_KEY를 확인해 주세요." };
+    }
+    if (res.status === 404) {
+      return { ...empty, error: "학생 관리 프로그램에 반 명단 API(/api/students/roster)가 아직 없습니다. Student-Card v1.65.0 이상이 필요합니다." };
+    }
+    if (!res.ok) return { ...empty, error: `반 명단을 불러오지 못했습니다(${res.status}).` };
+
+    const data = (await res.json()) as { classes?: unknown };
+    const list = Array.isArray(data.classes) ? data.classes : [];
+    const rosters: RosterResult["rosters"] = new Map();
+    for (const raw of list) {
+      if (!raw || typeof raw !== "object") continue;
+      const cls = raw as { className?: unknown; students?: unknown };
+      const className = String(cls.className ?? "").trim();
+      if (!className) continue;
+      const students = Array.isArray(cls.students) ? cls.students : [];
+      rosters.set(
+        className,
+        students
+          .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object")
+          .map((s) => ({
+            examNumber: String(s.examNumber ?? s.exam_number ?? s.cardNo ?? s.card_no ?? "").trim(),
+            name: String(s.name ?? "").trim(),
+            teacher: String(s.teacher ?? "").trim(),
+          }))
+          .filter((s) => s.name),
+      );
+    }
+    // 상대가 빠뜨린 반은 빈 명단으로 채운다 — 부르는 쪽이 "물어봤는데 없다"와 "안 물어봤다"를 가리지 않게
+    for (const name of names) if (!rosters.has(name)) rosters.set(name, []);
+    return { configured: true, rosters };
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    return {
+      ...empty,
+      error: timedOut
+        ? "학생 관리 프로그램이 제때 응답하지 않았습니다(10초)."
+        : "학생 관리 프로그램에 연결하지 못했습니다.",
+    };
+  }
+}
+
 /** 설정 화면의 연결 확인용 — 상대 쪽이 살아 있는지만 본다 */
 export async function pingDirectory(): Promise<{ ok: boolean; message: string }> {
   if (!directoryConfigured()) {
