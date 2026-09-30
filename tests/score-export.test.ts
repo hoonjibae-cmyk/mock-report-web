@@ -12,6 +12,7 @@ import test from "node:test";
 
 import {
   buildScoreSheet,
+  itemCell,
   latestPerStudent,
   orderedAreas,
   type ScoreSource,
@@ -101,13 +102,37 @@ function source(
   };
 }
 
-test("요청한 네 칸 그대로 나온다 — 학생명·총점수·듣기점수·독해점수", () => {
+test("앞 네 칸은 그대로 — 학생명·총점수·듣기점수·독해점수, 그 뒤에 문항별 정답 여부", () => {
   const rows = buildScoreSheet([source("김하늘", 7, 3, 4), source("이바다", 5, 2, 3)]);
 
-  assert.deepEqual(rows[0], ["학생명", "총점수", "듣기점수", "독해점수"]);
-  assert.deepEqual(rows[1], ["김하늘", 7, 3, 4]);
-  assert.deepEqual(rows[2], ["이바다", 5, 2, 3]);
-  assert.equal(rows.length, 3, "안내 문구 없이 머리글 + 학생 수만큼만 나와야 한다");
+  assert.deepEqual(rows[0], ["학생명", "총점수", "듣기점수", "독해점수", "1번", "2번", "3번", "4번"]);
+  assert.deepEqual(rows[1], ["정답", null, null, null, "1", "1", "1", "1"]);
+  assert.deepEqual(rows[2].slice(0, 4), ["김하늘", 7, 3, 4]);
+  assert.deepEqual(rows[3].slice(0, 4), ["이바다", 5, 2, 3]);
+  assert.equal(rows.length, 4, "안내 문구 없이 머리글 + 정답 + 학생 수만큼만 나와야 한다");
+});
+
+test("문항 칸 — 맞으면 O, 틀리면 X(고른 번호), 안 풀면 X(무응답), 모두 고르기는 번호를 쉼표로", () => {
+  const base = item(1, "듣기", 0);
+  assert.equal(itemCell({ ...base, correct: true, earned: 2 }), "O");
+  assert.equal(itemCell({ ...base, answer: 2, marked: 3 }), "X(3)");
+  assert.equal(itemCell({ ...base, answer: 2, marked: null }), "X(무응답)");
+  assert.equal(itemCell({ ...base, answer: [2, 4], marked: [2] }), "X(2)");
+  assert.equal(itemCell({ ...base, answer: 1, marked: [1, 3] }), "X(1,3)");
+  // 서술형은 고른 번호가 없으니 받은 점수
+  assert.equal(itemCell({ ...base, essay: true, answer: null, marked: null, earned: 1, point: 3 }), "X(1/3점)");
+  assert.equal(itemCell({ ...base, essay: true, answer: null, marked: null, correct: true, earned: 3, point: 3 }), "O");
+});
+
+test("학생 줄의 문항 칸이 성적표의 정오와 같다", () => {
+  const rows = buildScoreSheet([source("김하늘", 7, 3, 4), source("이바다", 5, 2, 3)]);
+  // source(): 듣기 3점이면 1·2번이 1.5점씩(맞음), 독해 4점이면 3·4번 2점씩(맞음)
+  assert.deepEqual(rows[2].slice(4), ["O", "O", "O", "O"]);
+  // 성적표에 없는 문항 번호는 빈칸
+  const partial = source("박새롬", 2, 2, 0);
+  partial.data.items = partial.data.items.filter((i) => i.no !== 4);
+  const rows2 = buildScoreSheet([partial]);
+  assert.deepEqual(rows2[0].slice(4), ["1번", "2번", "3번"]);
 });
 
 test("영역 열은 문항 순서를 따른다 — 성적표의 성취율 순서를 쓰지 않는다", () => {
@@ -122,7 +147,8 @@ test("이름 가나다순으로 정렬한다", () => {
     source("강여울", 8, 4, 4),
     source("박새롬", 6, 3, 3),
   ]);
-  assert.deepEqual(rows.slice(1).map((row) => row[0]), ["강여울", "박새롬", "최다솜"]);
+  // 둘째 줄은 정답 줄이라 셋째 줄부터 학생이다
+  assert.deepEqual(rows.slice(2).map((row) => row[0]), ["강여울", "박새롬", "최다솜"]);
 });
 
 test("성적표를 다시 만들었으면 마지막 것만 싣는다", () => {
@@ -130,8 +156,8 @@ test("성적표를 다시 만들었으면 마지막 것만 싣는다", () => {
     source("김하늘", 5, 2, 3, "2026-08-29T10:00:00.000Z"),
     source("김하늘", 7, 3, 4, "2026-08-29T15:00:00.000Z"),
   ]);
-  assert.equal(rows.length, 2, "같은 학생이 두 줄로 나오면 인원수부터 틀린다");
-  assert.deepEqual(rows[1], ["김하늘", 7, 3, 4]);
+  assert.equal(rows.length, 3, "같은 학생이 두 줄로 나오면 인원수부터 틀린다 (머리글 + 정답 + 1명)");
+  assert.deepEqual(rows[2].slice(0, 4), ["김하늘", 7, 3, 4]);
 });
 
 test("입력 순서가 뒤집혀 있어도 늦게 만든 성적표가 이긴다", () => {
@@ -177,8 +203,8 @@ test("영역을 셋으로 나눈 시험은 세 칸이 나온다 — 열을 듣�
       ),
     },
   ]);
-  assert.deepEqual(rows[0], ["학생명", "총점수", "듣기점수", "어법점수", "독해점수"]);
-  assert.deepEqual(rows[1], ["김하늘", 6, 2, 0, 4]);
+  assert.deepEqual(rows[0].slice(0, 5), ["학생명", "총점수", "듣기점수", "어법점수", "독해점수"]);
+  assert.deepEqual(rows[2].slice(0, 5), ["김하늘", 6, 2, 0, 4]);
 });
 
 test("영역을 안 적어 둔 시험은 학생명·총점수만 나온다", () => {
@@ -191,8 +217,8 @@ test("영역을 안 적어 둔 시험은 학생명·총점수만 나온다", () 
       data: report("김하늘", 4, [], items),
     },
   ]);
-  assert.deepEqual(rows[0], ["학생명", "총점수"]);
-  assert.deepEqual(rows[1], ["김하늘", 4]);
+  assert.deepEqual(rows[0], ["학생명", "총점수", "1번", "2번"]);
+  assert.deepEqual(rows[2], ["김하늘", 4, "O", "O"]);
 });
 
 test("그 영역이 없는 성적표는 0점이 아니라 빈칸으로 둔다", () => {
@@ -206,6 +232,6 @@ test("그 영역이 없는 성적표는 0점이 아니라 빈칸으로 둔다", 
     data: report("이바다", 5, [], [item(1, null, 2), item(2, null, 3)]),
   };
   const rows = buildScoreSheet([withArea, withoutArea]);
-  assert.deepEqual(rows[0], ["학생명", "총점수", "듣기점수", "독해점수"]);
-  assert.deepEqual(rows[2], ["이바다", 5, null, null]);
+  assert.deepEqual(rows[0].slice(0, 4), ["학생명", "총점수", "듣기점수", "독해점수"]);
+  assert.deepEqual(rows[3].slice(0, 4), ["이바다", 5, null, null]);
 });

@@ -1,4 +1,4 @@
-// 채점 결과를 엑셀 한 장으로 — 학생명 · 총점수 · 영역별 점수
+// 채점 결과를 엑셀 한 장으로 — 학생명 · 총점수 · 영역별 점수 · 문항별 정답 여부
 //
 // 왜 성적표에서 뽑는가
 // -------------------
@@ -15,7 +15,8 @@
 // 삼는다. 듣기·독해만 쓴 시험에서는 결과가 정확히 `학생명·총점수·듣기점수·
 // 독해점수` 네 칸이 된다.
 
-import type { GenericReportData } from "@/lib/omr-report-types";
+import type { GenericItemResult, GenericReportData } from "@/lib/omr-report-types";
+import type { MarkValue } from "@/lib/omr-answers";
 
 /** 엑셀 셀 — 숫자·문자, 빈칸은 null */
 export type ScoreCell = string | number | null;
@@ -81,8 +82,52 @@ function areaScore(data: GenericReportData, area: string): number | null {
   return stat ? stat.earned : null;
 }
 
+/** 표기(정답·학생 선택)를 사람이 읽는 글로 — 보기 하나면 "3", 모두 고르기면 "2,4" */
+function markText(value: MarkValue): string {
+  if (Array.isArray(value)) return value.join(",");
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
 /**
- * 성적 엑셀의 내용을 만든다 — 첫 줄이 머리글, 나머지가 학생별 한 줄.
+ * 문항 하나의 정답 여부 — 맞으면 O, 틀리면 X 와 학생이 고른 번호.
+ *
+ * 틀린 문항에 고른 번호를 함께 적는 이유: 선생님이 표를 보며 "3번을 골랐구나,
+ * 늘 그 함정에 빠지네"를 알아보게 하려는 것이다. O/X 만으로는 오답 유형이
+ * 보이지 않는다. 안 푼 문항은 "X(무응답)". 서술형은 고른 번호가 없으므로
+ * 받은 점수를 적는다.
+ */
+export function itemCell(item: GenericItemResult): string {
+  if (item.essay) return item.correct ? "O" : `X(${item.earned}/${item.point}점)`;
+  if (item.correct) return "O";
+  const marked = markText(item.marked);
+  return marked ? `X(${marked})` : "X(무응답)";
+}
+
+/** 모든 학생의 성적표에 나오는 문항 번호를 번호순으로 */
+export function orderedQuestions(reports: readonly ScoreSource[]): number[] {
+  const nos = new Set<number>();
+  for (const report of reports) for (const item of report.data.items ?? []) nos.add(item.no);
+  return [...nos].sort((a, b) => a - b);
+}
+
+/** 정답 줄 — 학생마다 같은 값이므로 처음 나오는 것을 쓴다. 서술형은 "서술" */
+function answerCell(reports: readonly ScoreSource[], no: number): string {
+  for (const report of reports) {
+    const item = (report.data.items ?? []).find((entry) => entry.no === no);
+    if (!item) continue;
+    if (item.essay) return "서술";
+    return markText(item.answer);
+  }
+  return "";
+}
+
+/**
+ * 성적 엑셀의 내용을 만든다 — 첫 줄이 머리글, 둘째 줄이 정답, 나머지가 학생별 한 줄.
+ *
+ * 열은 `학생명 · 총점수 · 영역별 점수 · 1번 · 2번 · …` 순이다. 문항 칸은 맞으면
+ * O, 틀리면 X(고른 번호). 정답 줄이 있어야 "X(3)"을 보고 정답이 무엇이었는지
+ * 바로 알 수 있다.
  *
  * 붙여 넣어 바로 쓰는 표라 안내 문구는 넣지 않는다. 이름 가나다순으로 정렬해
  * 명단에서 학생을 찾기 쉽게 한다(점수순이 필요하면 엑셀에서 정렬하면 된다).
@@ -92,15 +137,35 @@ export function buildScoreSheet(reports: readonly ScoreSource[]): ScoreCell[][] 
     a.name.localeCompare(b.name, "ko"),
   );
   const areas = orderedAreas(students);
+  const questions = orderedQuestions(students);
 
-  const header: ScoreCell[] = ["학생명", "총점수", ...areas.map((area) => `${area}점수`)];
+  const header: ScoreCell[] = [
+    "학생명",
+    "총점수",
+    ...areas.map((area) => `${area}점수`),
+    ...questions.map((no) => `${no}번`),
+  ];
   const rows: ScoreCell[][] = [header];
 
+  if (questions.length > 0) {
+    rows.push([
+      "정답",
+      null,
+      ...areas.map(() => null),
+      ...questions.map((no) => answerCell(students, no)),
+    ]);
+  }
+
   for (const student of students) {
+    const byNo = new Map((student.data.items ?? []).map((item) => [item.no, item]));
     rows.push([
       student.name,
       student.data.score.raw,
       ...areas.map((area) => areaScore(student.data, area)),
+      ...questions.map((no) => {
+        const item = byNo.get(no);
+        return item ? itemCell(item) : null;
+      }),
     ]);
   }
 
