@@ -2465,3 +2465,11 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .class-picker-name { font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
 .class-picker-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .class-picker .hint { display: block; margin-top: 8px; }
+
+/* 고친 내역 — 같은 글자는 그대로, 지운 글자·넣은 글자만 표시 */
+.review-diff-inline { line-height: 1.8; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+.review-diff-inline .review-before { background: #fdecea; border-radius: 3px; padding: 0 1px; }
+.review-diff-inline .review-after { background: #e3f4e8; border-radius: 3px; padding: 0 1px; font-weight: 700; }
+.review-diff-inline ins { text-decoration: none; }
+.review-diff-inline del { text-decoration: line-through; text-decoration-color: rgba(179, 38, 30, 0.6); }
+.review-edits .review-diff.review-diff-inline { display: block; gap: 0; }

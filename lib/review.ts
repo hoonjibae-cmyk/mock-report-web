@@ -8,6 +8,7 @@
 // 인클래스처럼 점수만 나가는 성적표까지 매번 운영진 손을 거치게 하면 검토가
 // 형식이 된다.
 
+import { describeChange } from "@/lib/text-diff";
 import type { ExamType } from "@/lib/omr-types";
 
 export type ReviewStatus = "none" | "requested" | "approved";
@@ -140,21 +141,17 @@ export function reviewRequestText(input: {
   );
 }
 
-/** 슬랙에 한 줄로 실을 만큼만 — 길면 앞부분만 */
-function clip(text: string, max = 60): string {
-  const t = text.replace(/\s+/g, " ").trim();
-  return t.length > max ? `${t.slice(0, max)}…` : t;
-}
-
 /**
  * 검수 중 고친 내역을 사람이 읽을 글로. 담임이 "뭐가 바뀌었지?"를 슬랙에서
- * 바로 보게 한다. 열 건이 넘으면 나머지는 검토 화면에서 보라고 한다.
+ * 바로 보게 한다. 문장 전체가 아니라 바뀐 자리 앞뒤만 싣는다 — 500자 총평에서
+ * 띄어쓰기 하나 고친 것을 앞부분 60자로는 알 수 없다. 열 건이 넘으면 나머지는
+ * 검토 화면에서 보라고 한다.
  */
 export function describeEdits(edits: readonly ReviewEdit[], max = 10): string {
   if (edits.length === 0) return "";
   const lines = edits.slice(0, max).map((e) => {
     const who = e.target === "overview" ? "총평" : (e.studentName ?? "학생");
-    return `• ${who}: “${clip(e.before)}” → “${clip(e.after)}”`;
+    return `• ${who}: ${describeChange(e.before, e.after)}`;
   });
   const more = edits.length > max ? `\n• 외 ${edits.length - max}건 — 검토 화면에서 전부 볼 수 있습니다.` : "";
   return `검수 중 고친 내용 ${edits.length}건:\n${lines.join("\n")}${more}`;
