@@ -92,8 +92,9 @@ export interface GrowthPoint {
  *
  * 시험이 쌓일수록 가로축이 촘촘해져 정작 최근 흐름이 안 보인다. 학부모가
  * 궁금한 것은 "지난 몇 달 사이 올랐나"이지 1년 전과의 비교가 아니다.
+ * 월말평가 기준 한 학기(6회)면 흐름이 보이고, 막대 여섯 개는 아직 읽힌다.
  */
-export const GROWTH_LIMIT = 3;
+export const GROWTH_LIMIT = 6;
 
 /**
  * 이전 회차 + 이번 회차를 합쳐 최근 것만 남긴다.

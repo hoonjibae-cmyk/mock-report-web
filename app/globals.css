@@ -2485,3 +2485,24 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .wrong-items-content { color: var(--muted); }
 .wrong-items-marked { color: var(--ink); }
 .wrong-items-marked .subtle { font-size: 12px; }
+
+/* 성적 추이(담임 의견 화면) */
+.trend-box { margin: 0 0 12px; padding: 12px 14px 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.trend-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 8px; }
+.trend-title { font-weight: 800; color: var(--navy-deep); font-size: 14px; }
+.trend-controls { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.trend-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fbfcfe; }
+.trend-seg button { border: 0; background: transparent; padding: 5px 10px; font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.trend-seg button + button { border-left: 1px solid var(--line); }
+.trend-seg button.on { background: var(--navy-deep); color: #fff; font-weight: 700; }
+.trend-seg.disabled { opacity: 0.45; }
+.trend-seg button:disabled { cursor: default; }
+.trend-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.trend-legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; margin-right: 6px; vertical-align: middle; }
+.trend-empty, .trend-note { margin: 4px 0 4px; font-size: 12.5px; }
+
+/* 성적표 생성 — 반 인원 대비 응시 현황 */
+.attendance-box { margin: 0 0 14px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 12px; background: #fbfcfe; }
+.attendance-box-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.attendance-box-head strong { color: var(--navy-deep); }
+.attendance-box .admin-table { background: #fff; }

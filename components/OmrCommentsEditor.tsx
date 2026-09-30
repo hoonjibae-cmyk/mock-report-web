@@ -1,5 +1,6 @@
 "use client";
 
+import TrendChart from "@/components/TrendChart";
 import { useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
@@ -683,6 +684,11 @@ export default function OmrCommentsEditor({
                         </ul>
                       )}
                     </div>
+                  ) : null}
+
+                  {/* 최근 회차 흐름 — "이번 달만 흔들린 건지, 계속 내려오는 건지"를 보고 쓴다 */}
+                  {row.history.length >= 2 ? (
+                    <TrendChart points={row.history} examTypeLabel={EXAM_TYPE_LABELS[exam.examType]} />
                   ) : null}
 
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>
