@@ -66,6 +66,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           channel,
           reviewRequestText({
             examTitle: exam.title,
+            classNames: exam.classNames,
             requesterName: auth.user.displayName,
             studentCount,
             link: `${base}/admin/omr/${id}/review`,

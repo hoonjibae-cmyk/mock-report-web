@@ -291,6 +291,9 @@ export default function GenericReport({
             <div><span>학생명</span><strong>{report.student.name}</strong></div>
             <div><span>수험번호</span><strong>{report.student.key}</strong></div>
             <div><span>학교·학년</span><strong>{report.student.school || "미입력"}</strong></div>
+            {report.student.className ? (
+              <div><span>반</span><strong>{report.student.className}</strong></div>
+            ) : null}
             <div><span>발행일</span><strong>{new Date(report.generatedAt).toLocaleDateString("ko-KR")}</strong></div>
           </div>
         </header>

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import ReviewPanel from "@/components/ReviewPanel";
-import { attendanceByClass, classNamesOf } from "@/lib/attendance";
+import { attendanceSummary, reviewClassNames } from "@/lib/attendance";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getVisibleExam } from "@/lib/exam-access";
 import { getExamOverview } from "@/lib/omr-comments";
@@ -25,11 +25,14 @@ export default async function OmrReviewPage(context: { params: Promise<{ id: str
     getExamOverview(id).catch(() => null),
   ]);
 
-  // 반 명단과 맞춰 미응시자를 가려낸다 — 검수하는 지금 시점의 재원생 기준이다.
-  // 명단을 못 가져오면 화면에 그 까닭만 보이고 검수는 그대로 진행된다.
-  const classNames = classNamesOf(students);
+  // 반 명단과 맞춰 미응시자를 가려낸다 — 담임이 시험을 만들 때 고른 반, 검수하는
+  // 지금 시점의 재원생 기준이다. 명단을 못 가져오면 화면에 그 까닭만 보이고
+  // 검수는 그대로 진행된다.
+  const classNames = reviewClassNames(exam.classNames, students);
   const roster = classNames.length > 0 ? await fetchClassRosters(classNames) : null;
-  const attendance = roster ? attendanceByClass(students, roster.rosters) : [];
+  const attendance = roster
+    ? attendanceSummary(students, roster.rosters, classNames)
+    : { classes: [], unlisted: [] };
 
   return (
     <ReviewPanel
@@ -37,8 +40,12 @@ export default async function OmrReviewPage(context: { params: Promise<{ id: str
       students={students}
       overview={{ status: overview?.status === "final" ? "final" : "draft", text: overview?.final ?? null }}
       canApprove={canApproveReview(user)}
-      attendance={attendance}
-      attendanceError={roster?.error ?? (classNames.length === 0 ? "성적표에 반 이름이 없어 반 명단과 맞춰 볼 수 없습니다." : null)}
+      attendance={attendance.classes}
+      attendanceUnlisted={attendance.unlisted}
+      attendanceError={
+        roster?.error ??
+        (classNames.length === 0 ? "시험에 고른 반이 없고 성적표에도 반 이름이 없어 반 명단과 맞춰 볼 수 없습니다." : null)
+      }
     />
   );
 }

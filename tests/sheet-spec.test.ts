@@ -28,6 +28,7 @@ function exam(over: Partial<OmrExam> = {}, cfg: OmrConfig = {}): OmrExam {
     title: "9월 11일 토모 코어",
     subject: null,
     examDate: "2026-09-12",
+    classNames: [],
     numQuestions: 45,
     numChoices: 5,
     idDigits: 5,

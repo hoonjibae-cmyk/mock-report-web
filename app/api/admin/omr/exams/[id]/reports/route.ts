@@ -253,7 +253,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         examTitle: exam.title,
         examDate: exam.examDate,
         academy: ACADEMY_NAME,
-        student: { key, name: input.name.trim(), school: input.school?.trim() ?? "" },
+        student: {
+          key,
+          name: input.name.trim(),
+          school: input.school?.trim() ?? "",
+          // 반 이름도 성적표에 찍는다 — 학생 관리 프로그램에서 온 값 그대로
+          className: input.className?.trim() || undefined,
+        },
         score: {
           raw: result.raw,
           objectiveRaw: result.objectiveRaw,

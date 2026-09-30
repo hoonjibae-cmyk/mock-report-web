@@ -14,6 +14,7 @@ import {
   type ExamType,
   type MockSubject,
 } from "@/lib/omr-types";
+import type { ClassOption } from "@/lib/student-directory";
 
 const TYPE_DEFAULTS: Record<ExamType, { q: number; subjectLabel: string; period: string }> = {
   mock: { q: 45, subjectLabel: "영어 영역", period: "3" },
@@ -27,7 +28,16 @@ function subjectDefaults(subject: MockSubject) {
   return MOCK_SUBJECTS.find((s) => s.value === subject) ?? MOCK_SUBJECTS[2];
 }
 
-export default function OmrExamForm() {
+interface Props {
+  /** 월말평가 '반 선택'에 보일 반 — 담당 반이 있으면 그것만, 없으면 전체 */
+  classOptions?: ClassOption[];
+  /** true면 로그인한 선생님의 담당 반만 보이는 상태 */
+  classesMine?: boolean;
+  /** 반 목록을 못 가져온 까닭 — 있으면 반 선택 없이도 만들 수 있게 한다 */
+  classesError?: string | null;
+}
+
+export default function OmrExamForm({ classOptions = [], classesMine = false, classesError = null }: Props) {
   const router = useRouter();
   const params = useSearchParams();
   // 좌측 하위 메뉴에서 '+ 새 시험'을 누르면 그 유형이 미리 골라져 있다
@@ -46,6 +56,13 @@ export default function OmrExamForm() {
   const [perColumn, setPerColumn] = useState(defaultPerColumn(initialType));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // 월말평가에서 담임이 고른 반 — 검수 화면이 이 반의 명단과 응시 인원을 맞춘다.
+  // 여러 반을 합쳐 한 시험으로 치르는 일이 있어 복수 선택이다.
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+
+  function toggleClass(name: string, on: boolean) {
+    setSelectedClasses((prev) => (on ? [...new Set([...prev, name])] : prev.filter((n) => n !== name)));
+  }
 
   // 답안지 미리보기 — 설정을 바꾸면 손을 뗀 뒤 0.5초 있다가 다시 그린다.
   // 판독 서버는 15분 놀면 잠들므로 화면에 들어오자마자 깨워 둔다.
@@ -144,11 +161,18 @@ export default function OmrExamForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // 반 목록이 있는데 하나도 안 골랐으면 막는다 — 반 없이 만든 월말평가는 검수에서
+    // 미응시자를 가려낼 수 없다. 목록을 못 가져온 날은(연동 장애) 그냥 만들 수 있다.
+    if (type === "monthly" && classOptions.length > 0 && selectedClasses.length === 0) {
+      setError("이 시험을 치르는 반을 하나 이상 골라 주세요.");
+      return;
+    }
     setLoading(true);
     setError("");
     const fd = new FormData(event.currentTarget);
     const payload = {
       examType: type,
+      classNames: type === "monthly" ? selectedClasses : [],
       title: String(fd.get("title") || "").trim(),
       subject: String(fd.get("subject") || ""),
       examDate: String(fd.get("examDate") || ""),
@@ -228,6 +252,47 @@ export default function OmrExamForm() {
             ))}
           </select>
         </label>
+
+        {type === "monthly" ? (
+          <fieldset className="class-picker">
+            <legend>
+              <span>시험을 치르는 반{classOptions.length > 0 ? " *" : ""}</span>
+            </legend>
+            {classOptions.length > 0 ? (
+              <>
+                <div className="class-picker-grid">
+                  {classOptions.map((c) => {
+                    const on = selectedClasses.includes(c.className);
+                    return (
+                      <label key={c.className} className={`class-picker-item${on ? " on" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) => toggleClass(c.className, e.target.checked)}
+                        />
+                        <span className="class-picker-name">{c.className}</span>
+                        <span className="class-picker-meta">
+                          {classesMine ? "" : c.teacher ? `${c.teacher} · ` : ""}
+                          {c.count}명
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <small className="hint">
+                  {classesMine
+                    ? "담당하시는 반만 보입니다. 두 반을 합쳐 치르면 둘 다 고르세요. 운영진 검토 화면의 미응시 확인은 여기서 고른 반을 기준으로 합니다."
+                    : "담당 반을 찾지 못해 전체 반을 보입니다. 이 시험을 치르는 반을 고르세요. 운영진 검토 화면의 미응시 확인은 여기서 고른 반을 기준으로 합니다."}
+                </small>
+              </>
+            ) : (
+              <small className="hint">
+                반 목록을 불러오지 못했습니다{classesError ? ` — ${classesError}` : ""}. 반 없이 만들 수 있지만,
+                운영진 검토 화면에서 미응시 학생을 가려내지 못합니다.
+              </small>
+            )}
+          </fieldset>
+        ) : null}
 
         {isMock ? (
           <label>

@@ -16,6 +16,8 @@ interface Props {
   canApprove: boolean;
   /** 반별 인원 대 응시 인원 — 학생 관리 프로그램 명단과 맞춘 결과(검수 시점 기준) */
   attendance?: ClassAttendance[];
+  /** 성적표는 있는데 어느 반 명단에도 없는 학생 */
+  attendanceUnlisted?: string[];
   /** 명단을 못 가져온 까닭 — 있으면 표 대신 이 문장을 보인다 */
   attendanceError?: string | null;
 }
@@ -132,6 +134,7 @@ export default function ReviewPanel({
   overview: initialOverview,
   canApprove,
   attendance = [],
+  attendanceUnlisted = [],
   attendanceError = null,
 }: Props) {
   const [review, setReview] = useState<ExamReview>(exam.review);
@@ -325,12 +328,6 @@ export default function ReviewPanel({
                           <span className="attendance-names">{c.absent.map((s) => s.name).join(", ")}</span>
                         </>
                       )}
-                      {c.unlisted.length > 0 ? (
-                        <p className="subtle attendance-unlisted">
-                          명단에 없는 응시자 {c.unlisted.length}명: {c.unlisted.join(", ")}
-                          <span> — 반을 옮겼거나 퇴원 처리된 학생일 수 있습니다.</span>
-                        </p>
-                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -338,9 +335,18 @@ export default function ReviewPanel({
             </table>
           </div>
         )}
+        {!attendanceError && attendanceUnlisted.length > 0 ? (
+          <p className="subtle attendance-unlisted">
+            명단에 없는 응시자 {attendanceUnlisted.length}명: <strong>{attendanceUnlisted.join(", ")}</strong> — 반을
+            옮겼거나 퇴원 처리된 학생, 또는 시험에 고른 반이 아닌 학생일 수 있습니다.
+          </p>
+        ) : null}
         {!attendanceError && attendance.length > 0 ? (
           <p className="subtle" style={{ marginTop: 8 }}>
-            반 전체 인원은 학생 관리 프로그램의 지금 재원생 기준입니다. 성적표가 없는 학생을 미응시로 봅니다.
+            {exam.classNames.length > 0
+              ? "담임 선생님이 시험을 만들 때 고른 반 기준이며, "
+              : "이 시험은 만들 때 반을 고르지 않아 성적표에 적힌 반 기준이며, "}
+            반 전체 인원은 학생 관리 프로그램의 지금 재원생 수입니다. 성적표가 없는 학생을 미응시로 봅니다.
           </p>
         ) : null}
       </section>

@@ -42,6 +42,7 @@ interface ExamRow {
   review_approved_by_name?: string | null;
   review_approved_at?: string | null;
   review_edits?: unknown;
+  class_names?: unknown;
 }
 
 /** 마이그레이션 미실행으로 컬럼이 없을 때, 실행할 파일을 알려준다. */
@@ -52,6 +53,7 @@ function describeExamDbError(message: string): string {
     const guide: Record<string, string> = {
       review_status: "supabase/migration_v13_review.sql",
       review_edits: "supabase/migration_v14_review_edits.sql",
+      class_names: "supabase/migration_v15_exam_classes.sql",
       question_meta: "supabase/migration_v2_omr.sql",
       points: "supabase/migration_v2_omr.sql",
       overview_comment: "supabase/migration_v2_omr.sql",
@@ -87,6 +89,9 @@ function mapExam(row: ExamRow): OmrExam {
     createdByName: row.created_by_name,
     createdByUsername: row.created_by_username ?? null,
     createdAt: row.created_at,
+    classNames: Array.isArray(row.class_names)
+      ? row.class_names.filter((v): v is string => typeof v === "string" && v.trim() !== "")
+      : [],
     review: {
       status: (["none", "requested", "approved"] as const).includes(row.review_status as ReviewStatus)
         ? (row.review_status as ReviewStatus)
@@ -103,7 +108,7 @@ function mapExam(row: ExamRow): OmrExam {
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at,review_edits";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at,review_edits,class_names";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -116,6 +121,8 @@ export interface CreateExamInput {
   omrStyle: "exam" | "basic";
   omrConfig: OmrConfig;
   useTeacherComment: boolean;
+  /** 월말평가에서 담임이 고른 반 — 없으면 빈 배열 */
+  classNames?: string[];
 }
 
 export async function createExam(
@@ -137,6 +144,7 @@ export async function createExam(
       omr_style: input.omrStyle,
       omr_config: input.omrConfig,
       use_teacher_comment: input.useTeacherComment,
+      class_names: input.classNames ?? [],
       created_by_username: user.username,
       created_by_name: user.displayName,
     })

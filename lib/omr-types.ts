@@ -148,6 +148,11 @@ export interface OmrExam {
   /** 만든 계정 — 삭제는 만든 사람과 총괄만 할 수 있다(lib/ownership.ts) */
   createdByUsername: string | null;
   createdAt: string;
+  /**
+   * 월말평가에서 담임이 시험을 만들 때 고른 반(v1.37.0). 검수 화면의 반 인원 대
+   * 응시 인원은 이 반을 기준으로 맞춘다. 그 전에 만든 시험은 빈 배열이다.
+   */
+  classNames: string[];
   /** 운영진 검토 상태 — 월말평가는 컨펌 전에 알림톡이 나가지 않는다(lib/review.ts) */
   review: ExamReview;
 }

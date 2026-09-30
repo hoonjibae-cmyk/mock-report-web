@@ -126,10 +126,14 @@ export function reviewRequestText(input: {
   requesterName: string;
   studentCount: number;
   link: string;
+  /** 담임이 시험을 만들 때 고른 반 — 있으면 한 줄 더 */
+  classNames?: readonly string[];
 }): string {
+  const classes = (input.classNames ?? []).filter(Boolean);
   return (
     `📝 *월말평가 성적표 검토 요청*\n` +
     `• 시험: ${input.examTitle}\n` +
+    (classes.length > 0 ? `• 반: ${classes.join(", ")}\n` : "") +
     `• 요청: ${input.requesterName} 선생님 · 학생 ${input.studentCount}명\n` +
     `• 성적표를 확인하고 문제 없으면 *컨펌*을 눌러 주세요. 컨펌 전에는 알림톡이 나가지 않습니다.\n` +
     `${input.link}`
