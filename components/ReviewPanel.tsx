@@ -7,6 +7,7 @@ import { formatWhen, type ExamReview, type ReviewEdit } from "@/lib/review";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { ReviewStudentRow } from "@/lib/reports";
 import type { ClassAttendance } from "@/lib/attendance";
+import { diffChars } from "@/lib/text-diff";
 
 interface Props {
   exam: OmrExam;
@@ -23,6 +24,11 @@ interface Props {
 }
 
 const when = formatWhen;
+
+/** 지운 글자·넣은 글자가 띄어쓰기뿐이면 눈에 보이게 ␣ 로 — 빨간 줄 하나로는 무엇을 지웠는지 모른다 */
+function showSpaces(text: string): string {
+  return text.replace(/ /g, "␣");
+}
 
 /**
  * 읽다가 바로 고치는 글 상자.
@@ -383,10 +389,18 @@ export default function ReviewPanel({
             {edits.map((e, i) => (
               <li key={`${e.at}-${i}`}>
                 <strong>{e.target === "overview" ? "총평" : (e.studentName ?? "학생")}</strong>
-                <span className="review-diff">
-                  <span className="review-before">{e.before}</span>
-                  <span className="review-arrow">→</span>
-                  <span className="review-after">{e.after}</span>
+                {/* 같은 글자는 그대로 두고 지운 글자·넣은 글자만 표시 — 통째로 줄 긋고
+                    통째로 다시 적으면 띄어쓰기 하나 고친 것을 찾을 수 없다 */}
+                <span className="review-diff review-diff-inline">
+                  {diffChars(e.before, e.after).map((op, k) =>
+                    op.type === "same" ? (
+                      <span key={k}>{op.text}</span>
+                    ) : op.type === "del" ? (
+                      <del key={k} className="review-before">{showSpaces(op.text)}</del>
+                    ) : (
+                      <ins key={k} className="review-after">{showSpaces(op.text)}</ins>
+                    ),
+                  )}
                 </span>
                 <span className="subtle review-meta">
                   {e.editedByName} · {when(e.at)}
