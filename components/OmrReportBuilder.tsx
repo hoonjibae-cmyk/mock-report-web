@@ -458,8 +458,9 @@ export default function OmrReportBuilder({
             {canExport && existingReports > 0 ? (
               <p className="subtle">
                 <strong>성적 엑셀 받기</strong>를 누르면 응시생 전원의{" "}
-                <strong>학생명 · 총점수 · 영역별 점수</strong>가 엑셀 한 장으로 나옵니다(성적표에
-                실린 점수 그대로). 영역 열은 이 시험에 적어 둔 영역을 따릅니다 — 듣기·독해로
+                <strong>학생명 · 총점수 · 영역별 점수 · 문항별 정답 여부</strong>가 엑셀 한 장으로
+                나옵니다(성적표에 실린 점수 그대로). 문항 칸은 맞으면 O, 틀리면 X(고른 번호)이고 둘째 줄이
+                정답입니다. 영역 열은 이 시험에 적어 둔 영역을 따릅니다 — 듣기·독해로
                 나눠 두었다면 그 두 칸이 나옵니다.
               </p>
             ) : null}
@@ -491,7 +492,7 @@ export default function OmrReportBuilder({
               <a
                 className="button secondary"
                 href={`/api/admin/omr/exams/${exam.id}/scores`}
-                title="응시생 전원의 학생명·총점수·영역별 점수를 엑셀 한 장으로 내려받습니다"
+                title="응시생 전원의 학생명·총점수·영역별 점수·문항별 정답 여부(O / X(고른 번호))를 엑셀 한 장으로 내려받습니다"
               >
                 성적 엑셀 받기
               </a>
