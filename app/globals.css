@@ -2443,3 +2443,13 @@ body.report-layout-a4 .a4-report-root { display: block; }
   .review-student-score strong { font-size: 17px; }
   .review-box { padding: 10px 14px 14px; }
 }
+
+/* 검수 화면 — 반 인원 대 응시 인원 */
+.attendance-table td { vertical-align: top; white-space: normal; }
+.attendance-table td:nth-child(2), .attendance-table td:nth-child(3) { white-space: nowrap; }
+.attendance-ok { color: #1a7f4b; font-weight: 700; }
+.attendance-absent { color: #b3261e; margin-right: 8px; }
+.attendance-names { line-height: 1.7; word-break: keep-all; }
+.attendance-unlisted { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; }
+.attendance-table .attendance-ok { color: #1a7f4b; }
+.attendance-table .attendance-names { display: block; margin-top: 2px; font-size: 14px; color: var(--ink); }

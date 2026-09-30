@@ -6,6 +6,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import { formatWhen, type ExamReview, type ReviewEdit } from "@/lib/review";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { ReviewStudentRow } from "@/lib/reports";
+import type { ClassAttendance } from "@/lib/attendance";
 
 interface Props {
   exam: OmrExam;
@@ -13,6 +14,10 @@ interface Props {
   overview: { status: "draft" | "final"; text: string | null };
   /** 컨펌 — 총괄이거나 계정에 '월말평가 검토 컨펌'이 켜진 사람(교수부장 등) */
   canApprove: boolean;
+  /** 반별 인원 대 응시 인원 — 학생 관리 프로그램 명단과 맞춘 결과(검수 시점 기준) */
+  attendance?: ClassAttendance[];
+  /** 명단을 못 가져온 까닭 — 있으면 표 대신 이 문장을 보인다 */
+  attendanceError?: string | null;
 }
 
 const when = formatWhen;
@@ -121,7 +126,14 @@ function EditableText({
  * 다만 확정된 의견의 사소한 오류는 검수자(교수부장)가 여기서 바로 고칠 수
  * 있다. 고친 것은 모두 기록되어 컨펌 알림에 함께 담임에게 전달된다.
  */
-export default function ReviewPanel({ exam, students: initialStudents, overview: initialOverview, canApprove }: Props) {
+export default function ReviewPanel({
+  exam,
+  students: initialStudents,
+  overview: initialOverview,
+  canApprove,
+  attendance = [],
+  attendanceError = null,
+}: Props) {
   const [review, setReview] = useState<ExamReview>(exam.review);
   const [students, setStudents] = useState<ReviewStudentRow[]>(initialStudents);
   const [overview, setOverview] = useState(initialOverview);
@@ -268,6 +280,67 @@ export default function ReviewPanel({ exam, students: initialStudents, overview:
           <p className="subtle" style={{ marginTop: 8 }}>
             확정된 의견의 철자·띄어쓰기 같은 사소한 오류는 각 글 옆의 ‘수정’으로 바로 고칠 수 있습니다.
             고친 내용은 컨펌할 때 담임 선생님께 함께 전달됩니다.
+          </p>
+        ) : null}
+      </section>
+
+      {/* 반 인원 대 응시 인원 — 성적표만 봐서는 "아예 안 본 학생"이 보이지 않는다.
+          학생 관리 프로그램의 재원생 명단(검수하는 지금 기준)과 맞춰 보여 준다. */}
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">반 인원 · 응시 여부</p>
+            <h2>시험을 아예 보지 않은 학생이 있는지 확인해 주세요</h2>
+          </div>
+        </div>
+        {attendanceError ? (
+          <p className="subtle">반 명단을 확인하지 못했습니다 — {attendanceError}</p>
+        ) : attendance.length === 0 ? (
+          <p className="subtle">반 명단과 맞춰 볼 성적표가 없습니다.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="admin-table attendance-table">
+              <thead>
+                <tr>
+                  <th>반</th>
+                  <th>반 전체 인원</th>
+                  <th>시험 응시 인원</th>
+                  <th>미응시 인원 (이름)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendance.map((c) => (
+                  <tr key={c.className}>
+                    <td>
+                      <strong>{c.className}</strong>
+                    </td>
+                    <td>{c.total}명</td>
+                    <td>{c.present}명</td>
+                    <td>
+                      {c.absent.length === 0 ? (
+                        <span className="attendance-ok">전원 응시</span>
+                      ) : (
+                        <>
+                          <strong className="attendance-absent">{c.absent.length}명</strong>
+                          <span className="attendance-names">{c.absent.map((s) => s.name).join(", ")}</span>
+                        </>
+                      )}
+                      {c.unlisted.length > 0 ? (
+                        <p className="subtle attendance-unlisted">
+                          명단에 없는 응시자 {c.unlisted.length}명: {c.unlisted.join(", ")}
+                          <span> — 반을 옮겼거나 퇴원 처리된 학생일 수 있습니다.</span>
+                        </p>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!attendanceError && attendance.length > 0 ? (
+          <p className="subtle" style={{ marginTop: 8 }}>
+            반 전체 인원은 학생 관리 프로그램의 지금 재원생 기준입니다. 성적표가 없는 학생을 미응시로 봅니다.
           </p>
         ) : null}
       </section>
