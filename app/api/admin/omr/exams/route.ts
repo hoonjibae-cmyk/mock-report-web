@@ -69,8 +69,14 @@ export async function POST(request: Request) {
       omrConfig.essay_count = essayCount;
     }
 
+    // 월말평가에서 담임이 고른 반 — 검수 화면이 이 반의 명단과 응시 인원을 맞춘다
+    const classNames = Array.isArray(body.classNames)
+      ? [...new Set((body.classNames as unknown[]).map((v) => String(v ?? "").trim().slice(0, 60)).filter(Boolean))].slice(0, 30)
+      : [];
+
     const exam = await createExam(
       {
+        classNames,
         examType,
         title,
         subject: typeof body.subject === "string" ? body.subject : undefined,

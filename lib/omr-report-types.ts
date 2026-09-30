@@ -139,6 +139,8 @@ export interface GenericReportData {
     key: string;
     name: string;
     school: string;
+    /** 반 이름 — 성적표 머리에 찍는다(v1.37.0 이후 성적표에만 있다) */
+    className?: string;
   };
   score: {
     /** 100점 만점 환산 원점수(객관식+서술형) */

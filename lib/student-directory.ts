@@ -210,6 +210,66 @@ export async function fetchClassRosters(classNames: string[]): Promise<RosterRes
   }
 }
 
+export interface ClassOption {
+  className: string;
+  /** 학생 관리 프로그램에 적힌 담임 이름 */
+  teacher: string;
+  /** 재원 인원 */
+  count: number;
+}
+
+/**
+ * 지금 운영 중인 반 목록 — 월말평가를 만들 때 담임이 고를 반.
+ *
+ * 실패해도 예외를 던지지 않는다. 반 목록이 없어도 시험은 만들 수 있어야 한다.
+ * Student-Card v1.66.0 이상이 필요하다(docs/STUDENT_CARD_API.md).
+ */
+export async function fetchClassBoard(): Promise<{ classes: ClassOption[]; error?: string }> {
+  if (!directoryConfigured()) {
+    return { classes: [], error: "학생 관리 프로그램 연동(STUDENT_API_URL)이 설정되어 있지 않습니다." };
+  }
+  const headers: Record<string, string> = {};
+  const key = process.env.STUDENT_API_KEY;
+  if (key) headers["x-api-key"] = key;
+  try {
+    const res = await fetch(`${base()}/api/students/classes`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { classes: [], error: "학생 관리 프로그램이 인증을 거부했습니다. STUDENT_API_KEY를 확인해 주세요." };
+    }
+    if (res.status === 404) {
+      return { classes: [], error: "학생 관리 프로그램에 반 목록 API(/api/students/classes)가 아직 없습니다. Student-Card v1.66.0 이상이 필요합니다." };
+    }
+    if (!res.ok) return { classes: [], error: `반 목록을 불러오지 못했습니다(${res.status}).` };
+    const data = (await res.json()) as { classes?: unknown };
+    const list = Array.isArray(data.classes) ? data.classes : [];
+    const classes: ClassOption[] = [];
+    for (const raw of list) {
+      if (!raw || typeof raw !== "object") continue;
+      const c = raw as Record<string, unknown>;
+      const className = String(c.className ?? c.class_name ?? "").trim();
+      if (!className) continue;
+      classes.push({
+        className,
+        teacher: String(c.teacher ?? "").trim(),
+        count: Number(c.count ?? 0) || 0,
+      });
+    }
+    return { classes };
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    return {
+      classes: [],
+      error: timedOut
+        ? "학생 관리 프로그램이 제때 응답하지 않았습니다(10초)."
+        : "학생 관리 프로그램에 연결하지 못했습니다.",
+    };
+  }
+}
+
 /** 설정 화면의 연결 확인용 — 상대 쪽이 살아 있는지만 본다 */
 export async function pingDirectory(): Promise<{ ok: boolean; message: string }> {
   if (!directoryConfigured()) {
