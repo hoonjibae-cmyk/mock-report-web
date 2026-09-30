@@ -2473,3 +2473,15 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .review-diff-inline ins { text-decoration: none; }
 .review-diff-inline del { text-decoration: line-through; text-decoration-color: rgba(179, 38, 30, 0.6); }
 .review-edits .review-diff.review-diff-inline { display: block; gap: 0; }
+
+/* 담임 의견 — 학생별 틀린 문항 */
+.wrong-items { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; background: #fbfcfe; font-size: 13px; }
+.wrong-items-label { font-weight: 800; color: var(--navy-deep); white-space: nowrap; padding: 3px 0; }
+.wrong-items-none { color: #1a7f4b; font-weight: 700; padding: 3px 0; }
+.wrong-items ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.wrong-items li { display: inline-flex; align-items: baseline; gap: 5px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 8px; background: #fff; white-space: nowrap; }
+.wrong-items li strong { color: #b3261e; }
+.wrong-items-area { color: var(--navy-deep); font-weight: 700; }
+.wrong-items-content { color: var(--muted); }
+.wrong-items-marked { color: var(--ink); }
+.wrong-items-marked .subtle { font-size: 12px; }

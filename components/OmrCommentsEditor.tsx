@@ -649,6 +649,42 @@ export default function OmrCommentsEditor({
                     ) : null}
                   </div>
 
+                  {/* 틀린 문항 — 번호순으로 영역과 고른 답. "시제에서 늘 3번을 고르네" 같은
+                      개별 코멘트는 이것을 보고 쓴다. 성적표에는 실리지 않는 참고 정보다. */}
+                  {row.summary ? (
+                    <div className="wrong-items">
+                      <span className="wrong-items-label">
+                        틀린 문항 {row.summary.wrong.length}개
+                      </span>
+                      {row.summary.wrong.length === 0 ? (
+                        <span className="wrong-items-none">전부 맞혔습니다</span>
+                      ) : (
+                        <ul>
+                          {row.summary.wrong.map((w) => (
+                            <li key={w.no} title={`정답 ${w.answer}`}>
+                              <strong>{w.no}번</strong>
+                              {w.area ? <span className="wrong-items-area">{w.area}</span> : null}
+                              {w.content ? <span className="wrong-items-content">{w.content}</span> : null}
+                              <span className="wrong-items-marked">
+                                {w.answer === "서술" ? (
+                                  <>
+                                    {w.marked}
+                                    <span className="subtle"> (서술형)</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    {w.marked === "무응답" ? "무응답" : `${w.marked} 선택`}
+                                    <span className="subtle"> (정답 {w.answer})</span>
+                                  </>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
+
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 10 }}>
                     <KeywordChips
                       label="표기용 키워드 (성적표에 칩으로 노출 · 긍정만)"
