@@ -76,18 +76,18 @@ test("영역별 — 만점이 달라도 성취율(%)로, 영역은 처음 나온
   assert.deepEqual(d.series[2].values, [null, 50]);
 });
 
-test("학부모 한 줄 — 지난 회차와 반 평균에 견준 말", () => {
+test("학부모 한 줄 — 오른 것만 말하고, 반 평균과 견주지 않는다", () => {
   assert.equal(
     trendSentence([{ raw: 78, mean: 70 }, { raw: 86, mean: 79.5 }]),
-    "이번 86점. 지난 회차(78점)보다 8점 올랐고, 반 평균(79.5점)보다 6.5점 높습니다.",
+    "이번 86점. 지난 회차(78점)보다 8점 올랐습니다.",
   );
+  // 내렸을 때는 점수만 — 성적표가 먼저 꾸짖지 않는다
+  assert.equal(trendSentence([{ raw: 90, mean: 70 }, { raw: 84, mean: 84 }]), "이번 84점.");
+  assert.equal(trendSentence([{ raw: 80, mean: 80 }, { raw: 80, mean: 80 }]), "이번 80점.");
+  assert.equal(trendSentence([{ raw: 80, mean: 85 }]), "이번 80점.");
   assert.equal(
-    trendSentence([{ raw: 90, mean: 70 }, { raw: 84, mean: 84 }]),
-    "이번 84점. 지난 회차(90점)보다 6점 내렸고, 반 평균(84점)과 같습니다.",
-  );
-  assert.equal(trendSentence([{ raw: 80, mean: 85 }]), "이번 80점. 반 평균(85점)보다 5점 낮습니다.");
-  assert.match(
     trendSentence([{ raw: 70, mean: 70 }, { raw: 75, mean: 70 }, { raw: 90, mean: 70 }]),
-    /최근 3회 중 가장 높은 점수입니다\.$/,
+    "이번 90점. 지난 회차(75점)보다 15점 올랐습니다. 최근 3회 중 가장 높은 점수입니다.",
   );
+  assert.ok(!trendSentence([{ raw: 60, mean: 90 }, { raw: 62, mean: 90 }]).includes("평균"), "반 평균 언급 없음");
 });
