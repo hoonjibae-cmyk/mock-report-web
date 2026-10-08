@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { OmrApiNotConfiguredError, previewSheet } from "@/lib/omr-api";
-import { ACADEMY_NAME, FIXED_ID_DIGITS, type OmrSheetSpec } from "@/lib/omr-types";
+import {
+  ACADEMY_NAME,
+  EXAM_TYPE_LABELS,
+  FIXED_ID_DIGITS,
+  applyFixedSheet,
+  type ExamType,
+  type OmrSheetSpec,
+} from "@/lib/omr-types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -29,7 +36,12 @@ export async function POST(request: Request) {
   if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => ({}));
-  const spec: OmrSheetSpec = {
+  // 공통 양식이 있는 유형(토요모의고사)은 미리보기도 실제 답안지와 같게 — 화면이
+  // 보낸 제목·영역이 아니라 고정 양식을 그린다
+  const examType = (Object.keys(EXAM_TYPE_LABELS) as ExamType[]).includes(body.examType)
+    ? (body.examType as ExamType)
+    : null;
+  const base: OmrSheetSpec = {
     exam_id: "PREVIEW",
     title: text(body.title) || "OMR 답안지",
     num_questions: clampInt(body.numQuestions, 1, 120, 45),
@@ -44,6 +56,7 @@ export async function POST(request: Request) {
     essay_count: clampInt(body.essayCount, 0, 20, 0),
     dpi: 100,
   };
+  const spec = examType ? applyFixedSheet(base, examType) : base;
 
   try {
     const png = await previewSheet(spec);
