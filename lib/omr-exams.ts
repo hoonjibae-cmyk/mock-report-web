@@ -6,11 +6,12 @@ import type { AnswerKeyValue, MarkValue } from "@/lib/omr-answers";
 import type { MockReference } from "@/lib/mock-reference";
 import {
   ACADEMY_NAME,
-  reportFamilyFor,
+  applyFixedSheet,
   type ExamType,
   type OmrConfig,
   type OmrExam,
   type OmrSheetSpec,
+  reportFamilyFor,
 } from "@/lib/omr-types";
 
 interface ExamRow {
@@ -257,7 +258,7 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
     typeof cfg.sheet_title === "string" && cfg.sheet_title.trim()
       ? cfg.sheet_title.trim()
       : exam.title;
-  return {
+  const spec: OmrSheetSpec = {
     exam_id: exam.id,
     title: sheetTitle,
     num_questions: exam.numQuestions,
@@ -270,4 +271,6 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
     academy: ACADEMY_NAME,
     essay_count: typeof cfg.essay_count === "number" ? cfg.essay_count : 0,
   };
+  // 토요모의고사는 공통 양식 — 시험 제목·설정과 상관없이 늘 같은 종이가 나온다
+  return applyFixedSheet(spec, exam.examType);
 }

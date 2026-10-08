@@ -60,7 +60,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     const spec = sheetSpecFor(exam);
     const cachePath = sheetCachePath(id, sheetCacheKey(spec));
-    const filename = `${exam.title.replace(/[^\w가-힣.-]+/g, "_")}_OMR.pdf`;
+    // 토요모의고사 답안지는 어느 시험에서 뽑아도 같은 종이다 — 파일 이름에 회차를 적지 않는다
+    const filename =
+      exam.examType === "saturday"
+        ? "목동유쌤영어_토모_OMR.pdf"
+        : `${exam.title.replace(/[^\w가-힣.-]+/g, "_")}_OMR.pdf`;
 
     // 같은 설정으로 만든 답안지가 보관돼 있으면 그대로 내려준다. 판독 서버를
     // 부르지 않으므로, 서버가 잠들어 있어도 기다림 없이 열린다.

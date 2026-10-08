@@ -8,6 +8,7 @@ import {
   EXAM_TYPE_LABELS,
   MOCK_SUBJECTS,
   FIXED_ID_DIGITS,
+  SATURDAY_SHEET,
   USER_QUESTION_COUNT,
   defaultPerColumn,
   defaultSheetTitle,
@@ -18,7 +19,7 @@ import type { ClassOption } from "@/lib/student-directory";
 
 const TYPE_DEFAULTS: Record<ExamType, { q: number; subjectLabel: string; period: string }> = {
   mock: { q: 45, subjectLabel: "영어 영역", period: "3" },
-  saturday: { q: 45, subjectLabel: "영어 영역", period: "" },
+  saturday: { q: 45, subjectLabel: "영어영역", period: "" },
   monthly: { q: 25, subjectLabel: "", period: "" },
   placement: { q: 30, subjectLabel: "", period: "" },
   inclass: { q: 20, subjectLabel: "", period: "" },
@@ -82,6 +83,8 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
     const get = (name: string) => String(fd?.get(name) ?? "").trim();
     const sheetTitle = get("sheetTitle") || get("title") || "OMR 답안지";
     return {
+      // 공통 양식이 있는 유형은 서버가 제목·영역을 고정 양식으로 바꿔 그린다
+      examType: type,
       title: sheetTitle,
       numQuestions,
       numChoices: Number(get("numChoices")) || 5,
@@ -181,11 +184,13 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
       // 학원 전체가 출결번호 5자리를 쓴다 — 화면에서 고르지 않는다.
       idDigits: FIXED_ID_DIGITS,
       omrStyle: String(fd.get("omrStyle") || "exam"),
-      perColumn: Number(fd.get("perColumn")) || undefined,
-      sheetTitle: String(fd.get("sheetTitle") || "").trim(),
+      // 토요모의고사는 공통 양식 — 서버가 답안지를 만들 때 어차피 고정 양식으로
+      // 덮어쓰지만, 저장되는 설정도 그 양식과 같게 둔다
+      perColumn: type === "saturday" ? SATURDAY_SHEET.perColumn : Number(fd.get("perColumn")) || undefined,
+      sheetTitle: type === "saturday" ? SATURDAY_SHEET.title : String(fd.get("sheetTitle") || "").trim(),
       essayCount: Number(fd.get("essayCount")) || 0,
-      period: String(fd.get("period") || ""),
-      subjectLabel: String(fd.get("subjectLabel") || ""),
+      period: type === "saturday" ? SATURDAY_SHEET.period : String(fd.get("period") || ""),
+      subjectLabel: type === "saturday" ? SATURDAY_SHEET.subjectLabel : String(fd.get("subjectLabel") || ""),
       useTeacherComment: fd.get("useTeacherComment") === "on",
     };
     try {
@@ -205,6 +210,8 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
   }
 
   const isMock = type === "mock";
+  // 토요모의고사 — 답안지가 공통 양식이라 제목·영역·열당 개수를 고를 수 없다
+  const isSaturday = type === "saturday";
   const subjectDefault = subjectDefaults(mockSubject);
   const defaults = isMock
     ? { q: subjectDefault.questions, subjectLabel: subjectDefault.subjectLabel, period: subjectDefault.period }
@@ -326,21 +333,33 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
           제목에 '9월 11일'을 적어야 하지만, 그 날짜가 종이에 찍히면 다음 주에
           그 종이를 못 쓴다.
         */}
-        <label>
-          <span>답안지 제목</span>
-          <input
-            // 유형을 바꾸면 그 유형의 기본값으로 다시 채워지도록 key를 묶는다
-            key={`sheet-title-${type}`}
-            name="sheetTitle"
-            defaultValue={sheetTitleDefault}
-            placeholder="비우면 시험 제목이 그대로 찍힙니다"
-          />
-          <small className="hint">
-            {sheetTitleDefault
-              ? "답안지를 미리 넉넉히 뽑아 두고 여러 회차에 나눠 쓸 수 있도록, 날짜가 없는 이름을 기본값으로 넣었습니다. 바꾸셔도 됩니다."
-              : "종이에 찍히는 제목입니다. 비워 두면 위의 시험 제목을 그대로 씁니다."}
-          </small>
-        </label>
+        {isSaturday ? (
+          /*
+            토요모의고사 답안지는 공통 양식이다. 미리 대량으로 뽑아 두고 어느 주에나
+            쓰므로, 어느 시험에서 뽑든 종이가 똑같아야 한다 — 제목·영역·QR 시험
+            코드가 모두 고정이고 여기서 바꿀 수 없다.
+          */
+          <label className="fixed-field">
+            <span>답안지 제목 (공통 양식 · 고정)</span>
+            <strong>{SATURDAY_SHEET.title} · {SATURDAY_SHEET.subjectLabel}</strong>
+            <small className="hint">
+              토요모의고사 답안지는 어느 시험에서 뽑아도 똑같습니다(45문항 · 보기 5 · 서술형 0 · 열당 15).
+              미리 넉넉히 뽑아 두고 여러 주에 나눠 쓰세요. 위의 시험 제목은 목록과 성적표에만 쓰입니다.
+            </small>
+          </label>
+        ) : (
+          <label>
+            <span>답안지 제목</span>
+            <input
+              // 유형을 바꾸면 그 유형의 기본값으로 다시 채워지도록 key를 묶는다
+              key={`sheet-title-${type}`}
+              name="sheetTitle"
+              defaultValue={sheetTitleDefault}
+              placeholder="비우면 시험 제목이 그대로 찍힙니다"
+            />
+            <small className="hint">종이에 찍히는 제목입니다. 비워 두면 위의 시험 제목을 그대로 씁니다.</small>
+          </label>
+        )}
 
         <div className="form-row">
           <label>
@@ -357,7 +376,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
           </label>
           <label>
             <span>보기 수</span>
-            <input name="numChoices" type="number" min={2} max={8} defaultValue={5} />
+            <input name="numChoices" type="number" min={2} max={8} defaultValue={5} readOnly={isSaturday} />
           </label>
         </div>
 
@@ -380,9 +399,11 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
               max={30}
               value={perColumn}
               onChange={(e) => setPerColumn(Number(e.target.value) || 0)}
+              readOnly={isSaturday}
             />
             <small className="hint">
               한 열에 담는 문항 수입니다. {numQuestions}문항을 {perColumn}개씩 나누면 {columnSplit}이 됩니다.
+              {isSaturday ? " 토요모의고사 공통 양식은 15로 고정입니다." : ""}
             </small>
           </label>
         </div>
@@ -390,7 +411,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
         <div className="form-row">
           <label>
             <span>서술형(주관식) 문항 수</span>
-            <input name="essayCount" type="number" min={0} max={20} defaultValue={0} />
+            <input name="essayCount" type="number" min={0} max={20} defaultValue={0} readOnly={isSaturday} />
             <small className="hint">0이면 객관식만. 1 이상이면 답안지 오른쪽에 손기입 칸이 추가됩니다.</small>
           </label>
         </div>
@@ -407,21 +428,23 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
           </label>
         </div>
 
-        <div className="form-row">
-          <label>
-            <span>교시(선택)</span>
-            <input key={`p-${type}-${mockSubject}`} name="period" defaultValue={defaults.period} placeholder="예: 3" />
-          </label>
-          <label>
-            <span>영역 표기(선택)</span>
-            <input
-              key={`s-${type}-${mockSubject}`}
-              name="subjectLabel"
-              defaultValue={defaults.subjectLabel}
-              placeholder="예: 영어 영역"
-            />
-          </label>
-        </div>
+        {isSaturday ? null : (
+          <div className="form-row">
+            <label>
+              <span>교시(선택)</span>
+              <input key={`p-${type}-${mockSubject}`} name="period" defaultValue={defaults.period} placeholder="예: 3" />
+            </label>
+            <label>
+              <span>영역 표기(선택)</span>
+              <input
+                key={`s-${type}-${mockSubject}`}
+                name="subjectLabel"
+                defaultValue={defaults.subjectLabel}
+                placeholder="예: 영어 영역"
+              />
+            </label>
+          </div>
+        )}
 
         {isMock ? (
           <input type="hidden" name="subject" value={mockSubject} />

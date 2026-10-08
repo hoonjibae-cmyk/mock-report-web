@@ -37,7 +37,7 @@ export const EXAM_TYPE_LABELS: Record<ExamType, string> = {
  * 알려 준다).
  */
 export const SHEET_DEFAULTS: Partial<Record<ExamType, { sheetTitle?: string; perColumn?: number }>> = {
-  saturday: { sheetTitle: "토요모의고사 OMR 답안지", perColumn: 15 },
+  saturday: { sheetTitle: "목동유쌤영어 토모", perColumn: 15 },
 };
 
 /** 이 유형의 답안지 기본 제목(없으면 시험 제목을 쓴다) */
@@ -48,6 +48,39 @@ export function defaultSheetTitle(type: ExamType): string {
 /** 이 유형의 기본 '문항 열당 개수' */
 export function defaultPerColumn(type: ExamType): number {
   return SHEET_DEFAULTS[type]?.perColumn ?? 20;
+}
+
+/**
+ * 토요모의고사 공통 답안지.
+ *
+ * 토요모의고사 답안지는 미리 대량으로 뽑아 두고 어느 주에나 쓴다. 그래서 어느
+ * 시험에서 뽑든 종이가 똑같아야 한다 — 제목은 시험 제목과 상관없이 '목동유쌤영어
+ * 토모' · '영어영역'이고, 네 귀퉁이 QR 에 들어가는 시험 코드도 시험마다 다른 id
+ * 대신 이 고정값이다. 판독은 시험 코드를 보지 않고 배치 지문(문항 수·보기 수·
+ * 자리수·열당 개수·스타일·서술형 수)으로만 호환을 가리므로, 고정값이어도 어느
+ * 토모 시험에서나 읽힌다.
+ */
+export const SATURDAY_SHEET = {
+  examId: "TOMO",
+  title: "목동유쌤영어 토모",
+  subjectLabel: "영어영역",
+  period: "",
+  perColumn: 15,
+} as const;
+
+/** 공통 양식이 있는 유형(토요모의고사)이면 그 양식으로 덮어쓴다 — 시험 설정이 무엇이든 */
+export function applyFixedSheet(spec: OmrSheetSpec, type: ExamType): OmrSheetSpec {
+  if (type !== "saturday") return spec;
+  return {
+    ...spec,
+    exam_id: SATURDAY_SHEET.examId,
+    title: SATURDAY_SHEET.title,
+    subject_label: SATURDAY_SHEET.subjectLabel,
+    period: SATURDAY_SHEET.period,
+    per_column: SATURDAY_SHEET.perColumn,
+    // 제목을 글자 그대로 — 판독 서버가 ' 답안지'를 덧붙이지 않게
+    title_suffix: false,
+  };
 }
 
 // 문항수를 유저가 고르는 유형(범용). mock/saturday는 정해진 구성.
@@ -170,6 +203,8 @@ export interface OmrSheetSpec {
   subject_label?: string;
   academy?: string;
   essay_count?: number;
+  /** 제목에 '답안지'가 없을 때 판독 서버가 덧붙일지 — 공통 양식(토모)은 false */
+  title_suffix?: boolean;
   dpi?: number;
 }
 
