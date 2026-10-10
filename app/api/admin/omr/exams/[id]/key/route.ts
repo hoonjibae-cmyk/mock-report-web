@@ -89,7 +89,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       if (typeof body.questionMeta !== "object" || body.questionMeta === null) {
         return NextResponse.json({ error: "영역 형식이 올바르지 않습니다." }, { status: 400 });
       }
-      questionMeta = {};
+      questionMeta = {...exam.questionMeta};
       for (const [key, value] of Object.entries(body.questionMeta as Record<string, unknown>)) {
         const q = Number(key);
         if (!Number.isInteger(q) || q < 1 || q > lastQuestion) continue;
@@ -97,7 +97,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
           typeof value === "object" && value !== null
             ? String((value as { area?: unknown }).area ?? "").trim()
             : String(value ?? "").trim();
-        if (area) questionMeta[String(q)] = { area: area.slice(0, 30) };
+        questionMeta[String(q)] = { ...exam.questionMeta[String(q)], area: area ? area.slice(0,30) : undefined };
       }
     }
 

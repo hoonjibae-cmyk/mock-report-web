@@ -119,7 +119,7 @@ export function normalizeDifficulty(value: unknown): Difficulty | null {
   const text = String(value ?? "").trim();
   if (!text) return null;
   const table: Record<string, Difficulty> = {
-    상: "어려움", 중: "보통", 하: "쉬움",
+    상: "어려움", 중상: "어려움", 중: "보통", 중하: "쉬움", 하: "쉬움",
     A: "어려움", B: "보통", C: "쉬움",
     어려움: "어려움", 보통: "보통", 쉬움: "쉬움",
     어려운: "어려움", 쉬운: "쉬움",
