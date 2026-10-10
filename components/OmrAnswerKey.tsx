@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import ImportedExamSource from "./ImportedExamSource";
 import {
   compactMark,
   formatChoices,
@@ -275,14 +276,16 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
             </span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link className="button ghost" href="/admin/omr">← 시험 목록</Link>
+          {exam.omrConfig.exam_generator&&canEdit?<a className="button ghost" href={`/api/admin/omr/exams/${exam.id}/sheet`} target="_blank" rel="noreferrer">OMR 답안지 PDF ↗</a>:null}
           <Link className="button secondary" href={`/admin/omr/${exam.id}/scans`}>
             스캔 · 검수 →
           </Link>
         </div>
       </header>
 
+      <ImportedExamSource exam={exam}/>
       {error ? <p className="form-error block">{error}</p> : null}
       {message ? <p className="subtle">{message}</p> : null}
 
