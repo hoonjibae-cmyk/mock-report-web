@@ -1,5 +1,6 @@
 // OMR 스캔 판독 결과(omr_scans) 저장소 — Supabase service-role 경유
 
+import type { ListeningMode } from "@/lib/listening";
 import type { MarkValue } from "@/lib/omr-answers";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
@@ -20,6 +21,7 @@ function describeDbError(message: string): string {
       preview_path: "supabase/migration_v7_scan_preview.sql",
       read_confidence: "supabase/migration_v8_read_confidence.sql",
       reviewed_by: "supabase/migration_v8_read_confidence.sql",
+      listening_mode: "supabase/migration_v16_listening_mode.sql",
     };
     const file = guide[column] ?? "supabase 폴더의 최신 migration 파일";
     return `데이터베이스 업데이트가 필요합니다. Supabase → SQL Editor에서 ${file}을 실행해 주세요. (기존 판독 결과는 그대로 보관되어 있으며, 실행 후 바로 다시 보입니다. 누락된 항목: ${column})`;
@@ -74,6 +76,11 @@ export interface OmrScan {
   /** 판독 확신 정보 — 자동 검수 통과 판단용. 이전에 올린 답안지는 null. */
   readConfidence: ReadConfidence | null;
   status: ScanStatus;
+  /**
+   * 듣기 미응시 처리(토요모의고사) — 'absent' 안 봄(반 평균으로 산출), 'marked' 봤음
+   * (마킹한 대로), null 은 아직 안 정함(듣기 문항이 거의 비어 있으면 안 본 것으로 본다)
+   */
+  listeningMode: ListeningMode | null;
   /** 'auto' = 시스템 자동 통과, 그 외에는 확인한 사용자 ID */
   reviewedBy: string | null;
   readError: string | null;
@@ -98,13 +105,14 @@ interface ScanRow {
   read_confidence: ReadConfidence | null;
   status: ScanStatus;
   reviewed_by: string | null;
+  listening_mode?: string | null;
   read_error: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,read_error,created_at,updated_at";
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -124,6 +132,7 @@ function mapScan(row: ScanRow): OmrScan {
     readConfidence: row.read_confidence ?? null,
     status: row.status,
     reviewedBy: row.reviewed_by ?? null,
+    listeningMode: row.listening_mode === "absent" || row.listening_mode === "marked" ? row.listening_mode : null,
     readError: row.read_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -200,6 +209,7 @@ export interface UpdateScanInput {
   essayAnswers?: Record<string, string>;
   status?: ScanStatus;
   reviewedBy?: string | null;
+  listeningMode?: ListeningMode | null;
   readError?: string | null;
 }
 
@@ -213,6 +223,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;
   if (input.status !== undefined) patch.status = input.status;
   if (input.reviewedBy !== undefined) patch.reviewed_by = input.reviewedBy;
+  if (input.listeningMode !== undefined) patch.listening_mode = input.listeningMode;
   if (input.readError !== undefined) patch.read_error = input.readError;
   // 사람이 검수해 확인했으면 판독 단계의 경고는 더 이상 표시하지 않는다.
   if (input.status === "reviewed" && input.readError === undefined) patch.read_error = null;

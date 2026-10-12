@@ -219,6 +219,8 @@ export interface CommentStudentRow {
     weakItems: number[];
     /** 틀린 문항 — 번호·영역·학생이 고른 답. 개별 코멘트를 쓸 때 본다 */
     wrong: WrongItem[];
+    /** 듣기 미응시 — 듣기 점수는 본 학생들의 평균을 받았다 */
+    listeningAbsent: boolean;
     growth: Array<{ date: string; standardScore: number }>;
     /**
      * 영역별 성취 — 등급을 제안하고 어느 영역에 서술을 써야 하는지 알려 준다.
@@ -264,6 +266,7 @@ export async function listCommentStudents(examId: string): Promise<CommentStuden
             standardScore: reportData.standardScore,
             weakItems: reportData.weakItems,
             wrong: wrongItemsOf(reportData.items ?? []),
+            listeningAbsent: Boolean(reportData.listeningAbsent),
             growth: reportData.growth.map((point) => ({
               date: point.date,
               standardScore: point.standardScore,

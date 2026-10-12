@@ -56,6 +56,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ scanI
       patch.answers = answers;
     }
 
+    // 듣기 미응시 처리(토요모의고사) — 'absent' 안 봄, 'marked' 봤음, null 은 자동 판단으로 되돌림
+    if (body.listeningMode !== undefined) {
+      const mode = body.listeningMode;
+      if (mode !== "absent" && mode !== "marked" && mode !== null) {
+        return NextResponse.json({ error: "듣기 처리 방식이 올바르지 않습니다." }, { status: 400 });
+      }
+      patch.listeningMode = mode;
+    }
+
     if (body.status !== undefined) {
       if (body.status !== "pending" && body.status !== "reviewed") {
         return NextResponse.json({ error: "알 수 없는 검수 상태입니다." }, { status: 400 });

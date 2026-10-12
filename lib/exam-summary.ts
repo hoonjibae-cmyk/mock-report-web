@@ -11,7 +11,15 @@
  */
 import type { MarkValue } from "@/lib/omr-answers";
 import type { OmrExam } from "@/lib/omr-types";
-import { areaOf, isEssayQuestion, pointFor, allQuestionNumbers, type CohortStats, type ScoredScan } from "@/lib/omr-scoring";
+import {
+  areaOf,
+  isEssayQuestion,
+  pointFor,
+  allQuestionNumbers,
+  type CohortStats,
+  type ListeningSummary,
+  type ScoredScan,
+} from "@/lib/omr-scoring";
 
 /** 이름·반 — 성적표가 있으면 거기서, 없으면 학생 관리 프로그램에서 */
 export interface SummaryStudent {
@@ -30,6 +38,8 @@ export interface SummaryItem {
   marked: string;
   earned: number;
   point: number;
+  /** 듣기 미응시 — 채점하지 않은 문항 */
+  absent: boolean;
 }
 
 export interface SummaryRow {
@@ -48,9 +58,11 @@ export interface SummaryRow {
   correctCount: number;
   wrongCount: number;
   blankCount: number;
-  areas: Array<{ area: string; earned: number; possible: number; rate: number }>;
+  areas: Array<{ area: string; earned: number; possible: number; rate: number; estimated: boolean }>;
   items: SummaryItem[];
   reportToken: string | null;
+  /** 듣기 미응시 — 듣기 점수는 본 학생들의 평균을 받았다 */
+  listeningAbsent: boolean;
 }
 
 export interface SummaryQuestion {
@@ -80,6 +92,8 @@ export interface ExamSummaryData {
   pendingScans: number;
   /** 성적표가 만들어진 학생 수 */
   reportCount: number;
+  /** 듣기 미응시 집계(토요모의고사) — 듣기 문항이 없는 시험이면 null */
+  listening: ListeningSummary | null;
   /** 정답이 전부 입력됐는가 — 아니면 점수가 아직 임시다 */
   answerKeyComplete: boolean;
   /** 이름을 학생 관리 프로그램에서 가져오지 못한 까닭 */
@@ -119,7 +133,7 @@ export function buildSummaryRows(
       correctCount: s.correctCount,
       wrongCount: s.wrongCount,
       blankCount: s.blankCount,
-      areas: s.areas.map((a) => ({ area: a.area, earned: a.earned, possible: a.possible, rate: a.rate })),
+      areas: s.areas.map((a) => ({ area: a.area, earned: a.earned, possible: a.possible, rate: a.rate, estimated: a.estimated === true })),
       items: [...s.items]
         .sort((a, b) => a.no - b.no)
         .map((it) => ({
@@ -129,8 +143,10 @@ export function buildSummaryRows(
           marked: it.essay ? "" : markText(it.marked),
           earned: it.earned,
           point: it.point,
+          absent: it.absent === true,
         })),
       reportToken: who?.reportToken ?? null,
+      listeningAbsent: s.listeningAbsent,
     };
   });
 }

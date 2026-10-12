@@ -2559,3 +2559,20 @@ body.report-layout-a4 .a4-report-root { display: block; }
   .summary-table thead th, .summary-table .sticky-col { position: static; }
 }
 .group-meta .inline-link { font-size: 12.5px; font-weight: 700; color: var(--navy-deep); text-decoration: underline; text-underline-offset: 3px; }
+
+/* 듣기 미응시 — 성적표·요약·생성 화면 */
+.omr-item-cell.absent { background: #f1f3f6; color: #98a2b3; border-style: dashed; }
+.omr-item-cell.absent .mark { font-size: 10px; letter-spacing: -0.02em; }
+.item-table td.absent-mark { color: #98a2b3; font-size: 12px; }
+.listening-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #fff7e6; border: 1px solid #f3dcae; color: #6b4e00; font-size: 13px; line-height: 1.7; }
+.area-estimated { font-weight: 600; color: #8a5a00; font-size: 11.5px; }
+.summary-table td.q.absent { color: #98a2b3; background: #f1f3f6; font-weight: 600; }
+.summary-table td.estimated { background: #fff7e6; color: #8a5a00; }
+.summary-absent { color: #8a5a00; font-style: normal; font-weight: 700; }
+.listening-box { margin: 0 0 14px; padding: 12px 14px; border: 1px dashed #e0a030; border-radius: 12px; background: #fffaf0; }
+.listening-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.listening-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.listening-who { display: grid; gap: 2px; min-width: 200px; }
+.listening-who strong { color: var(--navy-deep); }
+.listening-seg button { padding: 6px 12px; }
+@media (max-width: 720px) { .listening-list li { flex-direction: column; align-items: stretch; } .listening-seg { display: grid; grid-template-columns: 1fr; } .listening-seg button + button { border-left: 0; border-top: 1px solid var(--line); } }

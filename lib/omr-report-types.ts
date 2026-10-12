@@ -26,6 +26,8 @@ export interface GenericItemResult {
   /** 이 문항에서 받은 점수 */
   earned: number;
   point: number;
+  /** 듣기 미응시 — 이 문항은 채점하지 않았다(맞음·틀림·무응답 어느 것도 아님) */
+  absent?: boolean;
   /** 응시 집단 정답률(%) — 서술형은 평균 득점률 */
   correctRate: number;
   difficulty: Difficulty;
@@ -75,6 +77,8 @@ export interface AreaStat {
   cohortRate: number;
   /** 응시 집단 평균 득점(원점수) — 성취율만으론 감이 안 오므로 함께 싣는다 */
   cohortEarned: number;
+  /** 듣기 미응시 — 이 영역 점수는 본 학생들의 평균값을 그대로 적용한 것 */
+  estimated?: boolean;
 }
 
 export interface GrowthPoint {
@@ -181,6 +185,11 @@ export interface GenericReportData {
   growth: GrowthPoint[];
   /** 서술형 문항 수(손채점 별도 안내) */
   essayCount: number;
+  /**
+   * 듣기 미응시(토요모의고사 개별 응시) — 듣기 점수는 듣기를 본 학생들의 평균을
+   * 적용했다. mean 이 적용된 점수, possible 이 듣기 배점 합, count 가 듣기 문항 수.
+   */
+  listeningAbsent?: { mean: number; possible: number; count: number } | null;
   /** 국영수 모의고사에서 시험 기반 정보를 올린 경우의 전국 비교 */
   national?: NationalComparison | null;
   /** 분류 기준별 성취(행동영역·대영역·난이도·학년수준) */

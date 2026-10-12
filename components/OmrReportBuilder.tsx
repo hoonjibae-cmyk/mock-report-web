@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  isListeningAbsentCandidate,
+  listeningMarkedCount,
+  listeningQuestions,
+  listeningRangeLabel,
+  type ListeningMode,
+} from "@/lib/listening";
 import { attendanceSummary } from "@/lib/attendance";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -51,6 +58,11 @@ export default function OmrReportBuilder({
     [initialScans],
   );
   const pendingCount = initialScans.length - reviewed.length;
+  // 답안지마다 선생님이 정한 듣기 처리 방식 — 아직 안 정했으면 null(자동 판단)
+  const [listeningModes, setListeningModes] = useState<Record<string, ListeningMode | null>>(() =>
+    Object.fromEntries(initialScans.map((scan) => [scan.id, scan.listeningMode ?? null])),
+  );
+  const [listeningBusy, setListeningBusy] = useState<string | null>(null);
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [pinRequired, setPinRequired] = useState(true);
@@ -234,6 +246,32 @@ export default function OmrReportBuilder({
         exam.classNames,
       )
     : { classes: [], unlisted: [] };
+
+  // 듣기 미응시 후보(토요모의고사) — 듣기 문항이 거의 비어 온 답안지. 선생님이
+  // 성적표를 만들기 전에 '안 봤음(평균)'/'봤음(마킹대로)'을 고른다. 기본은 안 봤음.
+  const listeningCandidates = exam
+    ? reviewed.filter((scan) => isListeningAbsentCandidate(exam, scan) || listeningModes[scan.id] === "absent")
+    : [];
+
+  async function chooseListeningMode(scanId: string, mode: ListeningMode) {
+    const before = listeningModes[scanId] ?? null;
+    setListeningModes((prev) => ({ ...prev, [scanId]: mode }));
+    setListeningBusy(scanId);
+    try {
+      const res = await fetch(`/api/admin/omr/scans/${scanId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listeningMode: mode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "듣기 처리 방식을 저장하지 못했습니다.");
+    } catch (err) {
+      setListeningModes((prev) => ({ ...prev, [scanId]: before }));
+      setError(err instanceof Error ? err.message : "듣기 처리 방식을 저장하지 못했습니다.");
+    } finally {
+      setListeningBusy(null);
+    }
+  }
 
   async function uploadEssay() {
     const file = essayRef.current?.files?.[0];
@@ -531,6 +569,61 @@ export default function OmrReportBuilder({
           </p>
         ) : (
           <>
+            {listeningCandidates.length > 0 ? (
+              <div className="listening-box">
+                <div className="attendance-box-head">
+                  <strong>듣기 미응시 확인</strong>
+                  <span className="subtle">
+                    듣기 문항({listeningRangeLabel(exam)}) 중 마킹이 거의 없는 답안지입니다. 개별로 응시해 듣기를 못 본
+                    학생이면 듣기 점수를 듣기를 본 학생들의 평균으로 산출합니다(기본). 실제로 듣기를 봤다면 오른쪽을 고르세요.
+                  </span>
+                </div>
+                <ul className="listening-list">
+                  {listeningCandidates.map((scan) => {
+                    const d = draftFor(scan);
+                    const mode = listeningModes[scan.id] ?? "absent";
+                    const marked = listeningMarkedCount(exam, scan);
+                    const total = listeningQuestions(exam).length;
+                    return (
+                      <li key={scan.id}>
+                        <div className="listening-who">
+                          <strong>{d.name.trim() || `수험번호 ${scan.studentId}`}</strong>
+                          <span className="subtle">
+                            {d.name.trim() ? `${scan.studentId} · ` : ""}듣기 {total}문항 중 {marked}문항 마킹
+                          </span>
+                        </div>
+                        <span className="trend-seg listening-seg" role="group" aria-label="듣기 처리 방식">
+                          <button
+                            type="button"
+                            className={mode === "absent" ? "on" : ""}
+                            disabled={listeningBusy === scan.id || !canCreate}
+                            onClick={() => void chooseListeningMode(scan.id, "absent")}
+                            title="듣기 문항은 채점하지 않고, 듣기 점수는 듣기를 본 학생들의 평균을 적용합니다"
+                          >
+                            듣기 안 봤음 → 반 평균으로 산출
+                          </button>
+                          <button
+                            type="button"
+                            className={mode === "marked" ? "on" : ""}
+                            disabled={listeningBusy === scan.id || !canCreate}
+                            onClick={() => void chooseListeningMode(scan.id, "marked")}
+                            title="빈 문항은 무응답(0점)으로 두고 마킹한 대로 채점합니다"
+                          >
+                            듣기 봤음 → 마킹한 대로 채점
+                          </button>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="subtle" style={{ marginTop: 8 }}>
+                  듣기 평균은 듣기를 본 학생들만으로 계산하며, 안 본 학생은 듣기 문항 정답률과 듣기 평균의 분모에서
+                  빠집니다. 결과 요약에는 바로, 성적표에는 만드는 시점에 반영됩니다 — 나중에 듣기를 본 학생이 더
+                  들어오면 성적표를 다시 만들어 주세요. 미응시 학생의 듣기 점수가 새 평균으로 바뀝니다.
+                </p>
+              </div>
+            ) : null}
+
             {exam.examType === "monthly" || exam.classNames.length > 0 ? (
               <div className="attendance-box">
                 <div className="attendance-box-head">
