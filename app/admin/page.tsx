@@ -11,11 +11,14 @@ export default async function AdminPage() {
   if (!currentUser) return null;
 
   let exams: OmrExam[] = [];
-  let reports: Awaited<ReturnType<typeof listAdminReports>> = [];
+  let reports: Awaited<ReturnType<typeof listAdminReports>>["items"] = [];
   let setupError = "";
   if (hasPermission(currentUser, "viewReports")) {
     try {
-      [exams, reports] = await Promise.all([listExams(), listAdminReports()]);
+      // 홈은 최근 성적표 몇 건만 보여 준다 — 전체를 끌어올 이유가 없다
+      const [examList, recent] = await Promise.all([listExams(), listAdminReports({ cap: 50 })]);
+      exams = examList;
+      reports = recent.items;
     } catch (error) {
       setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";
     }
