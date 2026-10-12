@@ -9,6 +9,7 @@ import {
   type SendState,
   type SendSummary,
 } from "@/lib/report-messages";
+import { EMPTY_RANGE, rangeBounds, type DateRange } from "@/lib/date-range";
 import { homeroomKey, mergeTeacherNames, type HomeroomReport } from "@/lib/homeroom";
 import { parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
@@ -55,22 +56,62 @@ function examTypeOf(value: unknown): ExamType {
   return typeof key === "string" && key in EXAM_TYPE_LABELS ? (key as ExamType) : "mock";
 }
 
-export async function listAdminReports(limit = 300): Promise<AdminReportListItem[]> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("student_reports")
-    .select(
-      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name,created_by_username),exams(exam_type),exam_id",
-    )
-    .order("created_at", { ascending: false })
-    .limit(limit);
+/**
+ * 한 번에 불러오는 상한. 예전에는 300건이라 3주만 지나도 오래된 성적표가 조용히
+ * 사라졌다. 이 상한에 닿으면 '더 있다'고 알리고, 그 뒤는 생성일 기간으로 잘라
+ * 가져온다 — 전부를 한 화면에 내려보내면 몇 해 뒤 페이지가 무거워진다.
+ */
+export const REPORT_LIST_CAP = 5000;
+/** PostgREST 가 한 요청에 주는 최대 행 수 */
+const REPORT_PAGE = 1000;
 
-  if (error) throw new Error(`성적표 목록 조회 실패: ${error.message}`);
+export interface ListAdminReportsOptions {
+  /** 생성일 기간(한국 시간 하루 기준) — 없으면 최근 것부터 */
+  range?: DateRange;
+  cap?: number;
+}
+
+export interface AdminReportListResult {
+  items: AdminReportListItem[];
+  /** 상한에 걸려 더 오래된 성적표를 두고 왔는가 */
+  truncated: boolean;
+  cap: number;
+}
+
+export async function listAdminReports(options: ListAdminReportsOptions = {}): Promise<AdminReportListResult> {
+  const cap = Math.max(1, options.cap ?? REPORT_LIST_CAP);
+  const bounds = rangeBounds(options.range ?? EMPTY_RANGE);
+  const supabase = getSupabaseAdmin();
+
+  // 생성일 내림차순으로 1000행씩 끊어 읽는다. 상한보다 하나 더 읽어 '더 있는가'를
+  // 정확히 안다. 같은 묶음의 성적표는 created_at 이 같을 수 있어 id 로 순서를 고정한다
+  // — 그래야 페이지 경계에서 행이 빠지거나 겹치지 않는다.
+  const budget = cap + 1;
+  const rows: any[] = [];
+  for (let offset = 0; offset < budget; offset += REPORT_PAGE) {
+    const size = Math.min(REPORT_PAGE, budget - offset);
+    let query = supabase
+      .from("student_reports")
+      .select(
+        "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name,created_by_username),exams(exam_type),exam_id",
+      )
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+    if (bounds.gte) query = query.gte("created_at", bounds.gte);
+    if (bounds.lt) query = query.lt("created_at", bounds.lt);
+    const { data, error } = await query.range(offset, offset + size - 1);
+    if (error) throw new Error(`성적표 목록 조회 실패: ${error.message}`);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < size) break;
+  }
+  const truncated = rows.length > cap;
+  const data = truncated ? rows.slice(0, cap) : rows;
 
   // 발송 기록 — 성적표마다 "보냈는가"를 목록에서 바로 보이게. 기록 표가 없어도 목록은 나와야 한다.
-  const sendByReport = await sendSummariesFor((data ?? []).map((row: any) => row.id as string)).catch(() => new Map());
+  const sendByReport = await sendSummariesFor(data.map((row: any) => row.id as string)).catch(() => new Map());
 
-  return (data ?? []).map((row: any) => ({
+  const items: AdminReportListItem[] = data.map((row: any) => ({
     id: row.id,
     batchId: row.batch_id,
     batchTitle: row.report_batches?.title ?? "성적표",
@@ -92,6 +133,7 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
     examId: (row.exam_id as string | null) ?? null,
     ...sendFieldsOf(sendByReport.get(row.id as string)),
   }));
+  return { items, truncated, cap };
 }
 
 interface SendFields {

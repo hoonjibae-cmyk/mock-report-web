@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { canDeleteOwned, NOT_OWNER_MESSAGE } from "@/lib/ownership";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import FilterBar, { type FilterGroup } from "@/components/FilterBar";
+import { hasRange, inRange, rangeLabel, type DateRange } from "@/lib/date-range";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
 import type { UserPermissions } from "@/lib/access";
 import type { AdminReportListItem } from "@/lib/reports";
@@ -19,6 +21,11 @@ interface Props {
   initialReports: AdminReportListItem[];
   /** 좌측 하위 메뉴에서 고른 시험 유형(없으면 전체) */
   activeType: ExamType | null;
+  /** 서버가 잘라 온 생성일 기간(주소의 ?from=&to=). 없으면 최근 것부터 */
+  range: DateRange;
+  /** 상한에 걸려 더 오래된 성적표를 두고 왔는가 */
+  truncated: boolean;
+  cap: number;
   baseUrl: string;
   setupError?: string;
   currentUser: NavUser & { permissions: UserPermissions };
@@ -27,14 +34,22 @@ interface Props {
 export default function ReportsManager({
   initialReports,
   activeType,
+  range,
+  truncated,
+  cap,
   baseUrl,
   setupError,
   currentUser,
 }: Props) {
   const permissions = currentUser.permissions;
-  const [reports, setReports] = useState<AdminReport[]>(
-    initialReports.map((report) => ({ ...report, url: `${baseUrl}/r/${report.token}` })),
-  );
+  const router = useRouter();
+  const withUrl = (items: AdminReportListItem[]): AdminReport[] =>
+    items.map((report) => ({ ...report, url: `${baseUrl}/r/${report.token}` }));
+  const [reports, setReports] = useState<AdminReport[]>(() => withUrl(initialReports));
+  // 생성일 기간을 바꾸면 서버가 새 목록을 내려준다 — 그때 화면의 목록도 바꾼다
+  useEffect(() => {
+    setReports(initialReports.map((report) => ({ ...report, url: `${baseUrl}/r/${report.token}` })));
+  }, [initialReports, baseUrl]);
   const [error, setError] = useState(setupError ?? "");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -45,10 +60,31 @@ export default function ReportsManager({
   // 알림톡 발송 상태 — "안 보낸 학생만" 추리는 데 쓴다
   const [sendStates, setSendStates] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState(range.from ?? "");
+  const [dateTo, setDateTo] = useState(range.to ?? "");
   const [sort, setSort] = useState("recent");
   const [copied, setCopied] = useState("");
+
+  /**
+   * 생성일 기간은 화면에서 거르는 데서 끝나지 않는다. 서버는 최근 상한까지만
+   * 내려주므로, 기간을 주소(?from=&to=)에 실어 그 기간만 다시 가져온다. 달력에서
+   * 날짜를 고르는 동안 요청이 연달아 나가지 않게 잠깐 모았다 보낸다.
+   */
+  const rangeTimer = useRef<number | null>(null);
+  function navigateRange(from: string, to: string) {
+    const params = new URLSearchParams();
+    if (activeType) params.set("type", activeType);
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const query = params.toString();
+    router.replace(`/admin/reports${query ? `?${query}` : ""}`);
+  }
+  function changeRange(from: string, to: string) {
+    setDateFrom(from);
+    setDateTo(to);
+    if (rangeTimer.current) window.clearTimeout(rangeTimer.current);
+    rangeTimer.current = window.setTimeout(() => navigateRange(from, to), 400);
+  }
 
   // 좌측 하위 메뉴에서 고른 유형이 먼저 걸리고, 그 안에서 필터가 다시 좁힌다
   const typeReports = useMemo(
@@ -152,9 +188,8 @@ export default function ReportsManager({
         return false;
       }
       if (sendStates.length > 0 && !sendStates.includes(report.sendState)) return false;
-      const created = report.createdAt.slice(0, 10);
-      if (dateFrom && created < dateFrom) return false;
-      if (dateTo && created > dateTo) return false;
+      // 서버와 같은 하루 경계(한국 시간) — 새벽에 만든 성적표가 전날로 밀리지 않는다
+      if (!inRange(report.createdAt, { from: dateFrom || null, to: dateTo || null })) return false;
       if (
         query &&
         ![report.studentName, report.school, report.batchTitle, report.examLabel]
@@ -195,6 +230,8 @@ export default function ReportsManager({
       dateFrom ||
       dateTo,
   );
+  /** 불러온 목록이 무엇인지 — 기간으로 잘랐으면 '기간 내', 상한에 걸렸으면 '최근', 아니면 '전체' */
+  const loadedLabel = hasRange(range) ? "기간 내" : truncated ? "최근" : "전체";
 
   const groups = useMemo<ReportGroup[]>(() => {
     const map = new Map<string, ReportGroup>();
@@ -348,8 +385,8 @@ export default function ReportsManager({
     setStatuses([]);
     setSendStates([]);
     setTypes([]);
-    setDateFrom("");
-    setDateTo("");
+    // 기간을 지우면 최근 것부터 다시 불러온다
+    if (dateFrom || dateTo) changeRange("", "");
   }
 
   async function copyLink(url: string, id: string) {
@@ -453,8 +490,10 @@ export default function ReportsManager({
   async function deleteAllReports() {
     // 남의 것까지 한꺼번에 지우므로 총괄만
     if (currentUser.role !== "admin" || !reports.length) return;
+    // 서버는 기간·상한과 무관하게 전부 지운다 — 화면에 불러온 건수가 전부인 양 적지 않는다
     const typed = window.prompt(
-      `현재 저장된 성적표 ${reports.length}건과 모든 링크를 완전히 삭제합니다.\n계속하려면 ‘전체삭제’를 입력하세요.`,
+      "저장된 성적표와 모든 링크를 전부 삭제합니다.\n" +
+        `지금 불러온 ${reports.length}건뿐 아니라 모든 기간의 성적표가 대상입니다.\n계속하려면 ‘전체삭제’를 입력하세요.`,
     );
     if (typed !== "전체삭제") return;
 
@@ -481,9 +520,10 @@ export default function ReportsManager({
               <p className="eyebrow">웹 리포트</p>
               <h2>{activeType ? EXAM_TYPE_LABELS[activeType] : "생성된 웹리포트"}</h2>
               <p className="subtle">
+                {/* '전체'라고 적는 것은 정말 전부일 때뿐 — 기간이나 상한으로 잘렸으면 그렇게 적는다 */}
                 {filtering
-                  ? `${visibleReports.length}건 표시 중 (전체 ${typeReports.length}건)`
-                  : `전체 ${typeReports.length}건`}
+                  ? `${visibleReports.length}건 표시 중 (${loadedLabel} ${typeReports.length}건)`
+                  : `${loadedLabel} ${typeReports.length}건`}
                 {" · "}권한에 따라 링크 관리, 내보내기와 삭제 기능을 사용할 수 있습니다.
               </p>
             </div>
@@ -503,7 +543,20 @@ export default function ReportsManager({
             </div>
           </div>
 
-          {typeReports.length > 0 ? (
+          {hasRange(range) ? (
+            <p className="list-notice range">
+              생성일 <strong>{rangeLabel(range)}</strong> 기간의 성적표만 불러왔습니다
+              {truncated ? ` (이 기간도 ${cap.toLocaleString()}건이 넘어 최근 ${cap.toLocaleString()}건만)` : ""}. 기간을 지우면
+              최근 것부터 다시 불러옵니다.
+            </p>
+          ) : truncated ? (
+            <p className="list-notice">
+              최근 <strong>{cap.toLocaleString()}건</strong>만 불러왔습니다. 더 오래된 성적표는 아래 <strong>생성일</strong>{" "}
+              칸에 기간을 넣으면 그 기간만 다시 불러옵니다. ‘전체 CSV’는 상한 없이 모두 내려받습니다.
+            </p>
+          ) : null}
+
+          {typeReports.length > 0 || hasRange(range) ? (
             <>
               <FilterBar
                 groups={filterGroups}
@@ -524,9 +577,14 @@ export default function ReportsManager({
               />
               <div className="date-range">
                 <span className="filter-label">생성일</span>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                <input type="date" value={dateFrom} onChange={(e) => changeRange(e.target.value, dateTo)} />
                 <span>~</span>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                <input type="date" value={dateTo} onChange={(e) => changeRange(dateFrom, e.target.value)} />
+                {dateFrom || dateTo ? (
+                  <button type="button" className="button tiny ghost" onClick={() => changeRange("", "")}>
+                    기간 지우기
+                  </button>
+                ) : null}
               </div>
             </>
           ) : null}
