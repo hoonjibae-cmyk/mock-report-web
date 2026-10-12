@@ -11,13 +11,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  areaMaxima,
   areasOf,
   buildSummaryRows,
   duplicateKeys,
+  fmtScore,
   hardestQuestions,
   markText,
   scoreBins,
   sortRows,
+  summaryClipboardText,
   summaryQuestions,
   type SummaryQuestion,
   type SummaryRow,
@@ -136,4 +139,37 @@ test("어려운 문항 — 정답률 낮은 순, 같으면 번호순, n개만", 
 test("같은 수험번호가 두 번 들어오면 표시한다 — 집단 인원이 부푼다", () => {
   const dup = duplicateKeys([row("1", "a", 1), row("2", "b", 1), row("1", "a", 2)]);
   assert.deepEqual([...dup], ["1"]);
+});
+
+test("영역별 만점 — 그 영역 문항 배점의 합, 영역 없는 문항은 빼고, 문항 순서대로", () => {
+  const qs: SummaryQuestion[] = [
+    { no: 1, essay: false, answer: "1", area: "듣기", point: 2, rate: 90 },
+    { no: 2, essay: false, answer: "1", area: "독해", point: 3, rate: 40 },
+    { no: 3, essay: false, answer: "1", area: "듣기", point: 2.5, rate: 40 },
+    { no: 4, essay: true, answer: "서술", area: "", point: 3, rate: 10 },
+  ];
+  assert.deepEqual([...areaMaxima(qs).entries()], [["듣기", 4.5], ["독해", 3]]);
+  assert.equal(areaMaxima([]).size, 0);
+  assert.equal(fmtScore(37), "37");
+  assert.equal(fmtScore(33.333), "33.3");
+});
+
+test("엑셀 붙여넣기용 글 — 학생명·총점·영역 순, 탭으로 나누고 보이는 순서 그대로", () => {
+  const area = (name: string, earned: number, estimated = false) => ({ area: name, earned, possible: 37, rate: 90, estimated });
+  const rows: SummaryRow[] = [
+    { ...row("10231", "김하늘", 97), areas: [area("듣기", 37), area("독해", 60)] },
+    // 이름을 못 찾은 줄은 화면과 같이 수험번호로, 없는 영역은 빈 칸, 미응시 듣기는 숫자만
+    { ...row("10232", "", 70.5), areas: [area("듣기", 33.333, true)] },
+  ];
+  const text = summaryClipboardText(rows, ["듣기", "독해"]);
+  assert.deepEqual(text.split("\n"), [
+    "학생명\t총점\t듣기\t독해",
+    "김하늘\t97\t37\t60",
+    "수험번호 10232\t70.5\t33.3\t",
+  ]);
+  assert.ok(!/평균|미응시/.test(text), "글자가 붙으면 엑셀이 숫자로 보지 않는다");
+  assert.equal(summaryClipboardText([], []), "학생명\t총점", "영역이 없는 시험은 두 칸뿐");
+  // 이름에 탭이 섞여 있어도 칸이 밀리지 않는다
+  const odd = summaryClipboardText([{ ...row("1", "김\t하늘", 50) }], []);
+  assert.equal(odd.split("\n")[1], "김 하늘\t50");
 });
