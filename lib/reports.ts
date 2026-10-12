@@ -1,4 +1,14 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import {
+  lastSentAt,
+  sendStateOf,
+  summarizeByReport,
+  type MessageStatus,
+  type RecipientType,
+  type ReportMessage,
+  type SendState,
+  type SendSummary,
+} from "@/lib/report-messages";
 import { homeroomKey, type HomeroomReport } from "@/lib/homeroom";
 import { parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
@@ -29,6 +39,14 @@ export interface AdminReportListItem {
   examType: ExamType;
   /** 연결된 OMR 시험 — 없으면 null(전국 모의고사 엑셀 성적표) */
   examId: string | null;
+  /** 알림톡 발송 상태 — 학부모·학생 어느 쪽이든 성공했으면 sent */
+  sendState: SendState;
+  sentParent: boolean;
+  sentStudent: boolean;
+  /** 마지막으로 성공한 발송 시각 */
+  lastSentAt: string | null;
+  /** 성공이 없을 때 마지막 실패 사유 */
+  sendError: string | null;
 }
 
 function examTypeOf(value: unknown): ExamType {
@@ -48,6 +66,9 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
     .limit(limit);
 
   if (error) throw new Error(`성적표 목록 조회 실패: ${error.message}`);
+
+  // 발송 기록 — 성적표마다 "보냈는가"를 목록에서 바로 보이게. 기록 표가 없어도 목록은 나와야 한다.
+  const sendByReport = await sendSummariesFor((data ?? []).map((row: any) => row.id as string)).catch(() => new Map());
 
   return (data ?? []).map((row: any) => ({
     id: row.id,
@@ -69,7 +90,73 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
     // 연결된 시험이 없는 성적표(전국 모의고사 엑셀)는 국영수로 본다.
     examType: examTypeOf(row.exams),
     examId: (row.exam_id as string | null) ?? null,
+    ...sendFieldsOf(sendByReport.get(row.id as string)),
   }));
+}
+
+interface SendFields {
+  sendState: SendState;
+  sentParent: boolean;
+  sentStudent: boolean;
+  lastSentAt: string | null;
+  sendError: string | null;
+}
+
+function sendFieldsOf(entry: { parent: SendSummary | null; student: SendSummary | null } | undefined): SendFields {
+  const parent = entry?.parent ?? null;
+  const student = entry?.student ?? null;
+  const state = sendStateOf(parent, student);
+  return {
+    sendState: state,
+    sentParent: Boolean(parent?.sent),
+    sentStudent: Boolean(student?.sent),
+    lastSentAt: lastSentAt(parent, student),
+    sendError: state === "failed" ? (parent?.lastError ?? student?.lastError ?? null) : null,
+  };
+}
+
+/** 성적표 id 들의 발송 요약 — 수신자(학부모/학생)별로 */
+async function sendSummariesFor(
+  reportIds: string[],
+): Promise<Map<string, { parent: SendSummary | null; student: SendSummary | null }>> {
+  const out = new Map<string, { parent: SendSummary | null; student: SendSummary | null }>();
+  if (reportIds.length === 0) return out;
+  const supabase = getSupabaseAdmin();
+  const messages: ReportMessage[] = [];
+  for (let i = 0; i < reportIds.length; i += 200) {
+    const { data, error } = await supabase
+      .from("report_messages")
+      .select("id,report_id,exam_id,recipient_type,phone_masked,status,channel,provider_message_id,error,sent_by,created_at")
+      .in("report_id", reportIds.slice(i, i + 200))
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      messages.push({
+        id: row.id as string,
+        reportId: row.report_id as string,
+        examId: (row.exam_id as string | null) ?? null,
+        recipientType: row.recipient_type as RecipientType,
+        phoneMasked: (row.phone_masked as string) ?? "",
+        status: row.status as MessageStatus,
+        channel: (row.channel as string | null) ?? null,
+        providerMessageId: (row.provider_message_id as string | null) ?? null,
+        error: (row.error as string | null) ?? null,
+        sentBy: (row.sent_by as string | null) ?? null,
+        createdAt: row.created_at as string,
+      });
+    }
+  }
+  // 여러 묶음을 합쳤으니 최신순을 다시 맞춘다 — summarizeByReport 는 그 순서에 기댄다
+  messages.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const summary = summarizeByReport(messages);
+  for (const [key, value] of summary) {
+    const [reportId, type] = key.split(":");
+    const entry = out.get(reportId) ?? { parent: null, student: null };
+    if (type === "parent") entry.parent = value;
+    else entry.student = value;
+    out.set(reportId, entry);
+  }
+  return out;
 }
 
 export async function getReportByToken(publicToken: string): Promise<ReportDbRow | null> {
