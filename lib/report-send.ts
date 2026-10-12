@@ -276,3 +276,33 @@ export function resolveSelections(
   }
   return { send, rejected };
 }
+
+export const ALREADY_SENT =
+  "이미 보낸 성적표입니다. 다시 보내려면 '이미 받은 학생에게도 다시 보내기'를 확인해 주세요.";
+
+/**
+ * 이미 성공적으로 보낸 성적표는 다시 보내지 않는다 — 화면이 골랐더라도 서버가
+ * 한 번 더 막는다(이중 안전). 같은 성적표가 두 번 나가면 학부모는 같은 링크를
+ * 두 번 받고, 학원은 두 번 값을 치른다. 다시 보내려면 부르는 쪽이 allowResend
+ * 로 분명히 밝혀야 한다.
+ */
+export function guardAlreadySent(
+  send: ResolvedSend[],
+  targets: SendTarget[],
+  allowResend: boolean,
+): ResolveResult {
+  if (allowResend) return { send, rejected: [] };
+  const byId = new Map(targets.map((t) => [t.reportId, t]));
+  const out: ResolvedSend[] = [];
+  const rejected: ResolveResult["rejected"] = [];
+  for (const item of send) {
+    const target = byId.get(item.reportId);
+    const slot = item.recipientType === "parent" ? target?.parent : target?.student;
+    if (slot?.history?.sent) {
+      rejected.push({ reportId: item.reportId, recipientType: item.recipientType, reason: ALREADY_SENT });
+    } else {
+      out.push(item);
+    }
+  }
+  return { send: out, rejected };
+}

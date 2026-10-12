@@ -67,6 +67,9 @@ export default function OmrReportBuilder({
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [pinRequired, setPinRequired] = useState(true);
   const [existingReports, setExistingReports] = useState(0);
+  // 이미 살아 있는 성적표가 있는 학생의 수험번호 — 같은 학생은 새로 만들지 않고 갱신한다
+  const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
+  const [updatedCount, setUpdatedCount] = useState(0);
   const [created, setCreated] = useState<CreatedLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [essayUploading, setEssayUploading] = useState(false);
@@ -198,6 +201,7 @@ export default function OmrReportBuilder({
       .then((data) => {
         if (!data.ok) return;
         setExistingReports(data.existingReports ?? 0);
+        setExistingKeys(new Set<string>(Array.isArray(data.existingKeys) ? data.existingKeys : []));
         const suggestions = data.suggestions ?? {};
         setDrafts((prev) => {
           const next = { ...prev };
@@ -301,8 +305,19 @@ export default function OmrReportBuilder({
     }
   }
 
+  /** 이번에 새로 만들 성적표 수 — 나머지는 이미 있어 내용만 갱신된다 */
+  const newReportCount = reviewed.filter((scan) => !existingKeys.has(scan.studentId as string)).length;
+  const refreshCount = reviewed.length - newReportCount;
+
   async function generate() {
     if (!exam) return;
+    if (reviewed.length > 0 && newReportCount === 0) {
+      const ok = window.confirm(
+        "모든 답안지에 이미 성적표가 있습니다. 새로 만들지 않고(중복 생성 안 함) 점수·석차 등 내용만 최신으로 갱신합니다.\n" +
+          "링크·담임 의견·발송 기록은 그대로입니다. 진행할까요?",
+      );
+      if (!ok) return;
+    }
     setLoading(true);
     setError("");
     setMessage("");
@@ -324,10 +339,26 @@ export default function OmrReportBuilder({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "성적표를 생성하지 못했습니다.");
+      const createdCount = data.reports?.length ?? 0;
+      const refreshed = Array.isArray(data.updated) ? data.updated.length : 0;
+      const duplicates: string[] = Array.isArray(data.duplicates) ? data.duplicates : [];
       setCreated(data.reports ?? []);
-      setExistingReports((prev) => prev + (data.reports?.length ?? 0));
+      setUpdatedCount(refreshed);
+      setExistingReports((prev) => prev + createdCount);
+      setExistingKeys((prev) => {
+        const next = new Set(prev);
+        for (const scan of reviewed) if (scan.studentId) next.add(scan.studentId);
+        return next;
+      });
+      const tail = ` (응시 ${data.cohort?.count}명 · 평균 ${data.cohort?.mean}점)`;
+      const dupNote =
+        duplicates.length > 0
+          ? ` · 같은 수험번호 답안지 ${duplicates.length}건(${duplicates.join(", ")})은 마지막 것만 썼습니다.`
+          : "";
       setMessage(
-        `${data.reports?.length ?? 0}명의 성적표 링크를 생성했습니다. (응시 ${data.cohort?.count}명 · 평균 ${data.cohort?.mean}점)`,
+        createdCount === 0
+          ? `이미 성적표가 있는 학생 ${refreshed}명 — 새로 만들지 않았습니다(중복 생성 방지). 점수·석차 등 내용만 최신으로 갱신했고 링크·담임 의견·발송 기록은 그대로입니다.${tail}${dupNote}`
+          : `새 성적표 ${createdCount}건을 만들었습니다${refreshed > 0 ? ` · 이미 있던 ${refreshed}건은 내용만 갱신했습니다` : ""}.${tail}${dupNote}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "성적표 생성 중 오류가 발생했습니다.");
@@ -508,7 +539,7 @@ export default function OmrReportBuilder({
               {pendingCount > 0 ? ` (검수 대기 ${pendingCount}건은 제외)` : ""} · 이름 입력{" "}
               {namedCount}/{reviewed.length}
               {existingReports > 0
-                ? ` · 이 시험으로 이미 만든 성적표 ${existingReports}건 (다시 생성하면 새 링크가 추가됩니다. 이전 묶음은 웹 리포트 탭에서 삭제)`
+                ? ` · 이미 만든 성적표 ${existingReports}건 — 다시 눌러도 같은 학생의 성적표는 새로 만들지 않고 내용만 갱신합니다(링크·담임 의견·발송 기록 유지)`
                 : ""}
             </p>
             <p className="subtle">
@@ -545,7 +576,13 @@ export default function OmrReportBuilder({
                   disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
                   title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
                 >
-                  {loading ? "채점·생성 중…" : "성적표 생성"}
+                  {loading
+                    ? "채점·생성 중…"
+                    : reviewed.length > 0 && newReportCount === 0
+                      ? "성적표 갱신 (새 성적표 없음)"
+                      : refreshCount > 0
+                        ? `성적표 생성 (새로 ${newReportCount}장 · 갱신 ${refreshCount}장)`
+                        : "성적표 생성"}
                 </button>
               </>
             ) : null}
@@ -777,7 +814,10 @@ export default function OmrReportBuilder({
           <div className="section-heading wrap">
             <div>
               <p className="eyebrow">완료</p>
-              <h2>학생별 성적표 링크</h2>
+              <h2>새로 만든 성적표 링크 {created.length}건</h2>
+              {updatedCount > 0 ? (
+                <p className="subtle">이미 있던 {updatedCount}건은 기존 링크 그대로 내용만 갱신했습니다(웹 리포트 탭에서 확인).</p>
+              ) : null}
             </div>
             <Link className="button secondary" href="/admin/reports">웹 리포트 관리로 이동</Link>
           </div>

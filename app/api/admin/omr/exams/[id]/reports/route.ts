@@ -67,7 +67,21 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       .select("id", { count: "exact", head: true })
       .eq("exam_id", id);
 
-    return NextResponse.json({ ok: true, suggestions, existingReports: count ?? 0 });
+    // 이미 살아 있는 성적표가 있는 학생 — 화면이 "새로 만들 것 n장 · 갱신 m장"을 미리 보여 준다
+    const { data: existingRows } = await supabase
+      .from("student_reports")
+      .select("student_key")
+      .eq("exam_id", id)
+      .eq("is_active", true);
+    const existingKeys = [
+      ...new Set(
+        (existingRows ?? [])
+          .map((row) => row.student_key as string | null)
+          .filter((key): key is string => Boolean(key)),
+      ),
+    ];
+
+    return NextResponse.json({ ok: true, suggestions, existingReports: count ?? 0, existingKeys });
   } catch (error) {
     console.error(error);
     return NextResponse.json(
@@ -112,13 +126,22 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const allScans = await listScans(id);
-    const reviewed = allScans.filter((scan) => scan.status === "reviewed" && scan.studentId);
-    if (reviewed.length === 0) {
+    const reviewedAll = allScans.filter((scan) => scan.status === "reviewed" && scan.studentId);
+    if (reviewedAll.length === 0) {
       return NextResponse.json(
         { error: "검수 완료된 답안이 없습니다. 스캔 · 검수를 먼저 진행해 주세요." },
         { status: 400 },
       );
     }
+    // 같은 수험번호 답안지가 두 장 이상이면 마지막 것만 쓴다 — 한 학생에게 성적표는 하나다.
+    const latestByKey = new Map<string, (typeof reviewedAll)[number]>();
+    for (const scan of [...reviewedAll].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+      latestByKey.set(scan.studentId as string, scan);
+    }
+    const reviewed = [...latestByKey.values()];
+    const duplicateKeys = [...latestByKey.keys()].filter(
+      (key) => reviewedAll.filter((scan) => scan.studentId === key).length > 1,
+    );
 
     const nameByScan = new Map<string, StudentInput>();
     for (const input of inputs) {
@@ -177,10 +200,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const keys = [...new Set(reviewed.map((scan) => scan.studentId as string))];
     const growthByKey = new Map<string, GrowthPoint[]>();
     const commentByKey = new Map<string, unknown>();
+    // 이 시험에 이미 살아 있는 성적표(학생마다 가장 최근 것) — 다시 만들지 않고 제자리에서
+    // 갱신한다. 링크·담임 의견·발송 기록이 그대로 남아야 같은 학생에게 두 번 나가지 않는다.
+    const existingByKey = new Map<string, { id: string; token: string }>();
     if (keys.length > 0) {
       const { data: prior } = await supabase
         .from("student_reports")
-        .select("student_key,exam_id,report_data,teacher_comment,created_at")
+        .select("id,student_key,exam_id,report_data,teacher_comment,created_at,is_active,public_token")
         .in("student_key", keys)
         .not("exam_id", "is", null)
         .order("created_at", { ascending: true });
@@ -191,6 +217,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         if (row.exam_id === id) {
           // 같은 시험의 이전 성적표: 성장추이에서는 제외하고, 담임 코멘트만 승계(최신 우선)
           if (row.teacher_comment) commentByKey.set(row.student_key as string, row.teacher_comment);
+          // 오름차순이라 마지막에 남는 것이 가장 최근 — 중지된 링크는 새로 만든다
+          if (row.is_active !== false) {
+            existingByKey.set(row.student_key as string, { id: row.id as string, token: row.public_token as string });
+          }
           continue;
         }
         const key = row.student_key as string;
@@ -211,26 +241,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       }
     }
 
-    // 성적표 묶음 생성
-    const { data: batch, error: batchError } = await supabase
-      .from("report_batches")
-      .insert({
-        title: exam.title,
-        exam_label: exam.examDate || EXAM_TYPE_LABELS[exam.examType],
-        source_filename: `OMR ${reviewed.length}매`,
-        report_count: reviewed.length,
-        created_by_name: auth.user.displayName,
-        created_by_username: auth.user.username,
-      })
-      .select("id")
-      .single();
-    if (batchError || !batch) {
-      throw new Error(`성적표 묶음 저장 실패: ${batchError?.message ?? "알 수 없는 오류"}`);
-    }
-
     const generatedAt = new Date().toISOString();
 
-    const rows = reviewed.map((scan) => {
+    // 학생마다 성적표 내용을 만든다 — 새로 만들든 제자리에서 갱신하든 내용은 같다
+    const prepared = reviewed.map((scan) => {
       const input = nameByScan.get(scan.id)!;
       const result = scoredByScan.get(scan.id)!;
       const key = scan.studentId as string;
@@ -298,41 +312,107 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const phone = normalizePhone(input.phone ?? "");
       const pin = phoneLast4(phone);
       const pinRequired = requestPin && Boolean(pin);
-
-      return {
-        batch_id: batch.id,
-        public_token: createPublicToken(),
-        student_name: input.name.trim(),
-        school: input.school?.trim() || null,
-        grade: null,
-        parent_phone_masked: phone ? maskPhoneForGate(phone) : null,
-        access_pin_hash: pinRequired ? hashPin(pin) : null,
-        pin_required: pinRequired,
-        is_active: true,
-        report_data: reportData,
-        exam_id: id,
-        student_key: key,
-        scan_path: scan.scanPath,
-        teacher_comment: commentByKey.get(key) ?? null,
-        // 발행 시점의 담임·반을 남긴다 — 나중에 반이 바뀌어도 이 성적표는 그때 담임 것이다
-        homeroom_teacher: input.teacher?.trim() || null,
-        class_name: input.className?.trim() || null,
-      };
+      return { scan, input, key, reportData, phone, pin, pinRequired };
     });
 
-    const { data: inserted, error: insertError } = await supabase
-      .from("student_reports")
-      .insert(rows)
-      .select("id,public_token,student_name,school,pin_required,created_at");
-    if (insertError || !inserted) {
-      await supabase.from("report_batches").delete().eq("id", batch.id);
-      throw new Error(`성적표 저장 실패: ${insertError?.message ?? "알 수 없는 오류"}`);
+    const toInsert = prepared.filter((p) => !existingByKey.has(p.key));
+    const toUpdate = prepared.filter((p) => existingByKey.has(p.key));
+
+    // 새 성적표가 있을 때만 묶음을 만든다 — 갱신만 하는 날에 빈 묶음이 쌓이지 않게
+    let batchId: string | null = null;
+    if (toInsert.length > 0) {
+      const { data: batch, error: batchError } = await supabase
+        .from("report_batches")
+        .insert({
+          title: exam.title,
+          exam_label: exam.examDate || EXAM_TYPE_LABELS[exam.examType],
+          source_filename: `OMR ${toInsert.length}매`,
+          report_count: toInsert.length,
+          created_by_name: auth.user.displayName,
+          created_by_username: auth.user.username,
+        })
+        .select("id")
+        .single();
+      if (batchError || !batch) {
+        throw new Error(`성적표 묶음 저장 실패: ${batchError?.message ?? "알 수 없는 오류"}`);
+      }
+      batchId = batch.id as string;
+    }
+
+    const rows = toInsert.map((p) => ({
+      batch_id: batchId,
+      public_token: createPublicToken(),
+      student_name: p.input.name.trim(),
+      school: p.input.school?.trim() || null,
+      grade: null,
+      parent_phone_masked: p.phone ? maskPhoneForGate(p.phone) : null,
+      access_pin_hash: p.pinRequired ? hashPin(p.pin) : null,
+      pin_required: p.pinRequired,
+      is_active: true,
+      report_data: p.reportData,
+      exam_id: id,
+      student_key: p.key,
+      scan_path: p.scan.scanPath,
+      teacher_comment: commentByKey.get(p.key) ?? null,
+      // 발행 시점의 담임·반을 남긴다 — 나중에 반이 바뀌어도 이 성적표는 그때 담임 것이다
+      homeroom_teacher: p.input.teacher?.trim() || null,
+      class_name: p.input.className?.trim() || null,
+    }));
+
+    interface InsertedRow {
+      id: string;
+      public_token: string;
+      student_name: string;
+      school: string | null;
+      pin_required: boolean;
+      created_at: string;
+    }
+    let inserted: InsertedRow[] = [];
+    if (rows.length > 0) {
+      const { data, error: insertError } = await supabase
+        .from("student_reports")
+        .insert(rows)
+        .select("id,public_token,student_name,school,pin_required,created_at");
+      if (insertError || !data) {
+        if (batchId) await supabase.from("report_batches").delete().eq("id", batchId);
+        throw new Error(`성적표 저장 실패: ${insertError?.message ?? "알 수 없는 오류"}`);
+      }
+      inserted = data as InsertedRow[];
+    }
+
+    // 이미 있는 성적표는 내용만 갱신 — 토큰·담임 의견·발송 기록·조회수는 그대로.
+    // 이번에 안 들어온 값(연락처·학교·반)으로 있던 것을 지우지 않는다.
+    const updated: Array<{ id: string; studentName: string; token: string }> = [];
+    const updateErrors: string[] = [];
+    await Promise.all(
+      toUpdate.map(async (p) => {
+        const existing = existingByKey.get(p.key)!;
+        const change: Record<string, unknown> = {
+          student_name: p.input.name.trim(),
+          report_data: p.reportData,
+          scan_path: p.scan.scanPath,
+        };
+        if (p.input.school?.trim()) change.school = p.input.school.trim();
+        if (p.input.teacher?.trim()) change.homeroom_teacher = p.input.teacher.trim();
+        if (p.input.className?.trim()) change.class_name = p.input.className.trim();
+        if (p.phone) {
+          change.parent_phone_masked = maskPhoneForGate(p.phone);
+          change.access_pin_hash = p.pinRequired ? hashPin(p.pin) : null;
+          change.pin_required = p.pinRequired;
+        }
+        const { error: updateError } = await supabase.from("student_reports").update(change).eq("id", existing.id);
+        if (updateError) updateErrors.push(`${p.input.name.trim()}: ${updateError.message}`);
+        else updated.push({ id: existing.id, studentName: p.input.name.trim(), token: existing.token });
+      }),
+    );
+    if (updateErrors.length > 0) {
+      throw new Error(`성적표 갱신 실패: ${updateErrors.slice(0, 3).join(" · ")}${updateErrors.length > 3 ? " 외" : ""}`);
     }
 
     const baseUrl = siteBaseUrl(request.url);
     return NextResponse.json({
       ok: true,
-      batchId: batch.id,
+      batchId,
       reports: inserted.map((row) => ({
         id: row.id,
         studentName: row.student_name,
@@ -342,6 +422,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         pinRequired: row.pin_required,
         createdAt: row.created_at,
       })),
+      updated: updated.map((row) => ({ ...row, url: `${baseUrl}/r/${row.token}` })),
+      duplicates: duplicateKeys,
       cohort,
     });
   } catch (error) {

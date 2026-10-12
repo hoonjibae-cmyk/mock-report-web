@@ -11,6 +11,7 @@ import {
   countTargets,
   examDateNotice,
   formatExamDate,
+  guardAlreadySent,
   resolveSelections,
   templateVariables,
   type SendReportRow,
@@ -165,12 +166,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const { lookup, targets } = await prepare(id);
-    const { send, rejected } = resolveSelections(selections, targets, lookup.students);
+    const resolved = resolveSelections(selections, targets, lookup.students);
+    // 이미 보낸 성적표는 화면이 고르더라도 건너뛴다 — 다시 보내려면 allowResend 로 밝혀야 한다
+    const allowResend = body.allowResend === true;
+    const guarded = guardAlreadySent(resolved.send, targets, allowResend);
+    const send = guarded.send;
+    const rejected = [...resolved.rejected, ...guarded.rejected];
 
     if (send.length === 0) {
       return NextResponse.json(
         {
-          error: "보낼 수 있는 대상이 없습니다.",
+          error:
+            guarded.rejected.length > 0
+              ? "고른 성적표는 모두 이미 보낸 것이라 건너뛰었습니다. 다시 보내려면 '이미 받은 학생에게도 다시 보내기'를 확인해 주세요."
+              : "보낼 수 있는 대상이 없습니다.",
           rejected,
         },
         { status: 400 },

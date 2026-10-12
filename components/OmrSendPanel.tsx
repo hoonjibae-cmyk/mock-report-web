@@ -194,14 +194,33 @@ export default function OmrSendPanel({
 
   async function send() {
     if (!exam || selections.length === 0) return;
-    const alreadySent = selections.filter((s) => {
+    const isAlreadySent = (s: { reportId: string; recipientType: RecipientType }) => {
       const t = targets.find((x) => x.reportId === s.reportId);
       const slot = s.recipientType === "parent" ? t?.parent : t?.student;
-      return slot?.history?.sent;
-    }).length;
-    const warning = alreadySent > 0 ? `\n(이 중 ${alreadySent}건은 이미 받은 적이 있습니다.)` : "";
+      return Boolean(slot?.history?.sent);
+    };
+    const alreadySent = selections.filter(isAlreadySent).length;
+
+    // 이미 받은 학생이 섞여 있으면 먼저 묻는다 — 기본은 '안 보낸 건만'. 다시 보내는
+    // 것은 분명히 확인한 경우뿐이고, 서버도 allowResend 없이는 그 건을 건너뛴다.
+    let allowResend = false;
+    let toSend = selections;
+    if (alreadySent > 0) {
+      allowResend = window.confirm(
+        `고른 대상 중 ${alreadySent}건은 이미 알림톡을 받은 적이 있습니다.\n\n` +
+          "[확인] 이미 받은 학생에게도 다시 보냅니다\n[취소] 아직 안 받은 건만 보냅니다",
+      );
+      if (!allowResend) toSend = selections.filter((s) => !isAlreadySent(s));
+      if (toSend.length === 0) {
+        setMessage("고른 대상이 모두 이미 받은 학생이라 보내지 않았습니다.");
+        return;
+      }
+    }
+    const parents = toSend.filter((s) => s.recipientType === "parent").length;
+    const students = toSend.filter((s) => s.recipientType === "student").length;
+    const text = mode === "both" ? `학부모 ${parents}명 · 학생 ${students}명` : `학부모 ${parents}명`;
     const ok = window.confirm(
-      `${selectionText}에게 성적표 알림톡을 보냅니다(총 ${selections.length}건).${warning}\n\n` +
+      `${text}에게 성적표 알림톡을 보냅니다(총 ${toSend.length}건).${allowResend ? `\n(이 중 ${alreadySent}건은 다시 보내는 것입니다.)` : ""}\n\n` +
         "보낸 메시지는 취소할 수 없습니다. 진행할까요?",
     );
     if (!ok) return;
@@ -213,15 +232,17 @@ export default function OmrSendPanel({
       const res = await fetch(`/api/admin/omr/exams/${exam.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targets: selections }),
+        body: JSON.stringify({ targets: toSend, allowResend }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "발송에 실패했습니다.");
       setOutcomes(data.results ?? []);
+      const skipped = Array.isArray(data.rejected) ? data.rejected.length : 0;
       setMessage(
-        data.failed > 0
+        (data.failed > 0
           ? `${data.sent}건을 보냈고 ${data.failed}건은 실패했습니다. 실패한 건만 다시 고를 수 있습니다.`
-          : `${data.sent}건을 보냈습니다.`,
+          : `${data.sent}건을 보냈습니다.`) +
+          (skipped > 0 ? ` 이미 보냈거나 보낼 수 없는 ${skipped}건은 건너뛰었습니다.` : ""),
       );
       setPicked(new Set());
       setError("");
