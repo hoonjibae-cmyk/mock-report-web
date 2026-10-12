@@ -110,20 +110,34 @@ export default function MyClassView({ user, teacherName, teachers, groups, setup
 
             <div className="my-class-body">
               {group.summary.areas.length > 0 ? (
-                <div className="my-class-areas">
-                  {group.summary.areas.map((a) => {
-                    const diff = Math.round((a.rate - a.cohortRate) * 10) / 10;
-                    return (
-                      <div key={a.area} className="my-class-area">
-                        <span className="my-class-area-name">{a.area}</span>
-                        <strong>{a.rate}%</strong>
-                        <span className={diff >= 0 ? "up" : "down"}>
-                          전체 {a.cohortRate}% ({diff >= 0 ? "+" : ""}
-                          {diff})
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div className="my-class-areas-block">
+                  {/* 숫자 세 개가 무엇인지 적어 둔다 — 설명 없이는 '66.9%'가 평균인지 정답률인지 알 수 없다 */}
+                  <p className="my-class-areas-caption">
+                    <strong>영역별 성취율</strong> — 그 영역 배점 중 받은 점수의 비율을 우리 반 학생들끼리 평균 낸
+                    값입니다. ‘전체’는 이 시험 응시생 전체의 성취율이고, 괄호의 %p는 우리 반이 전체보다 얼마나
+                    높은지(+) 낮은지(−)입니다.
+                  </p>
+                  <div className="my-class-areas">
+                    {group.summary.areas.map((a) => {
+                      const diff = Math.round((a.rate - a.cohortRate) * 10) / 10;
+                      const sign = diff > 0 ? "+" : "";
+                      return (
+                        <div
+                          key={a.area}
+                          className="my-class-area"
+                          title={`${a.area} — 우리 반 평균 성취율 ${a.rate}%, 응시생 전체 ${a.cohortRate}%. 우리 반이 전체보다 ${Math.abs(diff)}%p ${diff >= 0 ? "높습니다" : "낮습니다"}.`}
+                        >
+                          <span className="my-class-area-name">{a.area}</span>
+                          <strong>우리 반 {a.rate}%</strong>
+                          <span className="my-class-area-cohort">전체 {a.cohortRate}%</span>
+                          <span className={diff >= 0 ? "up" : "down"}>
+                            ({sign}
+                            {diff}%p)
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
 

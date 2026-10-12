@@ -2353,6 +2353,11 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .my-class-area strong { font-size: 15px; color: var(--navy-deep); }
 .my-class-area .up { color: #1a7f4b; }
 .my-class-area .down { color: #b3261e; }
+.my-class-area-cohort { color: var(--muted); }
+.my-class-areas-block { margin-bottom: 14px; }
+.my-class-areas-block .my-class-areas { margin-bottom: 0; }
+.my-class-areas-caption { margin: 0 0 8px; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.my-class-areas-caption strong { color: var(--navy); }
 .my-class-body td { white-space: nowrap; }
 
 /* 발송 대상 — 학생 한 줄에 학부모·학생 연락처를 나란히 */
