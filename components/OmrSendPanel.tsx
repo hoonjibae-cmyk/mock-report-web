@@ -9,9 +9,11 @@
 //   - 실제로 나갈 문구를 보내기 전에 그대로 보여 준다.
 //   - 확정 발송에는 건수를 적은 한 번의 확인을 둔다.
 //
-// 받는 사람은 '학부모만' 또는 '학부모 + 학생' 둘 중 하나다. 학부모는 언제나
-// 받는다 — 성적표는 학부모에게 가는 것이 기본이고, 학생 본인은 거기에 얹는
-// 선택이다. 학생 한 줄에 두 연락처를 나란히 두어, 한 번 고르면 두 곳에 나간다.
+// 받는 사람은 '학부모만' · '학부모 + 학생' · '학생만' 셋 중 하나다. 성적표는
+// 학부모에게 가는 것이 기본이고, 학생 본인은 거기에 얹는 선택이다. '학생만'은
+// 학부모에게 먼저 보낸 뒤 학생에게 따로 보낼 때 쓴다 — 학부모가 한 번 더 받지
+// 않는다. 학생 한 줄에 두 연락처를 나란히 두어, 한 번 고르면 모드대로 나간다.
+// 규칙은 lib/send-mode 에 있다.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -20,6 +22,16 @@ import { ACADEMY_NAME, ACADEMY_PHONE, EXAM_TYPE_LABELS, type OmrExam } from "@/l
 import type { RecipientType } from "@/lib/report-messages";
 import type { RecipientSlot, SendTarget, TargetCounts } from "@/lib/report-send";
 import { EMPTY_REVIEW, formatWhen, reviewRequired, sendAllowed, type ExamReview } from "@/lib/review";
+import {
+  SEND_MODES,
+  SEND_MODE_LABELS,
+  channelsFor,
+  hasUnsentChannel,
+  includesRecipient,
+  recipientCountText,
+  slotOf,
+  type SendMode,
+} from "@/lib/send-mode";
 
 interface Setup {
   messagingConfigured: boolean;
@@ -41,26 +53,10 @@ interface SendOutcome {
   error: string | null;
 }
 
-/** 받는 사람 — 학부모는 늘 포함되고, 학생 본인을 얹을지만 고른다 */
-type SendMode = "parent" | "both";
-
-const MODE_LABELS: Record<SendMode, string> = {
-  parent: "학부모만",
-  both: "학부모 + 학생",
-};
-
 const RECIPIENT_LABELS: Record<RecipientType, string> = {
   parent: "학부모",
   student: "학생 본인",
 };
-
-/** 이 모드에서 이 학생에게 실제로 나갈 수신자들 */
-function channelsFor(target: SendTarget, mode: SendMode): RecipientType[] {
-  const out: RecipientType[] = [];
-  if (!target.parent.blocked) out.push("parent");
-  if (mode === "both" && !target.student.blocked) out.push("student");
-  return out;
-}
 
 /** 연락처 한 칸 — 번호·지난 발송·못 보내는 이유를 한곳에 */
 function ContactCell({ slot }: { slot: RecipientSlot }) {
@@ -114,7 +110,7 @@ export default function OmrSendPanel({
   const [review, setReview] = useState<ExamReview>(exam?.review ?? EMPTY_REVIEW);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewNotices, setReviewNotices] = useState<string[]>([]);
-  /** 고른 학생의 reportId — 한 학생을 고르면 모드에 따라 한 곳 또는 두 곳에 나간다 */
+  /** 고른 학생의 reportId — 한 학생을 고르면 모드에 따라 학부모·학생·둘 다에 나간다 */
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -158,12 +154,9 @@ export default function OmrSendPanel({
     () => targets.filter((t) => channelsFor(t, mode).length > 0),
     [targets, mode],
   );
-  /** 보낼 수 있는 곳 중 아직 안 보낸 곳이 하나라도 있는 학생 */
+  /** 보낼 수 있는 곳 중 아직 안 보낸 곳이 하나라도 있는 학생 — 모드에 있는 수신자 기준 */
   const unsent = useMemo(
-    () =>
-      sendable.filter((t) =>
-        channelsFor(t, mode).some((type) => !(type === "parent" ? t.parent : t.student).history?.sent),
-      ),
+    () => sendable.filter((t) => hasUnsentChannel(t, mode)),
     [sendable, mode],
   );
 
@@ -189,15 +182,13 @@ export default function OmrSendPanel({
   );
   const parentCount = selections.filter((s) => s.recipientType === "parent").length;
   const studentCount = selections.filter((s) => s.recipientType === "student").length;
-  const selectionText =
-    mode === "both" ? `학부모 ${parentCount}명 · 학생 ${studentCount}명` : `학부모 ${parentCount}명`;
+  const selectionText = recipientCountText(mode, parentCount, studentCount);
 
   async function send() {
     if (!exam || selections.length === 0) return;
     const isAlreadySent = (s: { reportId: string; recipientType: RecipientType }) => {
       const t = targets.find((x) => x.reportId === s.reportId);
-      const slot = s.recipientType === "parent" ? t?.parent : t?.student;
-      return Boolean(slot?.history?.sent);
+      return Boolean(t && slotOf(t, s.recipientType).history?.sent);
     };
     const alreadySent = selections.filter(isAlreadySent).length;
 
@@ -218,7 +209,7 @@ export default function OmrSendPanel({
     }
     const parents = toSend.filter((s) => s.recipientType === "parent").length;
     const students = toSend.filter((s) => s.recipientType === "student").length;
-    const text = mode === "both" ? `학부모 ${parents}명 · 학생 ${students}명` : `학부모 ${parents}명`;
+    const text = recipientCountText(mode, parents, students);
     const ok = window.confirm(
       `${text}에게 성적표 알림톡을 보냅니다(총 ${toSend.length}건).${allowResend ? `\n(이 중 ${alreadySent}건은 다시 보내는 것입니다.)` : ""}\n\n` +
         "보낸 메시지는 취소할 수 없습니다. 진행할까요?",
@@ -329,10 +320,15 @@ export default function OmrSendPanel({
   const modeSummary = (m: SendMode): string => {
     if (!counts) return "확인 중…";
     const p = counts.parent;
-    if (m === "parent") return `보낼 수 있음 ${p.ready}명 · 이미 보냄 ${p.alreadySent}명 · 불가 ${p.blocked}명`;
     const s = counts.student;
+    if (m === "parent") return `보낼 수 있음 ${p.ready}명 · 이미 보냄 ${p.alreadySent}명 · 불가 ${p.blocked}명`;
+    if (m === "student") return `보낼 수 있음 ${s.ready}명 · 이미 보냄 ${s.alreadySent}명 · 학생 번호 없음 ${s.blocked}명`;
     return `학부모 ${p.ready}명 + 학생 ${s.ready}명 · 학생 번호 없음 ${s.blocked}명`;
   };
+  /** 표에 보이는 연락처 열 — 모드에 있는 수신자만 */
+  const showParent = includesRecipient(mode, "parent");
+  const showStudent = includesRecipient(mode, "student");
+  const columnCount = 2 + (showParent ? 1 : 0) + (showStudent ? 1 : 0);
 
   return (
     <div className="admin-shell">
@@ -417,27 +413,28 @@ export default function OmrSendPanel({
         </section>
       ) : null}
 
-      {/* 누구에게 보낼지 — 학부모는 늘 받고, 학생 본인을 얹을지만 고른다 */}
+      {/* 누구에게 보낼지 — 학부모만 / 학부모 + 학생 / 학생만 */}
       <section className="panel">
         <div className="section-heading wrap">
           <div>
             <p className="eyebrow">받는 사람</p>
             <h2>누구에게 보낼까요?</h2>
             <p className="subtle">
-              학부모에게는 늘 갑니다. <strong>학부모 + 학생</strong>을 고르면 학생 본인 번호가 있는
-              학생에게도 같은 알림톡이 한 번 더 나갑니다.
+              성적표는 학부모에게 가는 것이 기본입니다. <strong>학부모 + 학생</strong>을 고르면 학생 본인
+              번호가 있는 학생에게도 같은 알림톡이 한 번 더 나갑니다. <strong>학생만</strong>은 학부모에게는
+              보내지 않고 학생 본인에게만 보냅니다 — 학부모에게 먼저 보낸 뒤 학생에게 따로 보낼 때 쓰세요.
             </p>
           </div>
         </div>
         <div className="style-options">
-          {(["parent", "both"] as SendMode[]).map((m) => (
+          {SEND_MODES.map((m) => (
             <button
               key={m}
               type="button"
               className={`style-option${mode === m ? " on" : ""}`}
               onClick={() => setMode(m)}
             >
-              <strong>{MODE_LABELS[m]}</strong>
+              <strong>{SEND_MODE_LABELS[m]}</strong>
               <span>{modeSummary(m)}</span>
             </button>
           ))}
@@ -489,11 +486,14 @@ export default function OmrSendPanel({
           <div>
             <p className="eyebrow">발송 대상</p>
             <h2>
-              {MODE_LABELS[mode]} · 학생 {picked.size}명 선택
+              {SEND_MODE_LABELS[mode]} · 학생 {picked.size}명 선택
             </h2>
             <p className="subtle">
               이미 보낸 학생은 기본으로 선택되지 않습니다. 다시 보내려면 직접 체크하세요.
               {mode === "both" ? " 학생 번호가 없는 학생은 학부모에게만 나갑니다." : ""}
+              {mode === "student"
+                ? " 학부모에게는 나가지 않습니다. 학생 번호가 없는 학생은 고를 수 없습니다."
+                : ""}
             </p>
           </div>
           <div className="toolbar">
@@ -515,20 +515,20 @@ export default function OmrSendPanel({
               <tr>
                 <th style={{ width: 44 }} />
                 <th>학생</th>
-                <th>학부모</th>
-                {mode === "both" ? <th>학생 본인</th> : null}
+                {showParent ? <th>학부모</th> : null}
+                {showStudent ? <th>학생 본인</th> : null}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="empty-cell" colSpan={4}>
+                  <td className="empty-cell" colSpan={columnCount}>
                     불러오는 중…
                   </td>
                 </tr>
               ) : targets.length === 0 ? (
                 <tr>
-                  <td className="empty-cell" colSpan={4}>
+                  <td className="empty-cell" colSpan={columnCount}>
                     이 시험에는 아직 만들어진 성적표가 없습니다.{" "}
                     <Link href={`/admin/omr/${exam.id}/reports`}>성적표 생성으로 이동 →</Link>
                   </td>
@@ -555,10 +555,12 @@ export default function OmrSendPanel({
                           {target.className ? ` · ${target.className}` : ""}
                         </span>
                       </td>
-                      <td>
-                        <ContactCell slot={target.parent} />
-                      </td>
-                      {mode === "both" ? (
+                      {showParent ? (
+                        <td>
+                          <ContactCell slot={target.parent} />
+                        </td>
+                      ) : null}
+                      {showStudent ? (
                         <td>
                           <ContactCell slot={target.student} />
                         </td>
