@@ -1,5 +1,6 @@
 "use client";
 
+import { isListeningAbsentCandidate } from "@/lib/listening";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
@@ -738,6 +739,14 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                             <span className="subtle">
                               표기 {marked}/{total}
                             </span>
+                            {isListeningAbsentCandidate(exam, scan) ? (
+                              <span
+                                className="status-chip inactive"
+                                title="듣기 문항 마킹이 거의 없습니다 — 성적표 생성 화면에서 듣기 미응시 여부를 정합니다"
+                              >
+                                듣기 미응시?
+                              </span>
+                            ) : null}
 
                             {scan.readError ? (
                               <span className="status-chip danger">

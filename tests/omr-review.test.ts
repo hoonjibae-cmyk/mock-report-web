@@ -36,6 +36,7 @@ function scan(over: Partial<OmrScan> = {}): OmrScan {
     readConfidence: { uncertain: [], multiMarked: [], idUncertain: false, idConflict: false },
     status: "pending",
     reviewedBy: null,
+    listeningMode: null,
     readError: null,
     createdAt: "",
     updatedAt: "",

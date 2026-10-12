@@ -164,7 +164,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     // 채점(검수 완료 전체가 응시 집단)
-    const { cohort, scored } = scoreExam(exam, reviewed);
+    const { cohort, scored, listening } = scoreExam(exam, reviewed);
     // 국영수 모의고사 기준 자료 — 있으면 전국 비교·문항 분류를 얹는다
     const reference = exam.examType === "mock" ? exam.mockReference : null;
     const scoredByScan = new Map(scored.map((s) => [s.scanId, s]));
@@ -281,6 +281,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         weakItems: result.weakItems,
         growth,
         essayCount,
+        // 듣기 미응시 — 성적표에 "듣기 점수는 본 학생들의 평균을 적용했다"고 적는다
+        listeningAbsent:
+          result.listeningAbsent && listening
+            ? { mean: listening.mean, possible: listening.possible, count: listening.questions.length }
+            : null,
         national: reference ? nationalComparison(reference, result.raw) : null,
         classificationStats: reference
           ? classificationStats(attachClassification(result.items, reference))

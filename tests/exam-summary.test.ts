@@ -42,6 +42,7 @@ function scored(key: string, raw: number, items: GenericItemResult[], over: Part
     correctCount: items.filter((i) => i.correct).length, wrongCount: items.filter((i) => !i.correct).length, blankCount: 0,
     rank: 1, topPercent: 50, standardScore: 100, grade: null, items, weakItems: [],
     areas: [{ area: "문법", earned: raw, possible: 100, rate: raw, cohortRate: 70, cohortEarned: 70 }], contents: [],
+    listeningAbsent: false,
     ...over,
   };
 }
@@ -50,7 +51,7 @@ function row(key: string, name: string, raw: number, max = 100): SummaryRow {
   return {
     studentKey: key, name, school: "", className: "", raw, max, objectiveRaw: raw, essayRaw: 0,
     rank: 1, topPercent: 50, standardScore: 100, grade: null, correctCount: 0, wrongCount: 0, blankCount: 0,
-    areas: [], items: [], reportToken: null,
+    areas: [], items: [], reportToken: null, listeningAbsent: false,
   };
 }
 

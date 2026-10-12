@@ -77,9 +77,11 @@ export function latestPerStudent(reports: readonly ScoreSource[]): ScoreSource[]
 }
 
 /** 이 성적표에서 해당 영역의 득점 (그 영역이 없으면 null — 0점과 구분한다) */
-function areaScore(data: GenericReportData, area: string): number | null {
+function areaScore(data: GenericReportData, area: string): ScoreCell {
   const stat = (data.areas ?? []).find((entry) => entry.area === area);
-  return stat ? stat.earned : null;
+  if (!stat) return null;
+  // 듣기 미응시 — 본 학생들의 평균을 받은 점수라는 것을 표에서도 알 수 있게
+  return stat.estimated ? `${stat.earned}(평균)` : stat.earned;
 }
 
 /** 표기(정답·학생 선택)를 사람이 읽는 글로 — 보기 하나면 "3", 모두 고르기면 "2,4" */
@@ -98,6 +100,8 @@ function markText(value: MarkValue): string {
  * 받은 점수를 적는다.
  */
 export function itemCell(item: GenericItemResult): string {
+  // 듣기 미응시 — 채점하지 않은 문항은 O 도 X 도 아니다
+  if (item.absent) return "미응시";
   if (item.essay) return item.correct ? "O" : `X(${item.earned}/${item.point}점)`;
   if (item.correct) return "O";
   const marked = markText(item.marked);

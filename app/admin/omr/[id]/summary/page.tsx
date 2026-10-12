@@ -15,6 +15,7 @@ const EMPTY_RESULT: ScoreExamResult = {
   cohort: { count: 0, mean: 0, stdev: 0, max: 0, min: 0 },
   itemRates: {},
   scored: [],
+  listening: null,
 };
 
 /**
@@ -80,6 +81,7 @@ export default async function ExamSummaryPage(context: { params: Promise<{ id: s
     rows: buildSummaryRows(result.scored, students, max),
     pendingScans: scans.length - reviewed.length,
     reportCount: reports.length,
+    listening: result.listening,
     answerKeyComplete: Object.keys(exam.answerKey ?? {}).length >= exam.numQuestions,
     directoryError,
     generatedAt: new Date().toISOString(),

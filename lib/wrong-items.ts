@@ -29,7 +29,8 @@ function markText(value: MarkValue): string {
 /** 틀린 문항만 번호순으로 */
 export function wrongItemsOf(items: readonly GenericItemResult[]): WrongItem[] {
   return items
-    .filter((item) => !item.correct)
+    // 채점하지 않은 듣기 문항(미응시)은 틀린 것이 아니다
+    .filter((item) => !item.correct && !item.absent)
     .sort((a, b) => a.no - b.no)
     .map((item) => ({
       no: item.no,

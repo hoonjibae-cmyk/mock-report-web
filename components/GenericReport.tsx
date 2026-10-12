@@ -127,7 +127,10 @@ function AreaBars({ areas }: { areas: AreaStat[] }) {
         return (
           <div className="area-row" key={stat.area}>
             <div className="area-head">
-              <strong>{stat.area}</strong>
+              <strong>
+                {stat.area}
+                {stat.estimated ? <small className="area-estimated"> 미응시 · 반 평균 적용</small> : null}
+              </strong>
               <span>
                 {stat.earned}/{stat.possible}점 · {stat.rate}%
                 <em className={diff >= 0 ? "up" : "down"}>
@@ -171,7 +174,10 @@ function AreaTable({ areas }: { areas: AreaStat[] }) {
         <tbody>
           {areas.map((stat) => (
             <tr key={stat.area}>
-              <td className="name">{stat.area}</td>
+              <td className="name">
+                {stat.area}
+                {stat.estimated ? <small className="area-estimated"> (미응시 · 반 평균 적용)</small> : null}
+              </td>
               <td>{stat.possible}</td>
               <td>
                 <strong>{stat.earned}</strong>
@@ -222,7 +228,9 @@ export default function GenericReport({
   comments?: ReportComments;
 }) {
   const { score, cohort } = report;
-  const wrongItems = report.items.filter((item) => !item.correct);
+  // 채점하지 않은 듣기 문항(미응시)은 오답이 아니다
+  const wrongItems = report.items.filter((item) => !item.correct && !item.absent);
+  const listeningAbsent = report.listeningAbsent ?? null;
   // 분류를 입력한 시험에서만 상세 표를 싣는다 — 없는 열을 빈칸으로 채우면 지저분하다
   const hasArea = report.items.some((item) => item.area);
   const hasContent = report.items.some((item) => item.content);
@@ -309,11 +317,19 @@ export default function GenericReport({
             <DistributionBar report={report} />
             <p className="subtle" style={{ marginTop: 10 }}>
               맞은 문항 {score.correctCount} · 틀린 문항 {score.wrongCount}
-              {score.blankCount > 0 ? ` · 미표기 ${score.blankCount}` : ""} (총 {score.totalQuestions}문항)
+              {score.blankCount > 0 ? ` · 미표기 ${score.blankCount}` : ""}
+              {listeningAbsent ? ` · 듣기 미응시 ${listeningAbsent.count}문항` : ""} (총 {score.totalQuestions}문항)
               {report.essayCount > 0
                 ? ` · 객관식 ${score.objectiveRaw}점 + 서술형 ${score.essayRaw}점(${report.essayCount}문항)`
                 : ""}
             </p>
+            {listeningAbsent ? (
+              <p className="listening-notice">
+                듣기 평가를 응시하지 않아 듣기 점수는 이 시험에서 듣기를 응시한 학생들의 평균값(
+                {listeningAbsent.mean}점 / {listeningAbsent.possible}점)을 적용했습니다. 아래 문항별 결과에서 듣기
+                문항은 ‘미응시’로 표시됩니다.
+              </p>
+            ) : null}
           </section>
         </section>
 
@@ -411,25 +427,31 @@ export default function GenericReport({
             {report.items.map((item) => (
               <div
                 key={item.no}
-                className={`omr-item-cell ${item.correct ? "ok" : item.essay ? "partial" : toChoices(item.marked).length === 0 ? "blank" : "wrong"}${weakSet.has(item.no) ? " weak" : ""}`}
-                title={`${item.no}번${item.area ? ` · ${item.area}` : ""} · 배점 ${item.point}점 · 반 정답률 ${item.correctRate}% (${item.difficulty})`}
+                className={`omr-item-cell ${item.absent ? "absent" : item.correct ? "ok" : item.essay ? "partial" : toChoices(item.marked).length === 0 ? "blank" : "wrong"}${weakSet.has(item.no) ? " weak" : ""}`}
+                title={
+                  item.absent
+                    ? `${item.no}번 · 듣기 미응시 — 채점하지 않았습니다`
+                    : `${item.no}번${item.area ? ` · ${item.area}` : ""} · 배점 ${item.point}점 · 반 정답률 ${item.correctRate}% (${item.difficulty})`
+                }
               >
                 <span className="no">{item.no}</span>
                 <span className="mark">
-                  {item.essay
-                    ? `${item.earned}/${item.point}`
-                    : item.correct
-                      ? "○"
-                      : toChoices(item.marked).length === 0
-                        ? "–"
-                        : `${formatChoices(item.marked)}→${formatChoices(item.answer, "?")}`}
+                  {item.absent
+                    ? "미응시"
+                    : item.essay
+                      ? `${item.earned}/${item.point}`
+                      : item.correct
+                        ? "○"
+                        : toChoices(item.marked).length === 0
+                          ? "–"
+                          : `${formatChoices(item.marked)}→${formatChoices(item.answer, "?")}`}
                 </span>
                 <span className={`rate d-${item.difficulty}`}>{item.correctRate}%</span>
               </div>
             ))}
           </div>
           <p className="subtle" style={{ marginTop: 8 }}>
-            ○ 정답 · ①→② 오답(내 표기→정답) · – 미표기 · 서술형은 득점/배점 · 붉은 테두리는
+            ○ 정답 · ①→② 오답(내 표기→정답) · – 미표기{listeningAbsent ? " · 미응시 = 듣기 평가를 보지 않은 문항" : ""} · 서술형은 득점/배점 · 붉은 테두리는
             우선 복습 문항. 정답률 색은 난이도입니다 — <b className="d-쉬움">쉬움</b> ·{" "}
             <b className="d-보통">보통</b> · <b className="d-어려움">어려움</b>
             {hasSpecifiedDifficulty
@@ -460,8 +482,8 @@ export default function GenericReport({
                     {report.items.map((item) => (
                       <tr key={item.no} className={weakSet.has(item.no) ? "weak" : undefined}>
                         <td>{item.no}</td>
-                        <td className={item.correct ? "ok-mark" : "x-mark"}>
-                          {item.essay ? "–" : item.correct ? "○" : "✕"}
+                        <td className={item.absent ? "absent-mark" : item.correct ? "ok-mark" : "x-mark"}>
+                          {item.absent ? "미응시" : item.essay ? "–" : item.correct ? "○" : "✕"}
                         </td>
                         {hasArea ? <td className="name">{item.area ?? "–"}</td> : null}
                         {hasContent ? <td className="name">{item.content ?? "–"}</td> : null}

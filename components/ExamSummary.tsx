@@ -116,6 +116,12 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
               <span className={withoutReport > 0 ? "need" : "ok"}>
                 성적표 <strong>{data.rows.length - withoutReport}</strong>/{data.rows.length}명 생성
               </span>
+              {data.listening && data.listening.absent > 0 ? (
+                <span className="need" title="듣기를 안 본 학생의 듣기 점수는 본 학생들의 평균을 적용합니다">
+                  듣기 미응시 <strong>{data.listening.absent}</strong>명 · 듣기 평균 {data.listening.mean}/{data.listening.possible}점
+                  (응시 {data.listening.takers}명 기준)
+                </span>
+              ) : null}
             </div>
             {!data.answerKeyComplete ? (
               <p className="form-error block" style={{ marginTop: 10 }}>
@@ -151,7 +157,10 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
             <div className="section-heading wrap">
               <div>
                 <p className="eyebrow">학생별 결과</p>
-                <h2>맞으면 ○, 틀리면 학생이 고른 번호, 안 풀었으면 ·</h2>
+                <h2>
+                  맞으면 ○, 틀리면 학생이 고른 번호, 안 풀었으면 ·
+                  {data.listening && data.listening.absent > 0 ? ", 듣기 미응시는 미" : ""}
+                </h2>
               </div>
               <div className="summary-controls no-print">
                 <span className="trend-seg" role="group" aria-label="정렬">
@@ -235,6 +244,7 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                             {[r.school, r.className].filter(Boolean).join(" · ")}
                             {r.name ? ` · ${r.studentKey}` : ""}
                             {dups.has(r.studentKey) ? <em className="summary-dup"> 중복</em> : null}
+                            {r.listeningAbsent ? <em className="summary-absent"> 듣기 미응시</em> : null}
                           </span>
                         </td>
                         <td>
@@ -249,11 +259,11 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                         {areas.map((area) => {
                           const a = areaByName.get(area);
                           return (
-                            <td key={area} className={a ? rateClass(a.rate) : ""}>
+                            <td key={area} className={a ? (a.estimated ? "estimated" : rateClass(a.rate)) : ""} title={a?.estimated ? "듣기 미응시 — 본 학생들의 평균 적용" : undefined}>
                               {a ? (
                                 <>
                                   {fmt(a.earned)}
-                                  <span className="subtle"> / {fmt(a.possible)}</span>
+                                  <span className="subtle"> / {fmt(a.possible)}{a.estimated ? " 평균" : ""}</span>
                                 </>
                               ) : (
                                 "—"
@@ -269,18 +279,20 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                           ? r.items.map((it) => (
                               <td
                                 key={it.no}
-                                className={`q ${it.essay ? "essay" : it.correct ? "ok" : it.marked ? "no" : "blank"}`}
+                                className={`q ${it.absent ? "absent" : it.essay ? "essay" : it.correct ? "ok" : it.marked ? "no" : "blank"}`}
                                 title={
-                                  it.essay
-                                    ? `${it.no}번 서술형 ${it.earned}/${it.point}점`
-                                    : it.correct
-                                      ? `${it.no}번 정답`
-                                      : it.marked
-                                        ? `${it.no}번 ${it.marked} 선택 (오답)`
-                                        : `${it.no}번 무응답`
+                                  it.absent
+                                    ? `${it.no}번 듣기 미응시 — 채점하지 않음`
+                                    : it.essay
+                                      ? `${it.no}번 서술형 ${it.earned}/${it.point}점`
+                                      : it.correct
+                                        ? `${it.no}번 정답`
+                                        : it.marked
+                                          ? `${it.no}번 ${it.marked} 선택 (오답)`
+                                          : `${it.no}번 무응답`
                                 }
                               >
-                                {it.essay ? `${fmt(it.earned)}` : it.correct ? "○" : it.marked || "·"}
+                                {it.absent ? "미" : it.essay ? `${fmt(it.earned)}` : it.correct ? "○" : it.marked || "·"}
                               </td>
                             ))
                           : null}

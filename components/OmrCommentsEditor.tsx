@@ -625,6 +625,11 @@ export default function OmrCommentsEditor({
                         ? ` · ${row.summary.raw}/${row.summary.max}점 · ${row.summary.rank}/${row.summary.cohortCount}등 · 표준점수 ${row.summary.standardScore}`
                         : ""}
                     </span>
+                    {row.summary?.listeningAbsent ? (
+                      <span className="status-chip inactive" title="듣기 평가를 보지 않아 듣기 점수는 본 학생들의 평균을 적용했습니다">
+                        듣기 미응시 · 평균 적용
+                      </span>
+                    ) : null}
                     {comment.status === "final" && !dirty ? (
                       <span className="status-chip active">저장됨</span>
                     ) : (
