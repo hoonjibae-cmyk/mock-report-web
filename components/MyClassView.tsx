@@ -1,10 +1,15 @@
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
-import type { ExamGroup } from "@/lib/homeroom";
+import TeacherPicker from "@/components/TeacherPicker";
+import { sameTeacher, type ExamGroup } from "@/lib/homeroom";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
 
 interface Props {
   user: NavUser;
+  /** 지금 보고 있는 반의 담임 — 보통 본인, 총괄이 골랐으면 그 선생님 */
+  teacherName: string;
+  /** 총괄에게만 주는 선생님 목록. null 이면 드롭다운이 없다 */
+  teachers: string[] | null;
   groups: ExamGroup[];
   setupError: string;
 }
@@ -15,11 +20,13 @@ interface Props {
  * 훅이 없는 그리기 전용 컴포넌트다. 데이터는 페이지가 넘겨주고, 펼치고 접는
  * 것은 <details> 로 충분하다 — 담임이 보는 화면에서 스크립트가 할 일이 없다.
  * 데이터를 떼어 둔 덕에 가짜 데이터로 그려 보며 사용설명서 사진도 찍을 수 있다.
+ * 총괄은 드롭다운(TeacherPicker)으로 다른 선생님 반을 골라 본다.
  */
-export default function MyClassView({ user, groups, setupError }: Props) {
+export default function MyClassView({ user, teacherName, teachers, groups, setupError }: Props) {
   const studentTotal = new Set(
     groups.flatMap((g) => g.students.map((s) => s.studentKey ?? s.reportId)),
   ).size;
+  const viewingOther = !sameTeacher(teacherName, user.displayName);
 
   return (
     <div className="admin-shell">
@@ -29,9 +36,9 @@ export default function MyClassView({ user, groups, setupError }: Props) {
         <div className="section-heading wrap">
           <div>
             <p className="eyebrow">MY CLASS</p>
-            <h2>{user.displayName} 선생님 반</h2>
+            <h2>{teacherName} 선생님 반</h2>
             <p className="subtle">
-              학생 관리 프로그램에서 담임이 <strong>{user.displayName}</strong>으로 적힌 학생들의
+              학생 관리 프로그램에서 담임이 <strong>{teacherName}</strong>으로 적힌 학생들의
               성적표입니다. 시험마다 반 평균을 전체 평균 옆에 놓았고, 학생 이름을 누르면 성적표가
               열립니다(학부모 PIN 없이 바로 열립니다).
             </p>
@@ -39,17 +46,26 @@ export default function MyClassView({ user, groups, setupError }: Props) {
               반배치고사는 여기에 나오지 않습니다. 담임 정보는 성적표를 만들 때 함께 저장되므로,
               그 전에 만든 성적표는 여기 없을 수 있습니다.
             </p>
+            {viewingOther ? (
+              <p className="subtle my-class-other">
+                관리자 권한으로 <strong>{teacherName}</strong> 선생님 반을 보고 있습니다.{" "}
+                <Link href="/admin/my-class">내 반으로 돌아가기</Link>
+              </p>
+            ) : null}
           </div>
-          {groups.length > 0 ? (
-            <div className="review-counts">
-              <span>
-                시험 <strong>{groups.length}</strong>개
-              </span>
-              <span>
-                학생 <strong>{studentTotal}</strong>명
-              </span>
-            </div>
-          ) : null}
+          <div className="my-class-tools">
+            {teachers ? <TeacherPicker teachers={teachers} current={teacherName} self={user.displayName} /> : null}
+            {groups.length > 0 ? (
+              <div className="review-counts">
+                <span>
+                  시험 <strong>{groups.length}</strong>개
+                </span>
+                <span>
+                  학생 <strong>{studentTotal}</strong>명
+                </span>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {setupError ? <p className="form-error block">{setupError}</p> : null}
@@ -61,6 +77,7 @@ export default function MyClassView({ user, groups, setupError }: Props) {
               담임으로 등록된 학생의 성적표가 만들어지면 여기 나타납니다. 학생 관리 프로그램의 담임
               이름과 인사 프로그램의 이름이 서로 다르면(띄어쓰기는 괜찮습니다) 보이지 않으니, 그
               경우 운영진에 알려 주세요.
+              {teachers ? " 관리자는 위의 ‘선생님 고르기’에서 다른 선생님 반을 볼 수 있습니다." : ""}
             </p>
           </div>
         ) : null}

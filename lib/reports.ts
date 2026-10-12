@@ -9,7 +9,7 @@ import {
   type SendState,
   type SendSummary,
 } from "@/lib/report-messages";
-import { homeroomKey, type HomeroomReport } from "@/lib/homeroom";
+import { homeroomKey, mergeTeacherNames, type HomeroomReport } from "@/lib/homeroom";
 import { parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
@@ -233,6 +233,33 @@ export async function listHomeroomReports(teacherName: string, limit = 600): Pro
     });
   }
   return out;
+}
+
+/**
+ * 성적표에 담임으로 적힌 선생님 이름들 — 총괄이 '내 반'에서 다른 선생님 반을
+ * 고를 때의 목록. 살아 있는 성적표만 보고, 표기가 다른 같은 이름은 하나로 합친다.
+ *
+ * PostgREST 에는 distinct 가 없어 담임 칸 하나만 페이지로 끊어 읽는다 — 글자
+ * 한 칸뿐이라 수천 행도 가볍다. 상한을 두어 표가 아주 커져도 끝없이 읽지 않는다.
+ */
+export async function listHomeroomTeachers(include: string[] = []): Promise<string[]> {
+  const supabase = getSupabaseAdmin();
+  const PAGE = 1000;
+  const MAX_PAGES = 30;
+  const names: string[] = [];
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const { data, error } = await supabase
+      .from("student_reports")
+      .select("homeroom_teacher")
+      .not("homeroom_key", "is", null)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) throw new Error(`담임 목록 조회 실패: ${error.message}`);
+    for (const row of data ?? []) names.push(String(row.homeroom_teacher ?? ""));
+    if (!data || data.length < PAGE) break;
+  }
+  return mergeTeacherNames(names, include);
 }
 
 /** 운영진 검토 화면의 한 줄 — 성적표 본문은 싣지 않고, 열어 볼 목차만 */

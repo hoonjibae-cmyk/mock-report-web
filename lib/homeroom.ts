@@ -40,6 +40,50 @@ export function teacherCanSeeExamType(type: ExamType): boolean {
   return TEACHER_VISIBLE_EXAM_TYPES[type] === true;
 }
 
+/**
+ * 총괄이 '내 반'에서 고를 선생님 목록 — 성적표에 담임으로 적힌 이름들.
+ *
+ * 같은 사람의 표기가 여럿이면('김 선생'·'김선생') 열쇠로 합치고, 가장 많이
+ * 쓰인 표기를 보여 준다. include 의 이름(로그인한 본인 등)은 성적표가 없어도
+ * 목록에 두고, 그 표기(인사 프로그램의 이름)를 우선한다. 가나다순.
+ */
+export function mergeTeacherNames(
+  names: readonly (string | null | undefined)[],
+  include: readonly string[] = [],
+): string[] {
+  const byKey = new Map<string, Map<string, number>>();
+  const bump = (raw: string, weight: number) => {
+    const name = raw.trim();
+    const key = homeroomKey(name);
+    if (!key) return;
+    const spellings = byKey.get(key) ?? new Map<string, number>();
+    spellings.set(name, (spellings.get(name) ?? 0) + weight);
+    byKey.set(key, spellings);
+  };
+  for (const name of names) bump(String(name ?? ""), 1);
+  for (const name of include) bump(name, Number.POSITIVE_INFINITY);
+
+  const out: string[] = [];
+  for (const spellings of byKey.values()) {
+    let best = "";
+    let bestCount = -1;
+    for (const [spelling, count] of spellings) {
+      if (count > bestCount) {
+        best = spelling;
+        bestCount = count;
+      }
+    }
+    out.push(best);
+  }
+  return out.sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+/** 두 이름이 같은 사람인가 — 공백·대소문자 차이는 무시. 빈 이름끼리는 아니다 */
+export function sameTeacher(a: string | null | undefined, b: string | null | undefined): boolean {
+  const ka = homeroomKey(a);
+  return ka !== "" && ka === homeroomKey(b);
+}
+
 /** '내 반' 화면에 필요한 만큼만 추린 성적표 한 건 */
 export interface HomeroomReport {
   reportId: string;

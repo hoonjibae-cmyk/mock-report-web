@@ -13,6 +13,8 @@ import {
   groupByExam,
   homeroomKey,
   latestPerStudent,
+  mergeTeacherNames,
+  sameTeacher,
   summarizeClass,
   teacherCanSeeExamType,
   type HomeroomReport,
@@ -53,6 +55,19 @@ test("이름 열쇠 — 공백과 대소문자 차이는 같은 사람으로 본
   assert.equal(homeroomKey(" Kim Teacher "), homeroomKey("kimteacher"));
   assert.notEqual(homeroomKey("김선생"), homeroomKey("이선생"));
   assert.equal(homeroomKey(null), "", "담임이 비어 있으면 아무하고도 맞지 않아야 한다");
+});
+
+test("선생님 목록 — 표기가 다른 같은 이름은 하나로, 많이 쓰인 표기로, 가나다순", () => {
+  const names = ["이선생", "김 선생", "김선생", "김선생", null, "", "  ", "박선생"];
+  assert.deepEqual(mergeTeacherNames(names), ["김선생", "박선생", "이선생"]);
+});
+
+test("선생님 목록 — 본인은 성적표가 없어도 들어가고, 본인 표기(인사 프로그램)가 우선한다", () => {
+  const merged = mergeTeacherNames(["김 선생", "김 선생", "이선생"], ["김선생", "배지훈"]);
+  assert.deepEqual(merged, ["김선생", "배지훈", "이선생"]);
+  assert.equal(sameTeacher("김 선생", "김선생"), true);
+  assert.equal(sameTeacher("", ""), false, "빈 이름끼리는 같은 사람이 아니다");
+  assert.equal(sameTeacher("김선생", "이선생"), false);
 });
 
 test("반배치고사만 담임에게 닫혀 있고 토요모의고사는 열려 있다", () => {
