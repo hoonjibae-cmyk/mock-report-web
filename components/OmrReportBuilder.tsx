@@ -343,6 +343,7 @@ export default function OmrReportBuilder({
           >
             ← {essayCount > 0 ? "주관식 채점" : "스캔 · 검수"}
           </Link>
+          <Link className="button secondary" href={`/admin/omr/${exam.id}/summary`}>결과 요약</Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/comments`}>담임 의견 →</Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/send`}>알림톡 발송 →</Link>
         </div>

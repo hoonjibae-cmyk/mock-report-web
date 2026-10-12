@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { canDeleteOwned, NOT_OWNER_MESSAGE } from "@/lib/ownership";
 
 import { useMemo, useState } from "react";
@@ -491,6 +492,15 @@ export default function ReportsManager({
                             <span className="muted">
                               {new Date(group.latestAt).toLocaleDateString("ko-KR")}
                             </span>
+                            {(() => {
+                              // 묶음의 시험 id — 그 시험 전원의 결과 요약으로 간다
+                              const examId = group.rows.find((r) => r.examId)?.examId;
+                              return examId ? (
+                                <Link className="inline-link" href={`/admin/omr/${examId}/summary`}>
+                                  결과 요약
+                                </Link>
+                              ) : null;
+                            })()}
                             {permissions.deleteReports && canDeleteGroup(group) ? (
                               <button className="inline-delete" onClick={() => deleteGroup(group)}>
                                 이 시험 삭제

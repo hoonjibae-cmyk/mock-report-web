@@ -27,6 +27,8 @@ export interface AdminReportListItem {
    * 연결된 시험이 없어(exam_id null) 국영수 모의고사로 본다.
    */
   examType: ExamType;
+  /** 연결된 OMR 시험 — 없으면 null(전국 모의고사 엑셀 성적표) */
+  examId: string | null;
 }
 
 function examTypeOf(value: unknown): ExamType {
@@ -40,7 +42,7 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
   const { data, error } = await supabase
     .from("student_reports")
     .select(
-      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name,created_by_username),exams(exam_type)",
+      "id,batch_id,public_token,student_name,school,grade,is_active,pin_required,view_count,last_viewed_at,created_at,report_batches(title,exam_label,created_by_name,created_by_username),exams(exam_type),exam_id",
     )
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -66,6 +68,7 @@ export async function listAdminReports(limit = 300): Promise<AdminReportListItem
     // PostgREST는 관계를 객체 또는 배열로 돌려줄 수 있어 둘 다 받는다.
     // 연결된 시험이 없는 성적표(전국 모의고사 엑셀)는 국영수로 본다.
     examType: examTypeOf(row.exams),
+    examId: (row.exam_id as string | null) ?? null,
   }));
 }
 
