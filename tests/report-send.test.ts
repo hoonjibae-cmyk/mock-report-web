@@ -15,6 +15,7 @@ import {
   countTargets,
   examDateNotice,
   formatExamDate,
+  guardAlreadySent,
   resolveSelections,
   templateVariables,
   type SendReportRow,
@@ -299,4 +300,37 @@ test("쌍둥이 — 이름이 다른 두 학생은 같은 학부모 번호로 �
   assert.deepEqual(send.map((s) => s.studentName), ["김하늘", "김바다"]);
   assert.equal(send[0].phone, send[1].phone, "같은 번호로 둘 다 나가야 한다");
   assert.notEqual(send[0].token, send[1].token, "각자 제 성적표 링크여야 한다");
+});
+
+test("이미 보낸 성적표는 서버가 한 번 더 막는다 — allowResend 가 있어야 다시 나간다", () => {
+  const directory = new Map<string, DirectoryStudent>([
+    ["1", { examNumber: "1", name: "김하늘", school: "", grade: "", parentPhone: "010-1111-2222", studentPhone: "", className: "", teacher: "", status: "재원" }],
+    ["2", { examNumber: "2", name: "이바다", school: "", grade: "", parentPhone: "010-3333-4444", studentPhone: "", className: "", teacher: "", status: "재원" }],
+  ]);
+  const sentBefore: ReportMessage = {
+    id: "m1", reportId: "r1", examId: "e", recipientType: "parent", phoneMasked: "010-****-2222",
+    status: "sent", channel: "alimtalk", providerMessageId: null, error: null, sentBy: "t", createdAt: "2026-10-11T00:00:00.000Z",
+  };
+  const targets = buildSendTargets({
+    reports: [report({ id: "r1", studentKey: "1", studentName: "김하늘" }), report({ id: "r2", studentKey: "2", studentName: "이바다" })],
+    directory,
+    directoryConfigured: true,
+    messages: [sentBefore],
+  });
+  const { send } = resolveSelections(
+    [{ reportId: "r1", recipientType: "parent" }, { reportId: "r2", recipientType: "parent" }],
+    targets,
+    directory,
+  );
+  assert.equal(send.length, 2, "화면이 둘 다 골랐다");
+
+  const guarded = guardAlreadySent(send, targets, false);
+  assert.deepEqual(guarded.send.map((s) => s.reportId), ["r2"], "이미 받은 r1 은 건너뛴다");
+  assert.equal(guarded.rejected.length, 1);
+  assert.equal(guarded.rejected[0].reportId, "r1");
+  assert.match(guarded.rejected[0].reason, /이미 보낸/);
+
+  const allowed = guardAlreadySent(send, targets, true);
+  assert.deepEqual(allowed.send.map((s) => s.reportId), ["r1", "r2"], "분명히 확인했으면 다시 보낸다");
+  assert.equal(allowed.rejected.length, 0);
 });
