@@ -1,14 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import {
+  areaMaxima,
   areasOf,
   duplicateKeys,
+  fmtScore as fmt,
   hardestQuestions,
   scoreBins,
   sortRows,
+  summaryClipboardText,
   type ExamSummaryData,
   type SummarySort,
 } from "@/lib/exam-summary";
@@ -21,8 +24,33 @@ function rateClass(rate: number): string {
   return "rate-high";
 }
 
-function fmt(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+/**
+ * 클립보드에 글을 넣는다. 클립보드 API 가 막힌 브라우저(http, 권한 거부)에서는
+ * 보이지 않는 입력칸을 골라 복사하는 옛 방식으로 한 번 더 시도한다.
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // 아래 옛 방식으로
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(area);
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -36,9 +64,13 @@ function fmt(n: number): string {
 export default function ExamSummary({ data, canExport }: { data: ExamSummaryData; canExport: boolean }) {
   const [sort, setSort] = useState<SummarySort>("score");
   const [showItems, setShowItems] = useState(true);
+  /** 엑셀용 복사 결과 — 몇 초 보이고 사라진다 */
+  const [copied, setCopied] = useState("");
+  const copiedTimer = useRef<number | null>(null);
 
   const rows = useMemo(() => sortRows(data.rows, sort), [data.rows, sort]);
   const areas = useMemo(() => areasOf(data.questions), [data.questions]);
+  const maxima = useMemo(() => areaMaxima(data.questions), [data.questions]);
   const bins = useMemo(() => scoreBins(data.rows), [data.rows]);
   const hardest = useMemo(() => hardestQuestions(data.questions, 5), [data.questions]);
   const dups = useMemo(() => duplicateKeys(data.rows), [data.rows]);
@@ -46,6 +78,21 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
   const unnamed = data.rows.filter((r) => !r.name).length;
   const withoutReport = data.rows.filter((r) => !r.reportToken).length;
   const base = `/admin/omr/${data.examId}`;
+
+  // 학생명 · 총점 · 영역별 점수를 표에 보이는 순서대로 탭으로 나눠 복사한다 —
+  // 엑셀에 붙여 넣으면 칸이 그대로 나뉜다.
+  async function copyForExcel() {
+    const ok = await copyText(summaryClipboardText(rows, areas));
+    const absent = data.listening?.absent ?? 0;
+    setCopied(
+      ok
+        ? `${rows.length}명 복사됨 — 엑셀에 붙여넣으세요` +
+            (absent > 0 ? ` (듣기 미응시 ${absent}명의 듣기는 평균값)` : "")
+        : "복사하지 못했습니다. 브라우저가 클립보드를 막았을 수 있습니다.",
+    );
+    if (copiedTimer.current) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => setCopied(""), 5000);
+  }
 
   return (
     <div className="admin-shell summary-shell">
@@ -180,6 +227,19 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                   <input type="checkbox" checked={showItems} onChange={(e) => setShowItems(e.target.checked)} />
                   <span>문항별 정오 보기</span>
                 </label>
+                <button
+                  type="button"
+                  className="button small secondary"
+                  onClick={copyForExcel}
+                  title={`학생명 · 총점${areas.length ? ` · ${areas.join(" · ")}` : ""} 순으로, 표에 보이는 순서대로 탭으로 나눠 복사합니다. 엑셀에 바로 붙여넣을 수 있습니다.`}
+                >
+                  엑셀 붙여넣기용 복사
+                </button>
+                {copied ? (
+                  <span className="summary-copied" role="status">
+                    {copied}
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -188,12 +248,23 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                 <thead>
                   <tr>
                     <th className="sticky-col">학생</th>
-                    <th>점수</th>
-                    <th>석차</th>
+                    {/* 만점·인원은 머리줄에 한 번만 — 학생 줄마다 "/ 100"을 되풀이하지 않는다 */}
+                    <th>
+                      점수 <span className="th-max">({fmt(data.max)})</span>
+                    </th>
+                    <th>
+                      석차 <span className="th-max">({data.cohort.count}명 중)</span>
+                    </th>
                     <th>표준점수</th>
-                    {areas.map((area) => (
-                      <th key={area}>{area}</th>
-                    ))}
+                    {areas.map((area) => {
+                      const max = maxima.get(area);
+                      return (
+                        <th key={area}>
+                          {area}
+                          {max !== undefined ? <span className="th-max"> ({fmt(max)})</span> : null}
+                        </th>
+                      );
+                    })}
                     <th>오답·무응답</th>
                     {showItems
                       ? data.questions.map((q) => (
@@ -249,12 +320,8 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                         </td>
                         <td>
                           <strong>{fmt(r.raw)}</strong>
-                          <span className="subtle"> / {r.max}</span>
                         </td>
-                        <td>
-                          {r.rank}
-                          <span className="subtle"> / {data.cohort.count}</span>
-                        </td>
+                        <td>{r.rank}</td>
                         <td>{fmt(r.standardScore)}</td>
                         {areas.map((area) => {
                           const a = areaByName.get(area);
@@ -263,7 +330,7 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                               {a ? (
                                 <>
                                   {fmt(a.earned)}
-                                  <span className="subtle"> / {fmt(a.possible)}{a.estimated ? " 평균" : ""}</span>
+                                  {a.estimated ? <span className="subtle"> 평균</span> : null}
                                 </>
                               ) : (
                                 "—"

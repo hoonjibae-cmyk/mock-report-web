@@ -103,6 +103,11 @@ export interface ExamSummaryData {
 
 export type SummarySort = "score" | "name" | "key";
 
+/** 점수 표기 — 정수면 그대로, 아니면 소수 한 자리 */
+export function fmtScore(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
 export function markText(value: MarkValue | string | null | undefined): string {
   if (Array.isArray(value)) return value.join(",");
   if (value === null || value === undefined || value === "") return "";
@@ -172,6 +177,50 @@ export function areasOf(questions: readonly SummaryQuestion[]): string[] {
   const out: string[] = [];
   for (const q of questions) if (q.area && !out.includes(q.area)) out.push(q.area);
   return out;
+}
+
+/**
+ * 영역별 만점 — 그 영역 문항의 배점 합. 표 머리줄에 "듣기 (37)"로 한 번만 적고,
+ * 학생 줄마다 "/ 37"을 되풀이하지 않는다. 채점(omr-scoring)의 영역 possible 과
+ * 같은 값이다 — 둘 다 문항 배점을 더한 것이다.
+ */
+export function areaMaxima(questions: readonly SummaryQuestion[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const q of questions) {
+    if (!q.area) continue;
+    out.set(q.area, Math.round(((out.get(q.area) ?? 0) + q.point) * 10) / 10);
+  }
+  return out;
+}
+
+/** 한 칸에 들어갈 글 — 탭·줄바꿈이 섞이면 엑셀에서 칸이 밀린다 */
+function cell(text: string): string {
+  return text.replace(/[\t\r\n]+/g, " ").trim();
+}
+
+/**
+ * 엑셀에 바로 붙여 넣는 표 — 학생명 · 총점 · 영역별 점수를 탭으로 나눈 글.
+ *
+ * 화면에 보이는 순서 그대로다(정렬을 바꾸면 그 순서로). 이름을 못 찾은 줄은
+ * 화면과 같이 "수험번호 ○○"로, 그 영역 점수가 없는 학생은 빈 칸으로 둔다.
+ * 듣기 미응시 학생의 듣기는 성적표와 같은 평균값이 **숫자로만** 들어간다 —
+ * 글자를 붙이면 엑셀이 숫자로 보지 않아 합계·평균이 깨진다.
+ */
+export function summaryClipboardText(rows: readonly SummaryRow[], areas: readonly string[]): string {
+  const header = ["학생명", "총점", ...areas];
+  const lines = rows.map((r) => {
+    const byName = new Map(r.areas.map((a) => [a.area, a]));
+    const cells = [
+      cell(r.name || `수험번호 ${r.studentKey}`),
+      fmtScore(r.raw),
+      ...areas.map((area) => {
+        const a = byName.get(area);
+        return a ? fmtScore(a.earned) : "";
+      }),
+    ];
+    return cells.join("\t");
+  });
+  return [header.join("\t"), ...lines].join("\n");
 }
 
 const LAST = "￿";
