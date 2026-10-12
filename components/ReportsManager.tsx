@@ -384,6 +384,52 @@ export default function ReportsManager({
   }
 
 
+  /**
+   * 지금 필터에 맞는 성적표를 한꺼번에 지운다 — 시험·만든 사람·상태·검색·생성일로
+   * 추려 둔 그대로. 내가 지울 수 없는 것(남이 만든 묶음)은 빼고 세어서 알린다.
+   */
+  async function deleteVisibleReports() {
+    if (!permissions.deleteReports) return setError("성적표 삭제 권한이 없습니다.");
+    const deletable = visibleReports.filter(canDeleteRow);
+    const skipped = visibleReports.length - deletable.length;
+    if (deletable.length === 0) return setError(NOT_OWNER_MESSAGE);
+
+    const conditions = [
+      types.length ? `유형 ${types.map((t) => EXAM_TYPE_LABELS[t as ExamType] ?? t).join(", ")}` : "",
+      batchFilter.length ? `시험 ${batchFilter.join(", ")}` : "",
+      authors.length ? `만든 사람 ${authors.join(", ")}` : "",
+      statuses.length ? `상태 ${statuses.map((v) => (v === "active" ? "활성" : "중지")).join(", ")}` : "",
+      search.trim() ? `검색 ‘${search.trim()}’` : "",
+      dateFrom || dateTo ? `생성일 ${dateFrom || "…"} ~ ${dateTo || "…"}` : "",
+    ].filter(Boolean);
+    const typed = window.prompt(
+      `지금 필터에 맞는 성적표 ${deletable.length}건과 그 링크를 완전히 삭제합니다.\n` +
+        (conditions.length ? `조건: ${conditions.join(" · ")}\n` : "") +
+        (skipped > 0 ? `(남이 만든 ${skipped}건은 제외됩니다)\n` : "") +
+        "학부모에게 이미 보낸 링크도 즉시 열리지 않으며 복구할 수 없습니다.\n계속하려면 ‘삭제’를 입력하세요.",
+    );
+    if (typed !== "삭제") return;
+
+    setError("");
+    try {
+      const response = await fetch("/api/admin/reports/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: deletable.map((report) => report.id) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "삭제에 실패했습니다.");
+      const removed = new Set(deletable.map((report) => report.id));
+      setReports((current) => current.filter((report) => !removed.has(report.id)));
+      setStatus(
+        `필터에 맞는 성적표 ${data.deletedCount ?? deletable.length}건과 링크를 삭제했습니다.` +
+          ((data.deniedCount ?? 0) > 0 ? ` 남이 만든 ${data.deniedCount}건은 그대로 두었습니다.` : ""),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "삭제에 실패했습니다.");
+    }
+  }
+
   async function deleteAllReports() {
     // 남의 것까지 한꺼번에 지우므로 총괄만
     if (currentUser.role !== "admin" || !reports.length) return;
@@ -423,6 +469,16 @@ export default function ReportsManager({
             </div>
             <div className="toolbar">
               {permissions.exportReports ? <a className="button secondary" href="/api/admin/export">전체 CSV</a> : null}
+              {/* 필터로 추린 것만 지운다 — 필터가 하나라도 걸려 있을 때만 보인다(전체와 헷갈리지 않게) */}
+              {permissions.deleteReports && filtering && visibleReports.length > 0 ? (
+                <button
+                  className="button danger"
+                  onClick={deleteVisibleReports}
+                  title="지금 필터(시험·만든 사람·상태·검색·생성일)에 맞는 성적표만 삭제합니다"
+                >
+                  표시된 {visibleReports.length}건 삭제
+                </button>
+              ) : null}
               {currentUser.role === "admin" ? <button className="button danger" onClick={deleteAllReports} disabled={!reports.length}>전체삭제</button> : null}
             </div>
           </div>
