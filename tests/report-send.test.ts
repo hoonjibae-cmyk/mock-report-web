@@ -21,7 +21,7 @@ import {
   type SendReportRow,
 } from "../lib/report-send";
 import type { DirectoryStudent } from "../lib/student-directory";
-import type { ReportMessage } from "../lib/report-messages";
+import { lastSentAt, sendStateOf, type ReportMessage } from "../lib/report-messages";
 import { maskPhone, normalizePhone } from "../lib/messaging/solapi";
 
 function report(over: Partial<SendReportRow> = {}): SendReportRow {
@@ -333,4 +333,14 @@ test("이미 보낸 성적표는 서버가 한 번 더 막는다 — allowResend
   const allowed = guardAlreadySent(send, targets, true);
   assert.deepEqual(allowed.send.map((s) => s.reportId), ["r1", "r2"], "분명히 확인했으면 다시 보낸다");
   assert.equal(allowed.rejected.length, 0);
+});
+
+test("목록의 발송 상태 — 어느 쪽이든 성공하면 발송됨, 성공 없이 실패만이면 실패, 아니면 미발송", () => {
+  const sentP = { sent: true, lastAt: "2026-10-12T05:00:00.000Z", lastStatus: "sent" as const, attempts: 1, lastError: null };
+  const failedS = { sent: false, lastAt: "2026-10-12T06:00:00.000Z", lastStatus: "failed" as const, attempts: 2, lastError: "번호 오류" };
+  assert.equal(sendStateOf(sentP, failedS), "sent", "학부모에게 갔으면 학생 쪽 실패가 있어도 발송됨");
+  assert.equal(sendStateOf(null, failedS), "failed");
+  assert.equal(sendStateOf(null, null), "unsent");
+  assert.equal(lastSentAt(sentP, failedS), "2026-10-12T05:00:00.000Z", "실패 시각은 세지 않는다");
+  assert.equal(lastSentAt(null, null), null);
 });

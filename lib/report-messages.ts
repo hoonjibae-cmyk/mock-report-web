@@ -143,3 +143,26 @@ export function summarizeByReport(messages: ReportMessage[]): Map<string, SendSu
   }
   return out;
 }
+
+export type SendState = "sent" | "failed" | "unsent";
+
+/**
+ * 성적표 하나의 발송 상태 — 목록에 한 단어로 적기 위한 것.
+ *   sent   학부모나 학생 어느 쪽이든 성공한 발송이 있다
+ *   failed 성공은 없고 마지막 시도가 실패였다 — 손을 써야 한다
+ *   unsent 보낸 적이 없다
+ */
+export function sendStateOf(parent: SendSummary | null, student: SendSummary | null): SendState {
+  if (parent?.sent || student?.sent) return "sent";
+  if (parent?.lastStatus === "failed" || student?.lastStatus === "failed") return "failed";
+  return "unsent";
+}
+
+/** 두 수신자 중 더 최근의 성공 발송 시각 */
+export function lastSentAt(parent: SendSummary | null, student: SendSummary | null): string | null {
+  const times = [parent, student]
+    .filter((s): s is SendSummary => Boolean(s?.sent))
+    .map((s) => s.lastAt)
+    .filter((t): t is string => Boolean(t));
+  return times.length ? times.sort().at(-1)! : null;
+}

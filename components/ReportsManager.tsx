@@ -42,6 +42,8 @@ export default function ReportsManager({
   const [batchFilter, setBatchFilter] = useState<string[]>([]);
   const [authors, setAuthors] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
+  // 알림톡 발송 상태 — "안 보낸 학생만" 추리는 데 쓴다
+  const [sendStates, setSendStates] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -133,6 +135,8 @@ export default function ReportsManager({
     active: number;
     inactive: number;
     views: number;
+    /** 알림톡이 한 번이라도 성공한 성적표 수 */
+    sent: number;
     rows: AdminReport[];
   }
 
@@ -147,6 +151,7 @@ export default function ReportsManager({
       if (statuses.length > 0 && !statuses.includes(report.active ? "active" : "inactive")) {
         return false;
       }
+      if (sendStates.length > 0 && !sendStates.includes(report.sendState)) return false;
       const created = report.createdAt.slice(0, 10);
       if (dateFrom && created < dateFrom) return false;
       if (dateTo && created > dateTo) return false;
@@ -185,6 +190,7 @@ export default function ReportsManager({
       batchFilter.length ||
       authors.length ||
       statuses.length ||
+      sendStates.length ||
       types.length ||
       dateFrom ||
       dateTo,
@@ -206,6 +212,7 @@ export default function ReportsManager({
           active: 0,
           inactive: 0,
           views: 0,
+          sent: 0,
           rows: [],
         };
         map.set(label, group);
@@ -217,6 +224,7 @@ export default function ReportsManager({
       if (report.active) group.active += 1;
       else group.inactive += 1;
       group.views += report.viewCount;
+      if (report.sendState === "sent") group.sent += 1;
       group.rows.push(report);
     }
     // 시험은 최근에 만든 것부터. 학생 정렬은 visibleReports가 이미 해 두었다.
@@ -320,6 +328,17 @@ export default function ReportsManager({
       selected: statuses,
       onChange: setStatuses,
     },
+    {
+      key: "send",
+      label: "발송",
+      options: [
+        { value: "sent", label: "발송됨", count: typeReports.filter((r) => r.sendState === "sent").length },
+        { value: "unsent", label: "미발송", count: typeReports.filter((r) => r.sendState === "unsent").length },
+        { value: "failed", label: "실패", count: typeReports.filter((r) => r.sendState === "failed").length },
+      ],
+      selected: sendStates,
+      onChange: setSendStates,
+    },
   ];
 
   function resetFilters() {
@@ -327,6 +346,7 @@ export default function ReportsManager({
     setBatchFilter([]);
     setAuthors([]);
     setStatuses([]);
+    setSendStates([]);
     setTypes([]);
     setDateFrom("");
     setDateTo("");
@@ -516,7 +536,7 @@ export default function ReportsManager({
 
           <div className="table-scroll">
             <table className="admin-table">
-              <thead><tr><th>학생</th><th>리포트 묶음</th><th>생성자</th><th>상태</th><th>조회</th><th>링크 관리</th></tr></thead>
+              <thead><tr><th>학생</th><th>리포트 묶음</th><th>생성자</th><th>상태</th><th>조회</th><th>발송</th><th>링크 관리</th></tr></thead>
               {groups.map((group) => {
                 const open = isOpen(group.label);
                 return (
@@ -544,6 +564,9 @@ export default function ReportsManager({
                               <span className="muted">중지 {group.inactive}</span>
                             ) : null}
                             <span className="muted">조회 {group.views}회</span>
+                            <span className={group.sent < group.rows.length ? "muted need" : "muted"} title="알림톡이 한 번이라도 성공한 성적표 수">
+                              발송 {group.sent}/{group.rows.length}
+                            </span>
                             <span className="muted">{group.authors.join(", ")}</span>
                             <span className="muted">
                               {new Date(group.latestAt).toLocaleDateString("ko-KR")}
@@ -575,6 +598,22 @@ export default function ReportsManager({
                             <td><strong>{report.createdByName || "관리자"}</strong><span>{new Date(report.createdAt).toLocaleDateString("ko-KR")}</span></td>
                             <td><span className={`status-chip ${report.active ? "active" : "inactive"}`}>{report.active ? "활성" : "중지"}</span><span>{report.pinRequired ? "PIN 보호" : "PIN 없음"}</span></td>
                             <td><strong>{report.viewCount}회</strong><span>{report.lastViewedAt ? new Date(report.lastViewedAt).toLocaleString("ko-KR") : "아직 열람 전"}</span></td>
+                            <td>
+                              {/* 알림톡 발송 여부 — 학부모·학생 어느 쪽이든 성공했으면 '발송됨' */}
+                              <span
+                                className={`status-chip ${report.sendState === "sent" ? "active" : report.sendState === "failed" ? "danger" : "inactive"}`}
+                                title={report.sendError ?? undefined}
+                              >
+                                {report.sendState === "sent" ? "발송됨" : report.sendState === "failed" ? "발송 실패" : "미발송"}
+                              </span>
+                              <span>
+                                {report.sendState === "sent"
+                                  ? `${[report.sentParent ? "학부모" : "", report.sentStudent ? "학생" : ""].filter(Boolean).join("·")}${report.lastSentAt ? ` · ${new Date(report.lastSentAt).toLocaleDateString("ko-KR")}` : ""}`
+                                  : report.sendState === "failed"
+                                    ? "발송 화면에서 다시 보내기"
+                                    : "아직 안 보냄"}
+                              </span>
+                            </td>
                             <td><div className="row-actions">
                               <a className="button tiny ghost" href={report.url} target="_blank" rel="noreferrer">웹</a>
                               <a className="button tiny ghost" href={`${report.url}?layout=a4`} target="_blank" rel="noreferrer">A4</a>
