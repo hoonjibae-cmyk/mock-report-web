@@ -2570,6 +2570,8 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .omr-item-cell.absent .mark { font-size: 10px; letter-spacing: -0.02em; }
 .item-table td.absent-mark { color: #98a2b3; font-size: 12px; }
 .listening-notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #fff7e6; border: 1px solid #f3dcae; color: #6b4e00; font-size: 13px; line-height: 1.7; }
+/* 토요모의고사 — 응시 학년 범위 안내("중1부터 고1까지 응시한 시험으로…") */
+.cohort-grade-notice { margin: 8px 0 10px; padding: 9px 12px; border-radius: 10px; background: #f2f7fe; border: 1px solid #d6e4f4; color: #2f4a6b; font-size: 13px; line-height: 1.7; }
 .area-estimated { font-weight: 600; color: #8a5a00; font-size: 11.5px; }
 .summary-table td.q.absent { color: #98a2b3; background: #f1f3f6; font-weight: 600; }
 .summary-table td.estimated { background: #fff7e6; color: #8a5a00; }

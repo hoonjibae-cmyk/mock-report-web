@@ -13,6 +13,7 @@ import {
 import { EXAM_TYPE_LABELS, ACADEMY_NAME } from "@/lib/omr-types";
 import type { GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
 import { isGenericReport, recentGrowth } from "@/lib/omr-report-types";
+import { gradeRange } from "@/lib/school-grade";
 import { maskPhoneForGate, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 
@@ -243,6 +244,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const generatedAt = new Date().toISOString();
 
+    // 응시생 학년 범위 — 지금 이 시험을 본 학생들의 학교 칸("은가람중 2")에서 읽는다.
+    // 토요모의고사 성적표가 "중1부터 고1까지 응시한 시험"이라고 적는 근거다.
+    const cohortGrades = gradeRange(reviewed.map((scan) => nameByScan.get(scan.id)?.school ?? ""));
+
     // 학생마다 성적표 내용을 만든다 — 새로 만들든 제자리에서 갱신하든 내용은 같다
     const prepared = reviewed.map((scan) => {
       const input = nameByScan.get(scan.id)!;
@@ -300,6 +305,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           result.listeningAbsent && listening
             ? { mean: listening.mean, possible: listening.possible, count: listening.questions.length }
             : null,
+        cohortGrades,
         national: reference ? nationalComparison(reference, result.raw) : null,
         classificationStats: reference
           ? classificationStats(attachClassification(result.items, reference))
