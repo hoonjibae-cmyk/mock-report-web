@@ -2,6 +2,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { formatChoices, toChoices } from "@/lib/omr-answers";
 import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
+import { gradeRangeSentence } from "@/lib/school-grade";
 import { shortDate, trendSentence } from "@/lib/score-history";
 
 /** 열람 시점에 주입되는 담임 의견(성적표 생성 후에도 수정 가능) */
@@ -29,6 +30,17 @@ function ratingClass(rating: string): string {
   if (rating === "우수") return "good";
   if (rating === "보통") return "fair";
   return "work";
+}
+
+/**
+ * 토요모의고사 — 응시 학년 범위 안내. 여러 학년이 한 시험을 보므로 평균이 낮아
+ * 보이는 까닭을 밝힌다. 범위는 성적표를 만들 때 응시생 기준으로 적어 둔 값이고,
+ * 학년이 한 가지뿐이면 문장이 비어 아무것도 그리지 않는다. 다른 시험에는 적지 않는다.
+ */
+function GradeRangeNotice({ report }: { report: GenericReportData }) {
+  if (report.examType !== "saturday") return null;
+  const sentence = gradeRangeSentence(report.cohortGrades);
+  return sentence ? <p className="cohort-grade-notice">{sentence}</p> : null;
 }
 
 /**
@@ -314,6 +326,7 @@ export default function GenericReport({
                 {cohort.count}명 응시 · 평균 {cohort.mean}점 · 표준편차 {cohort.stdev}
               </span>
             </div>
+            <GradeRangeNotice report={report} />
             <DistributionBar report={report} />
             <p className="subtle" style={{ marginTop: 10 }}>
               맞은 문항 {score.correctCount} · 틀린 문항 {score.wrongCount}

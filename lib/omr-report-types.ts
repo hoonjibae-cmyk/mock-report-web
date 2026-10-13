@@ -190,6 +190,13 @@ export interface GenericReportData {
    * 적용했다. mean 이 적용된 점수, possible 이 듣기 배점 합, count 가 듣기 문항 수.
    */
   listeningAbsent?: { mean: number; possible: number; count: number } | null;
+  /**
+   * 응시생 학년 범위 — 성적표를 만드는 시점의 응시생 학교 칸("은가람중 2")에서
+   * 읽은 가장 낮은 학년과 가장 높은 학년("중1"·"고1"). 토요모의고사 성적표에
+   * "중1부터 고1까지 응시한 시험으로 다소 평균이 낮을 수 있습니다"를 적는 데 쓴다.
+   * 학년을 하나도 못 읽었으면 null(v1.47.0 이전 성적표에는 없다).
+   */
+  cohortGrades?: { min: string; max: string; count: number } | null;
   /** 국영수 모의고사에서 시험 기반 정보를 올린 경우의 전국 비교 */
   national?: NationalComparison | null;
   /** 분류 기준별 성취(행동영역·대영역·난이도·학년수준) */
