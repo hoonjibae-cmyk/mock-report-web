@@ -108,6 +108,13 @@ export function fmtScore(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
+/** 정답률(%)에 따른 칸 색 — 낮을수록 붉게. 결과 요약과 '내 반'이 같은 색을 쓴다 */
+export function rateClass(rate: number): string {
+  if (rate < 40) return "rate-low";
+  if (rate < 70) return "rate-mid";
+  return "rate-high";
+}
+
 export function markText(value: MarkValue | string | null | undefined): string {
   if (Array.isArray(value)) return value.join(",");
   if (value === null || value === undefined || value === "") return "";
@@ -206,7 +213,15 @@ function cell(text: string): string {
  * 듣기 미응시 학생의 듣기는 성적표와 같은 평균값이 **숫자로만** 들어간다 —
  * 글자를 붙이면 엑셀이 숫자로 보지 않아 합계·평균이 깨진다.
  */
-export function summaryClipboardText(rows: readonly SummaryRow[], areas: readonly string[]): string {
+/** 복사에 필요한 만큼의 학생 줄 — 결과 요약의 줄도, '내 반'의 줄도 맞는다 */
+export interface ClipboardRowLike {
+  name: string;
+  studentKey: string | null;
+  raw: number;
+  areas: ReadonlyArray<{ area: string; earned: number }>;
+}
+
+export function summaryClipboardText(rows: readonly ClipboardRowLike[], areas: readonly string[]): string {
   const header = ["학생명", "총점", ...areas];
   const lines = rows.map((r) => {
     const byName = new Map(r.areas.map((a) => [a.area, a]));

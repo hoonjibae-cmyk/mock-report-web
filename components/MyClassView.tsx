@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
+import ClassExamDetail from "@/components/ClassExamDetail";
 import TeacherPicker from "@/components/TeacherPicker";
 import { sameTeacher, type ExamGroup } from "@/lib/homeroom";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
@@ -141,41 +142,9 @@ export default function MyClassView({ user, teacherName, teachers, groups, setup
                 </div>
               ) : null}
 
-              <div className="table-scroll">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>석차(전체)</th>
-                      <th>학생</th>
-                      <th>학교 · 학년</th>
-                      <th>점수</th>
-                      <th>표준점수</th>
-                      <th>학부모 열람</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.students.map((s) => (
-                      <tr key={s.reportId}>
-                        <td>
-                          {s.rank} / {s.cohortCount}
-                        </td>
-                        <td>
-                          <Link href={`/r/${s.token}`} target="_blank" rel="noreferrer">
-                            <strong>{s.studentName}</strong>
-                          </Link>
-                          {s.className ? <span className="subtle"> · {s.className}</span> : null}
-                        </td>
-                        <td>{s.school || "-"}</td>
-                        <td>
-                          <strong>{s.raw}</strong> / {s.max}
-                        </td>
-                        <td>{s.standardScore}</td>
-                        <td>{s.viewCount > 0 ? `${s.viewCount}회` : "아직"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {/* 결과 요약과 같은 표 — 우리 반 학생만으로, 문항별 정오와 정답률까지 */}
+              <ClassExamDetail group={group} />
+
             </div>
           </details>
         ))}
