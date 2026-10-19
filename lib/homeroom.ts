@@ -11,7 +11,9 @@
 // 동명이인이 있으면 두 사람 다 서로의 반이 보인다. 이 학원 규모에서는 드물지만
 // 생기면 인사 프로그램에서 이름을 구분해 적어야 한다(예: '김민수B').
 
-import type { AreaStat } from "@/lib/omr-report-types";
+import type { SummaryQuestion } from "@/lib/exam-summary";
+import type { MarkValue } from "@/lib/omr-answers";
+import type { AreaStat, GenericItemResult } from "@/lib/omr-report-types";
 import type { ExamType } from "@/lib/omr-types";
 
 /** 이름 열쇠 — 공백을 빼고 소문자로. DB 생성 컬럼 homeroom_key 와 같은 규칙 */
@@ -84,6 +86,21 @@ export function sameTeacher(a: string | null | undefined, b: string | null | und
   return ka !== "" && ka === homeroomKey(b);
 }
 
+/**
+ * 문항별 정오 한 칸 — 결과 요약의 ○·고른 번호·· 를 '내 반'에서도 그린다.
+ * 정답·영역·배점은 학생마다 같으므로 여기 두지 않고 시험(ExamGroup.questions)에 둔다.
+ */
+export interface HomeroomItem {
+  no: number;
+  /** 학생이 고른 것 — "3", "2,4"(모두 고르기), 무응답은 "". 서술형은 "" */
+  marked: string;
+  correct: boolean;
+  /** 받은 점수 — 서술형 칸에 적는다 */
+  earned: number;
+  /** 듣기 미응시 — 채점하지 않은 문항 */
+  absent: boolean;
+}
+
 /** '내 반' 화면에 필요한 만큼만 추린 성적표 한 건 */
 export interface HomeroomReport {
   reportId: string;
@@ -105,10 +122,80 @@ export interface HomeroomReport {
   cohortCount: number;
   cohortMean: number;
   areas: AreaStat[];
+  wrongCount: number;
+  blankCount: number;
+  /** 듣기 미응시 — 듣기 점수는 본 학생들의 평균을 받았다 */
+  listeningAbsent: boolean;
+  /** 문항별 정오 — 번호순 */
+  items: HomeroomItem[];
+  /**
+   * 시험의 문항 정보(정답·영역·배점·전체 정답률). 성적표마다 같은 값이라
+   * groupByExam 이 시험(ExamGroup)으로 올리고 학생에서는 뺀다 — 화면으로
+   * 내려보내는 양을 줄이기 위해서다.
+   */
+  questions?: SummaryQuestion[];
   active: boolean;
   /** 학부모가 열어 본 횟수 — 직원 열람은 세지 않는다 */
   viewCount: number;
   createdAt: string;
+}
+
+function markLabel(value: MarkValue | null | undefined): string {
+  if (Array.isArray(value)) return value.join(",");
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+/** 성적표 본문의 문항 결과를 '내 반' 칸으로 — 번호순 */
+export function compactItems(items: readonly GenericItemResult[]): HomeroomItem[] {
+  return [...items]
+    .sort((a, b) => a.no - b.no)
+    .map((it) => ({
+      no: it.no,
+      marked: it.essay ? "" : markLabel(it.marked),
+      correct: it.correct,
+      earned: it.earned,
+      absent: it.absent === true,
+    }));
+}
+
+/** 성적표 본문에서 시험의 문항 정보 — 정답·영역·배점·응시 집단 정답률(서술형은 평균 득점률) */
+export function questionsOf(items: readonly GenericItemResult[]): SummaryQuestion[] {
+  return [...items]
+    .sort((a, b) => a.no - b.no)
+    .map((it) => ({
+      no: it.no,
+      essay: it.essay,
+      answer: it.essay ? "서술" : markLabel(it.answer),
+      area: it.area ?? "",
+      point: it.point,
+      rate: Math.round(it.correctRate ?? 0),
+    }));
+}
+
+/**
+ * 우리 반의 문항별 정답률(%) — 반 학생 중 맞힌 비율. 듣기 미응시(채점 안 함)
+ * 학생은 그 문항의 분모에서 뺀다. 서술형은 평균 득점률. 결과 요약의 '전체
+ * 정답률' 옆에 놓아 "전체는 쉬웠는데 우리 반은 틀렸다"가 보이게 한다.
+ */
+export function classItemRates(
+  students: readonly HomeroomReport[],
+  questions: readonly SummaryQuestion[],
+): Record<number, number> {
+  const out: Record<number, number> = {};
+  for (const q of questions) {
+    let sum = 0;
+    let n = 0;
+    for (const s of students) {
+      const it = s.items.find((i) => i.no === q.no);
+      if (!it || it.absent) continue;
+      n += 1;
+      if (q.essay) sum += q.point > 0 ? Math.min(1, Math.max(0, it.earned / q.point)) : 0;
+      else sum += it.correct ? 1 : 0;
+    }
+    out[q.no] = n > 0 ? Math.round((sum / n) * 100) : 0;
+  }
+  return out;
 }
 
 export interface ClassAreaSummary {
@@ -139,6 +226,10 @@ export interface ExamGroup {
   summary: ClassSummary;
   /** 석차 순. 같은 석차면 이름 가나다순 */
   students: HomeroomReport[];
+  /** 시험의 문항 정보 — 정답·영역·배점·전체 정답률(성적표에서 가져온다) */
+  questions: SummaryQuestion[];
+  /** 우리 반의 문항별 정답률(%) */
+  classRates: Record<number, number>;
 }
 
 function round1(value: number): number {
@@ -224,10 +315,22 @@ export function groupByExam(rows: readonly HomeroomReport[], canSeePlacement = f
 
   const groups: ExamGroup[] = [];
   for (const list of byExam.values()) {
-    const students = latestPerStudent(list).sort(
+    const sorted = latestPerStudent(list).sort(
       (a, b) => a.rank - b.rank || a.studentName.localeCompare(b.studentName, "ko"),
     );
-    const head = students[0];
+    const head = sorted[0];
+    // 문항 정보는 시험으로 올리고 학생에서는 뺀다 — 성적표마다 같은 값이다.
+    // 가장 문항이 많은 성적표에서 가져온다(옛 성적표에 문항이 비어 있을 수 있다).
+    const questions =
+      sorted.reduce<SummaryQuestion[] | undefined>(
+        (best, s) => ((s.questions?.length ?? 0) > (best?.length ?? 0) ? s.questions : best),
+        undefined,
+      ) ?? [];
+    const students = sorted.map((s) => {
+      const { questions: _omit, ...rest } = s;
+      void _omit;
+      return rest;
+    });
     groups.push({
       examId: head.examId,
       examType: head.examType,
@@ -235,6 +338,8 @@ export function groupByExam(rows: readonly HomeroomReport[], canSeePlacement = f
       examDate: head.examDate,
       summary: summarizeClass(students),
       students,
+      questions,
+      classRates: classItemRates(students, questions),
     });
   }
 

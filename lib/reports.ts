@@ -10,7 +10,7 @@ import {
   type SendSummary,
 } from "@/lib/report-messages";
 import { EMPTY_RANGE, rangeBounds, type DateRange } from "@/lib/date-range";
-import { homeroomKey, mergeTeacherNames, type HomeroomReport } from "@/lib/homeroom";
+import { compactItems, homeroomKey, mergeTeacherNames, questionsOf, type HomeroomReport } from "@/lib/homeroom";
 import { parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
@@ -269,6 +269,13 @@ export async function listHomeroomReports(teacherName: string, limit = 600): Pro
       cohortCount: body.cohort.count,
       cohortMean: body.cohort.mean,
       areas: body.areas ?? [],
+      wrongCount: body.score.wrongCount ?? 0,
+      blankCount: body.score.blankCount ?? 0,
+      listeningAbsent: Boolean(body.listeningAbsent),
+      // 문항별 정오 — 결과 요약의 표를 '내 반'에서도 그린다. 정답·영역·배점은
+      // 시험(questions)으로 한 번만 올라가고 학생 줄에서는 빠진다(groupByExam).
+      items: compactItems(body.items ?? []),
+      questions: questionsOf(body.items ?? []),
       active: Boolean(row.is_active),
       viewCount: row.view_count ?? 0,
       createdAt: row.created_at,

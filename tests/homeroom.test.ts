@@ -10,15 +10,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  classItemRates,
+  compactItems,
   groupByExam,
   homeroomKey,
   latestPerStudent,
   mergeTeacherNames,
+  questionsOf,
   sameTeacher,
   summarizeClass,
   teacherCanSeeExamType,
   type HomeroomReport,
 } from "../lib/homeroom";
+import type { GenericItemResult } from "../lib/omr-report-types";
 import type { ExamType } from "../lib/omr-types";
 
 function report(over: Partial<HomeroomReport> = {}): HomeroomReport {
@@ -43,9 +47,21 @@ function report(over: Partial<HomeroomReport> = {}): HomeroomReport {
       { area: "독해", earned: 50, possible: 62.2, rate: 80, cohortRate: 74, cohortEarned: 46 },
       { area: "듣기", earned: 30, possible: 37.8, rate: 79, cohortRate: 81, cohortEarned: 30.6 },
     ],
+    wrongCount: 2,
+    blankCount: 0,
+    listeningAbsent: false,
+    items: [],
     active: true,
     viewCount: 0,
     createdAt: "2026-09-12T10:00:00.000Z",
+    ...over,
+  };
+}
+
+function genericItem(no: number, over: Partial<GenericItemResult> = {}): GenericItemResult {
+  return {
+    no, essay: false, answer: 2, marked: 2, correct: true, earned: 2, point: 2,
+    correctRate: 70.4, difficulty: "보통", difficultySpecified: false, area: "독해", content: null,
     ...over,
   };
 }
@@ -154,6 +170,63 @@ test("빈 반은 0으로 채운 요약을 돌려준다 — 화면이 죽지 않�
   const s = summarizeClass([]);
   assert.equal(s.count, 0);
   assert.deepEqual(s.areas, []);
+});
+
+test("문항별 정오 — 성적표 본문을 '내 반' 칸으로: 고른 번호·모두 고르기·무응답·서술형·미응시", () => {
+  const items = compactItems([
+    genericItem(3, { answer: [2, 4], marked: [2, 4], correct: true }),
+    genericItem(1, { marked: 3, correct: false, earned: 0 }),
+    genericItem(2, { marked: null, correct: false, earned: 0 }),
+    genericItem(4, { essay: true, answer: null, marked: null, correct: false, earned: 1.5, point: 3, area: null }),
+    genericItem(5, { absent: true, marked: null, correct: false, earned: 0, area: "듣기" }),
+  ]);
+  assert.deepEqual(items.map((i) => i.no), [1, 2, 3, 4, 5], "번호순");
+  assert.deepEqual(items.map((i) => i.marked), ["3", "", "2,4", "", ""]);
+  assert.deepEqual(items.map((i) => i.correct), [false, false, true, false, false]);
+  assert.equal(items[3].earned, 1.5, "서술형은 받은 점수");
+  assert.equal(items[4].absent, true);
+});
+
+test("시험의 문항 정보 — 정답·영역·배점·전체 정답률, 서술형은 '서술'", () => {
+  const qs = questionsOf([
+    genericItem(2, { answer: [1, 3], area: "듣기", correctRate: 83.3 }),
+    genericItem(1, { answer: 4, correctRate: 49.5 }),
+    genericItem(3, { essay: true, answer: null, point: 3, area: null, correctRate: 55 }),
+  ]);
+  assert.deepEqual(qs.map((q) => [q.no, q.answer, q.area, q.point, q.rate]), [
+    [1, "4", "독해", 2, 50],
+    [2, "1,3", "듣기", 2, 83],
+    [3, "서술", "", 3, 55],
+  ]);
+  assert.equal(qs[2].essay, true);
+});
+
+test("우리 반 정답률 — 맞힌 비율, 미응시는 분모에서 빼고, 서술형은 평균 득점률", () => {
+  const qs = questionsOf([
+    genericItem(1), genericItem(2, { area: "듣기" }), genericItem(3, { essay: true, answer: null, point: 4 }),
+  ]);
+  const students = [
+    report({ studentKey: "1", items: [{ no: 1, marked: "2", correct: true, earned: 2, absent: false }, { no: 2, marked: "2", correct: true, earned: 2, absent: false }, { no: 3, marked: "", correct: false, earned: 4, absent: false }] }),
+    report({ studentKey: "2", items: [{ no: 1, marked: "3", correct: false, earned: 0, absent: false }, { no: 2, marked: "", correct: false, earned: 0, absent: true }, { no: 3, marked: "", correct: false, earned: 2, absent: false }] }),
+    report({ studentKey: "3", items: [{ no: 1, marked: "2", correct: true, earned: 2, absent: false }, { no: 2, marked: "1", correct: false, earned: 0, absent: false }, { no: 3, marked: "", correct: false, earned: 0, absent: false }] }),
+  ];
+  const rates = classItemRates(students, qs);
+  assert.equal(rates[1], 67, "3명 중 2명");
+  assert.equal(rates[2], 50, "듣기 미응시 학생은 빼고 2명 중 1명");
+  assert.equal(rates[3], 50, "서술형: (4+2+0)/(3×4)");
+  assert.deepEqual(classItemRates([], qs), { 1: 0, 2: 0, 3: 0 }, "학생이 없으면 0");
+});
+
+test("시험별로 묶을 때 문항 정보는 시험으로 올리고 학생에서는 뺀다", () => {
+  const qs = questionsOf([genericItem(1), genericItem(2)]);
+  const groups = groupByExam([
+    report({ studentKey: "1", questions: qs, items: [{ no: 1, marked: "2", correct: true, earned: 2, absent: false }, { no: 2, marked: "1", correct: false, earned: 0, absent: false }] }),
+    report({ studentKey: "2", questions: [], items: [] }), // 문항이 비어 온 옛 성적표
+  ]);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].questions.map((q) => q.no), [1, 2], "문항이 있는 성적표에서 가져온다");
+  assert.deepEqual(groups[0].classRates, { 1: 100, 2: 0 });
+  for (const s of groups[0].students) assert.equal("questions" in s, false, "학생 줄에는 문항 정보가 없다");
 });
 
 test("시험은 최근 것이 위, 학생은 석차 순", () => {

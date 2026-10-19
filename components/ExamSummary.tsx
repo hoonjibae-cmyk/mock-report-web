@@ -9,49 +9,16 @@ import {
   duplicateKeys,
   fmtScore as fmt,
   hardestQuestions,
+  rateClass,
   scoreBins,
   sortRows,
   summaryClipboardText,
   type ExamSummaryData,
   type SummarySort,
 } from "@/lib/exam-summary";
+import { copyText } from "@/lib/clipboard";
 import { formatWhen } from "@/lib/review";
 
-/** 정답률에 따라 셀 바탕을 달리한다 — 낮을수록 붉게 */
-function rateClass(rate: number): string {
-  if (rate < 40) return "rate-low";
-  if (rate < 70) return "rate-mid";
-  return "rate-high";
-}
-
-/**
- * 클립보드에 글을 넣는다. 클립보드 API 가 막힌 브라우저(http, 권한 거부)에서는
- * 보이지 않는 입력칸을 골라 복사하는 옛 방식으로 한 번 더 시도한다.
- */
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // 아래 옛 방식으로
-  }
-  try {
-    const area = document.createElement("textarea");
-    area.value = text;
-    area.setAttribute("readonly", "");
-    area.style.position = "fixed";
-    area.style.opacity = "0";
-    document.body.appendChild(area);
-    area.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(area);
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * 시험 결과 요약 화면.
