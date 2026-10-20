@@ -1,5 +1,6 @@
 "use client";
-import {PREFERRED_SCHEDULES,placementGrade} from '@/lib/placement-policy';
+import { PREFERRED_SCHEDULES, placementGrade } from "@/lib/placement-policy";
+import { rereadMessage, scheduleRead, scheduleReadLabel, suggestedSchedule } from "@/lib/schedule-read";
 
 import {
   isListeningAbsentCandidate,
@@ -47,6 +48,9 @@ interface Draft {
 
 const EMPTY_DRAFT: Draft = { grade:"",preferredSchedule:"",name: "", school: "", phone: "", teacher: "", className: "" };
 
+/** 반배치고사 학년 보기 — lib/placement-policy의 placementGrade가 받아들이는 값과 같다 */
+const PLACEMENT_GRADES = ["초6", "중1", "중2", "중3", "고1", "고2", "고3"];
+
 export default function OmrReportBuilder({
   exam,
   initialScans,
@@ -56,11 +60,13 @@ export default function OmrReportBuilder({
   rosters = [],
   rosterError = null,
 }: Props) {
+  // 답안지 목록 — '답안지에서 선호 요일 다시 읽기'가 판독 결과를 바꾸므로 상태로 든다
+  const [scans, setScans] = useState<OmrScan[]>(initialScans);
   const reviewed = useMemo(
-    () => initialScans.filter((scan) => scan.status === "reviewed" && scan.studentId),
-    [initialScans],
+    () => scans.filter((scan) => scan.status === "reviewed" && scan.studentId),
+    [scans],
   );
-  const pendingCount = initialScans.length - reviewed.length;
+  const pendingCount = scans.length - reviewed.length;
   // 답안지마다 선생님이 정한 듣기 처리 방식 — 아직 안 정했으면 null(자동 판단)
   const [listeningModes, setListeningModes] = useState<Record<string, ListeningMode | null>>(() =>
     Object.fromEntries(initialScans.map((scan) => [scan.id, scan.listeningMode ?? null])),
@@ -90,6 +96,7 @@ export default function OmrReportBuilder({
 
   const isPlacement=exam?.examType==='placement';
   const [placementReports,setPlacementReports]=useState<Array<{reportId:string;name:string;preferredSchedule:string;notification:string;classes:Array<{id:string;name:string;url:string}>}>>([]);
+  const [rereading, setRereading] = useState(false);
   const isMock = exam?.examType === "mock";
   const mockSubject = mockSubjectOf(exam?.subject);
   const referenceReady = !isMock || Boolean(reference);
@@ -135,7 +142,7 @@ export default function OmrReportBuilder({
           next[scan.id] = {
             // 이미 손으로 고쳐 둔 값이 있으면 덮어쓰지 않는다
             grade:current.grade||placementGrade(info.grade,info.schoolLevel??""),
-            preferredSchedule:current.preferredSchedule||scan.preferredSchedule||"",
+            preferredSchedule: current.preferredSchedule || suggestedSchedule(scan),
             name: current.name.trim() || info.name,
             school: current.school.trim() || [info.school, info.grade].filter(Boolean).join(" "),
             phone: current.phone.trim() || info.parentPhone,
@@ -217,7 +224,8 @@ export default function OmrReportBuilder({
             const suggestion = scan.studentId ? suggestions[scan.studentId] : undefined;
             next[scan.id] = {
               ...EMPTY_DRAFT,
-              preferredSchedule:scan.preferredSchedule??"",
+              // 답안지에서 읽은 선호 요일 — 확정하지 못했으면 가장 진한 칸을 넣고 칸 아래에 안내한다
+              preferredSchedule: suggestedSchedule(scan),
               name: suggestion?.name ?? "",
               school: suggestion?.school ?? "",
             };
@@ -230,7 +238,7 @@ export default function OmrReportBuilder({
   }, [exam?.id]);
 
   function draftFor(scan: OmrScan): Draft {
-    return drafts[scan.id] ?? {...EMPTY_DRAFT,preferredSchedule:scan.preferredSchedule??""};
+    return drafts[scan.id] ?? { ...EMPTY_DRAFT, preferredSchedule: suggestedSchedule(scan) };
   }
 
   function setDraft(scanId: string, patch: Partial<Draft>) {
@@ -282,6 +290,46 @@ export default function OmrReportBuilder({
       setError(err instanceof Error ? err.message : "듣기 처리 방식을 저장하지 못했습니다.");
     } finally {
       setListeningBusy(null);
+    }
+  }
+
+  /**
+   * 보관된 스캔 원본으로 선호 요일 칸만 다시 읽는다(반배치고사).
+   *
+   * 선호 요일 칸이 생기기 전에 올린 답안지, 판독 서버가 갱신되기 전에 올린 답안지는
+   * 값이 비어 있다. 다시 올리면 검수를 처음부터 해야 하지만, 이 길은 수험번호·답안·
+   * 검수 상태를 그대로 두고 선호 요일만 채운다.
+   */
+  async function rereadSchedules() {
+    if (!exam) return;
+    setRereading(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/scans/preferred-schedule`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "선호 요일을 다시 읽지 못했습니다.");
+      const next: OmrScan[] = Array.isArray(data.scans) ? data.scans : [];
+      const before = new Map(scans.map((scan) => [scan.id, suggestedSchedule(scan)]));
+      setScans(next);
+      // 손으로 고른 값은 두고, 비어 있거나 이전 판독값 그대로인 칸만 새 판독값으로 바꾼다
+      setDrafts((prev) => {
+        const out = { ...prev };
+        for (const scan of next) {
+          const draft = out[scan.id];
+          if (!draft) continue;
+          const old = before.get(scan.id) ?? "";
+          if (draft.preferredSchedule === "" || draft.preferredSchedule === old) {
+            out[scan.id] = { ...draft, preferredSchedule: suggestedSchedule(scan) };
+          }
+        }
+        return out;
+      });
+      setMessage(rereadMessage(data.summary ?? {}, data.unavailable ?? [], data.problems ?? []));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "선호 요일을 다시 읽는 중 오류가 발생했습니다.");
+    } finally {
+      setRereading(false);
     }
   }
 
@@ -564,6 +612,13 @@ export default function OmrReportBuilder({
               연락처를 가져와 채웁니다(직접 고쳐 둔 칸은 그대로 둡니다).
               {directoryConfigured === false ? " — 아직 연동이 설정되지 않았습니다." : ""}
             </p>
+            {isPlacement ? (
+              <p className="subtle">
+                선호 요일은 답안지 표기를 읽어 채웁니다. 표기가 흐리거나 겹치면 가장 진한 칸을 넣고 칸 아래에
+                안내를 달아 두니 확인해 주세요. 선호 요일 칸이 생기기 전에 올린 답안지는{" "}
+                <strong>답안지에서 선호 요일 다시 읽기</strong>로 채울 수 있습니다(수험번호·답안·검수 상태는 그대로).
+              </p>
+            ) : null}
             {canExport && existingReports > 0 ? (
               <p className="subtle">
                 <strong>성적 엑셀 받기</strong>를 누르면 응시생 전원의{" "}
@@ -586,6 +641,17 @@ export default function OmrReportBuilder({
                 >
                   {directoryLoading ? "불러오는 중…" : "학생 정보 불러오기"}
                 </button>
+                {isPlacement ? (
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={rereadSchedules}
+                    disabled={rereading || scans.length === 0}
+                    title="보관된 스캔 원본으로 선호 요일 칸만 다시 읽습니다. 수험번호·답안·검수 상태는 바뀌지 않습니다."
+                  >
+                    {rereading ? "다시 읽는 중…" : "답안지에서 선호 요일 다시 읽기"}
+                  </button>
+                ) : null}
                 <button
                   className="button primary"
                   onClick={()=>generate()}
@@ -752,13 +818,16 @@ export default function OmrReportBuilder({
                     <th>이름 *</th>
                     <th>학교 · 학년</th>
                     <th>학부모 연락처(선택 · PIN용)</th>
-                    {isPlacement&&<th>학년 · 선호 요일 · 반배정 요청</th>}
+                    {isPlacement ? <th>학년 · 선호 요일</th> : null}
+                    {isPlacement ? <th>반배정</th> : null}
                     <th>담임 · 반</th>
                   </tr>
                 </thead>
                 <tbody>
                   {reviewed.map((scan) => {
                     const draft = draftFor(scan);
+                    // 반배치고사 — 답안지의 선호 요일 칸을 판독기가 어떻게 읽었는지
+                    const read = isPlacement ? scheduleRead(scan) : null;
                     return (
                       <tr key={scan.id}>
                         <td>
@@ -796,7 +865,56 @@ export default function OmrReportBuilder({
                             onChange={(e) => setDraft(scan.id, { phone: e.target.value })}
                           />
                         </td>
-                        {isPlacement&&<td><select aria-label={`${draft.name||scan.studentId} 학년`} value={draft.grade} onChange={e=>setDraft(scan.id,{grade:e.target.value})}><option value="">학년 선택</option>{['초6','중1','중2','중3','고1','고2','고3'].map(g=><option key={g}>{g}</option>)}</select><select aria-label={`${draft.name||scan.studentId} 선호 요일`} value={draft.preferredSchedule} onChange={e=>setDraft(scan.id,{preferredSchedule:e.target.value})}><option value="">마킹 확인</option>{PREFERRED_SCHEDULES.map(d=><option key={d}>{d}</option>)}</select><button className="button secondary" disabled={!canCreate||loading} onClick={()=>generate(scan.id)}>반배정 요청</button></td>}
+                        {isPlacement && read ? (
+                          <>
+                            <td className="placement-cell">
+                              <div className="placement-fields">
+                                <label>
+                                  <span>학년</span>
+                                  <select
+                                    aria-label={`${draft.name || scan.studentId} 학년`}
+                                    className={draft.grade ? undefined : "missing"}
+                                    value={draft.grade}
+                                    disabled={!canCreate}
+                                    onChange={(e) => setDraft(scan.id, { grade: e.target.value })}
+                                  >
+                                    <option value="">선택</option>
+                                    {PLACEMENT_GRADES.map((g) => (
+                                      <option key={g}>{g}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label>
+                                  <span>선호 요일</span>
+                                  <select
+                                    aria-label={`${draft.name || scan.studentId} 선호 요일`}
+                                    className={draft.preferredSchedule ? undefined : "missing"}
+                                    value={draft.preferredSchedule}
+                                    disabled={!canCreate}
+                                    onChange={(e) => setDraft(scan.id, { preferredSchedule: e.target.value })}
+                                  >
+                                    <option value="">선택</option>
+                                    {PREFERRED_SCHEDULES.map((d) => (
+                                      <option key={d}>{d}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <p className={`schedule-read ${read.kind}`}>{scheduleReadLabel(read)}</p>
+                            </td>
+                            <td>
+                              <button
+                                className="button small secondary"
+                                type="button"
+                                disabled={!canCreate || loading}
+                                title="이 학생의 반배정만 요청합니다(다른 학생은 그대로)"
+                                onClick={() => generate(scan.id)}
+                              >
+                                이 학생만 요청
+                              </button>
+                            </td>
+                          </>
+                        ) : null}
                         <td>
                           {/* 담임 선생님이 '내 반'에서 이 학생을 찾는 열쇠다. 인사 프로그램의 이름과 같아야 한다. */}
                           <div style={{ display: "flex", gap: 6 }}>

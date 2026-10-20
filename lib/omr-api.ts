@@ -127,12 +127,13 @@ export interface ReadScansResult {
 export async function readScans(
   spec: OmrSheetSpec,
   files: File[],
-  options: { essayCrops?: boolean } = {},
+  options: { essayCrops?: boolean; preview?: boolean } = {},
 ): Promise<ReadScansResult> {
   const form = new FormData();
   form.append("spec", JSON.stringify(spec));
-  // 검수 화면에서 나란히 볼 미리보기를 함께 받는다(원본을 다시 받지 않아도 되게)
-  form.append("include_preview", "true");
+  // 검수 화면에서 나란히 볼 미리보기를 함께 받는다(원본을 다시 받지 않아도 되게).
+  // 선호 요일만 다시 읽을 때처럼 쓸 데가 없으면 끈다 — 장당 100KB가 헛돈다.
+  if (options.preview !== false) form.append("include_preview", "true");
   // 주관식이 있는 시험에서만 답안 칸 이미지를 받는다 — 없으면 헛수고다
   if (options.essayCrops) form.append("include_essay_crops", "true");
   for (const file of files) form.append("files", file, file.name);

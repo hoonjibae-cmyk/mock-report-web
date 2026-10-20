@@ -209,6 +209,8 @@ export async function getScan(id: string): Promise<OmrScan | null> {
 
 export interface UpdateScanInput {
   preferredSchedule?:string|null;
+  /** 판독 플래그 전체를 갈아 끼운다 — 선호 요일만 다시 읽을 때 쓴다 */
+  reviewFlags?: Array<Record<string, unknown>>;
   studentId?: string | null;
   answers?: Record<string, MarkValue>;
   essayScores?: Record<string, number>;
@@ -225,6 +227,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   const patch: Record<string, unknown> = {};
   if (input.studentId !== undefined) patch.student_id = input.studentId;
   if (input.preferredSchedule !== undefined) patch.preferred_schedule = input.preferredSchedule;
+  if (input.reviewFlags !== undefined) patch.review_flags = input.reviewFlags;
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
   if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;
