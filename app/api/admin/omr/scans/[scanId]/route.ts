@@ -1,3 +1,4 @@
+import {preferredSchedule} from '@/lib/placement-policy';
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
@@ -21,6 +22,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ scanI
     const body = await request.json().catch(() => ({}));
     const patch: Parameters<typeof updateScan>[1] = {};
 
+    if(body.preferredSchedule!==undefined){
+      const value=preferredSchedule(body.preferredSchedule);
+      if(exam.examType!=='placement'||!value)return NextResponse.json({error:'선호 요일을 확인해 주세요.'},{status:400});
+      patch.preferredSchedule=value;
+    }
     if (body.studentId !== undefined) {
       const value = String(body.studentId ?? "").trim();
       if (value && !/^\d{1,9}$/.test(value)) {

@@ -1,3 +1,5 @@
+import {requestPlacement,placementStatuses} from '@/lib/placement-service';
+import {preferredSchedule,placementGrade} from '@/lib/placement-policy';
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -28,6 +30,8 @@ interface StudentInput {
   /** 학생 관리 프로그램의 담임 — 담임 선생님의 '내 반' 화면이 이 값으로 찾는다 */
   teacher?: string;
   className?: string;
+  grade?:string;
+  preferredSchedule?:string;
 }
 
 /** 학생 식별 제안 + 이 시험의 기존 성적표 현황 */
@@ -82,7 +86,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       ),
     ];
 
-    return NextResponse.json({ ok: true, suggestions, existingReports: count ?? 0, existingKeys });
+    return NextResponse.json({ ok: true, suggestions, existingReports: count ?? 0, existingKeys, placementReports:exam.examType==='placement'?await placementStatuses(id):[] });
   } catch (error) {
     console.error(error);
     return NextResponse.json(
@@ -139,7 +143,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     for (const scan of [...reviewedAll].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
       latestByKey.set(scan.studentId as string, scan);
     }
-    const reviewed = [...latestByKey.values()];
+    const reviewed = [...latestByKey.values()].filter(scan=>exam.examType!=='placement'||inputs.some(input=>input.scanId===scan.id));
     const duplicateKeys = [...latestByKey.keys()].filter(
       (key) => reviewedAll.filter((scan) => scan.studentId === key).length > 1,
     );
@@ -161,6 +165,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         },
         { status: 400 },
       );
+    }
+
+    if(exam.examType==='placement')for(const scan of reviewed){
+      const input=nameByScan.get(scan.id)!;
+      if(!placementGrade(input.grade??'')||!preferredSchedule(input.preferredSchedule??scan.preferredSchedule))return NextResponse.json({error:`${input.name}: 학년과 선호 요일을 선택해 주세요.`},{status:400});
     }
 
     // 주관식은 채점하지 않으면 **조용히 0점**으로 들어간다. 그대로 성적표를
@@ -350,7 +359,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       public_token: createPublicToken(),
       student_name: p.input.name.trim(),
       school: p.input.school?.trim() || null,
-      grade: null,
+      grade: exam.examType==='placement'?placementGrade(p.input.grade??''):null,
       parent_phone_masked: p.phone ? maskPhoneForGate(p.phone) : null,
       access_pin_hash: p.pinRequired ? hashPin(p.pin) : null,
       pin_required: p.pinRequired,
@@ -398,6 +407,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           report_data: p.reportData,
           scan_path: p.scan.scanPath,
         };
+        if(exam.examType==='placement')change.grade=placementGrade(p.input.grade??'');
         if (p.input.school?.trim()) change.school = p.input.school.trim();
         if (p.input.teacher?.trim()) change.homeroom_teacher = p.input.teacher.trim();
         if (p.input.className?.trim()) change.class_name = p.input.className.trim();
@@ -416,6 +426,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const baseUrl = siteBaseUrl(request.url);
+    if(exam.examType==='placement'){
+      // 이름이 같은 학생이 있어도 수험번호로만 연결한다.
+      const {data:active,error:activeError}=await supabase.from('student_reports').select('id,student_key').eq('exam_id',id).eq('is_active',true).order('created_at',{ascending:false});
+      if(activeError)throw Error('반배정 성적 기록을 확인하지 못했습니다.');
+      const byKey=new Map<string,string>();for(const r of active??[])if(r.student_key&&!byKey.has(r.student_key))byKey.set(r.student_key,r.id);
+      const requests=await requestPlacement(prepared.map(p=>({id:byKey.get(p.key)!,key:p.key,data:p.reportData,grade:p.input.grade,preferredSchedule:p.input.preferredSchedule??p.scan.preferredSchedule})),auth.user.username);
+      return NextResponse.json({ok:true,placementRequests:requests,placementReports:await placementStatuses(id),reports:[],updated:[],duplicates:duplicateKeys,cohort});
+    }
     return NextResponse.json({
       ok: true,
       batchId,

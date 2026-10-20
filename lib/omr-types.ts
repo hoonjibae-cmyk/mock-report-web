@@ -192,6 +192,7 @@ export interface OmrExam {
 
 // Python OMR API `/generate` 요청 스펙
 export interface OmrSheetSpec {
+  preferred_schedule?: boolean;
   exam_id: string;
   title: string;
   num_questions: number;

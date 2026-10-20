@@ -7,6 +7,7 @@ import { getExamOverview, parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { getReportByToken, recordReportView } from "@/lib/reports";
 import { gatePhoneHint } from "@/lib/utils";
+import {resolveAssignedReport} from '@/lib/placement-service';
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,14 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   // 열람 횟수는 '학부모가 봤는가'를 뜻한다. 직원이 여는 것은 세지 않는다 —
   // 세면 담임이 한 번 훑어본 성적표가 목록에서 '열람됨'으로 보인다.
   if (!staffViewing) await recordReportView(row.id, row.view_count).catch(() => undefined);
-  if (isGenericReport(row.report_data)) {
+  const genericData:unknown=row.report_data;
+  if (isGenericReport(genericData)) {
+    let report=genericData;
+    if(report.examType==='placement'){
+      const assigned=await resolveAssignedReport(row.id);
+      if(!assigned.report)return <Unavailable title="반배정 대기 중입니다" message={assigned.reason??'반배정 후 성적표를 확인할 수 있습니다.'}/>;
+      report=assigned.report;
+    }
     // 담임 의견(총평·개별)은 성적표 생성 이후에도 수정되므로 열람 시점에 읽는다.
     const personal = parseTeacherComment(row.teacher_comment);
     const overview = row.exam_id
@@ -71,7 +79,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
       areaFeedback: personalFinal ? personal.areaFeedback : [],
       keywords: personalFinal ? personal.displayKeywords : [],
     };
-    return <GenericReport report={row.report_data} comments={comments} />;
+    return <GenericReport report={report} comments={comments} />;
   }
   return <ReportView report={row.report_data} />;
 }

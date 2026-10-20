@@ -1,0 +1,5 @@
+import {createHmac,timingSafeEqual} from 'node:crypto';
+export const PRINT_COOKIE='ys_placement_print';
+type Scope={reportId:string;workspaceId:string;classId:string;expires:number};
+export function signPrintScope(scope:Scope){const data=Buffer.from(JSON.stringify(scope)).toString('base64url');return `${data}.${createHmac('sha256',process.env.AUTH_SECRET??'').update(`placement-print:${data}`).digest('hex')}`;}
+export function validPrintScope(value:string|undefined,scope:Omit<Scope,'expires'>){try{if(!value||!process.env.AUTH_SECRET)return false;const [data,signature]=value.split('.'),a=Buffer.from(signature??''),b=Buffer.from(createHmac('sha256',process.env.AUTH_SECRET).update(`placement-print:${data}`).digest('hex'));if(a.length!==b.length||!timingSafeEqual(a,b))return false;const p=JSON.parse(Buffer.from(data,'base64url').toString()) as Scope;return p.expires>Date.now()&&p.expires<Date.now()+11*60000&&p.reportId===scope.reportId&&p.workspaceId===scope.workspaceId&&p.classId===scope.classId;}catch{return false;}}

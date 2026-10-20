@@ -259,6 +259,7 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
       ? cfg.sheet_title.trim()
       : exam.title;
   const spec: OmrSheetSpec = {
+    ...(exam.examType === "placement" ? {preferred_schedule:true} : {}),
     exam_id: exam.id,
     title: sheetTitle,
     num_questions: exam.numQuestions,

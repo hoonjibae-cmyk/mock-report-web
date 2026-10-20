@@ -28,6 +28,8 @@ export interface DirectoryStudent {
   teacher: string;
   /** 재원 / 휴원 / 퇴원 등 */
   status: string;
+  schoolLevel?:string;
+  regularEnrolled?:boolean;
 }
 
 export interface LookupResult {
@@ -69,6 +71,8 @@ function normalize(raw: Record<string, unknown>, requested: string): DirectorySt
     className: pick("className", "class_name"),
     teacher: pick("teacher"),
     status: pick("status"),
+    schoolLevel:pick("schoolLevel","school_level"),
+    regularEnrolled:typeof raw.regularEnrolled==='boolean'?raw.regularEnrolled:undefined,
   };
 }
 

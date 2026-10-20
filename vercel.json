@@ -4,6 +4,10 @@
   "buildCommand": "npm run build",
   "crons": [
     {
+      "path": "/api/cron/placement-notify",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/cleanup",
       "schedule": "0 19 * * *"
     },

@@ -89,6 +89,7 @@ export interface ReadResultRow {
   student_id: string | null;
   student_id_qr: string | null;
   student_id_bubbles: string | null;
+  preferred_schedule?: string | null;
   exam_id: string | null;
   /** 답안지 QR에 새겨진 레이아웃 지문(구형 답안지는 null) */
   sheet_layout?: string | null;
