@@ -467,7 +467,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
             </Link>
           ) : (
             <Link className="button secondary" href={`/admin/omr/${exam.id}/reports`}>
-              성적표 생성 →
+              {exam.examType === 'placement' ? '반배정 요청 →' : '성적표 생성 →'}
             </Link>
           )}
           <Link className="button secondary" href={`/admin/omr/${exam.id}/summary`}>결과 요약</Link>

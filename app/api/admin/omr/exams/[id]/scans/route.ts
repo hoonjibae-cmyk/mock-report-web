@@ -253,6 +253,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         // PDF 페이지 결과는 원본 PDF의 저장 경로를 공유한다
         scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
         previewPath: previewPaths.get(result.filename) ?? null,
+        preferredSchedule: result.preferred_schedule ?? null,
         studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
         studentIdQr: result.student_id_qr ?? null,
         studentIdBubbles: result.student_id_bubbles ?? null,

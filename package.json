@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types --import ./tests/alias-loader.mjs --test tests/*.test.ts"
   },
   "dependencies": {
+    "@resvg/resvg-js": "2.6.2",
     "@supabase/supabase-js": "2.110.2",
     "next": "16.2.10",
     "openai": "6.46.0",

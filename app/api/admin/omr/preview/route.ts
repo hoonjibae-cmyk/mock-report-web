@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     academy: ACADEMY_NAME,
     essay_count: clampInt(body.essayCount, 0, 20, 0),
     dpi: 100,
+    preferred_schedule: examType === 'placement',
   };
   const spec = examType ? applyFixedSheet(base, examType) : base;
 

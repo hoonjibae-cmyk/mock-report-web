@@ -81,6 +81,7 @@ export interface OmrScan {
    * (마킹한 대로), null 은 아직 안 정함(듣기 문항이 거의 비어 있으면 안 본 것으로 본다)
    */
   listeningMode: ListeningMode | null;
+  preferredSchedule?: string | null;
   /** 'auto' = 시스템 자동 통과, 그 외에는 확인한 사용자 ID */
   reviewedBy: string | null;
   readError: string | null;
@@ -106,13 +107,14 @@ interface ScanRow {
   status: ScanStatus;
   reviewed_by: string | null;
   listening_mode?: string | null;
+  preferred_schedule?: string | null;
   read_error: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,preferred_schedule,read_error,created_at,updated_at";
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -122,6 +124,7 @@ function mapScan(row: ScanRow): OmrScan {
     scanPath: row.scan_path,
     previewPath: row.preview_path ?? null,
     studentId: row.student_id,
+    preferredSchedule: row.preferred_schedule ?? null,
     studentIdQr: row.student_id_qr,
     studentIdBubbles: row.student_id_bubbles,
     answers: row.answers ?? {},
@@ -140,6 +143,7 @@ function mapScan(row: ScanRow): OmrScan {
 }
 
 export interface UpsertScanInput {
+  preferredSchedule?:string|null;
   examId: string;
   filename: string;
   scanPath?: string | null;
@@ -168,6 +172,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
         scan_path: input.scanPath ?? null,
         preview_path: input.previewPath ?? null,
         student_id: input.studentId ?? null,
+        preferred_schedule: input.preferredSchedule ?? null,
         student_id_qr: input.studentIdQr ?? null,
         student_id_bubbles: input.studentIdBubbles ?? null,
         answers: input.answers ?? {},
@@ -203,6 +208,7 @@ export async function getScan(id: string): Promise<OmrScan | null> {
 }
 
 export interface UpdateScanInput {
+  preferredSchedule?:string|null;
   studentId?: string | null;
   answers?: Record<string, MarkValue>;
   essayScores?: Record<string, number>;
@@ -218,6 +224,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   const supabase = getSupabaseAdmin();
   const patch: Record<string, unknown> = {};
   if (input.studentId !== undefined) patch.student_id = input.studentId;
+  if (input.preferredSchedule !== undefined) patch.preferred_schedule = input.preferredSchedule;
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
   if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;

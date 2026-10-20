@@ -1,4 +1,5 @@
 "use client";
+import {PREFERRED_SCHEDULES,placementGrade} from '@/lib/placement-policy';
 
 import {
   isListeningAbsentCandidate,
@@ -34,6 +35,8 @@ interface CreatedLink {
 }
 
 interface Draft {
+  grade:string;
+  preferredSchedule:string;
   name: string;
   school: string;
   phone: string;
@@ -42,7 +45,7 @@ interface Draft {
   className: string;
 }
 
-const EMPTY_DRAFT: Draft = { name: "", school: "", phone: "", teacher: "", className: "" };
+const EMPTY_DRAFT: Draft = { grade:"",preferredSchedule:"",name: "", school: "", phone: "", teacher: "", className: "" };
 
 export default function OmrReportBuilder({
   exam,
@@ -85,6 +88,8 @@ export default function OmrReportBuilder({
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState("");
 
+  const isPlacement=exam?.examType==='placement';
+  const [placementReports,setPlacementReports]=useState<Array<{reportId:string;name:string;preferredSchedule:string;notification:string;classes:Array<{id:string;name:string;url:string}>}>>([]);
   const isMock = exam?.examType === "mock";
   const mockSubject = mockSubjectOf(exam?.subject);
   const referenceReady = !isMock || Boolean(reference);
@@ -118,9 +123,9 @@ export default function OmrReportBuilder({
 
       const found = data.students as Record<
         string,
-        { name: string; school: string; grade: string; parentPhone: string; teacher?: string; className?: string }
+        { name: string; school: string; grade: string; schoolLevel?:string; parentPhone: string; teacher?: string; className?: string }
       >;
-      let filled = 0;
+      const filled = reviewed.filter(scan => scan.studentId && found[scan.studentId]).length;
       setDrafts((prev) => {
         const next = { ...prev };
         for (const scan of reviewed) {
@@ -129,6 +134,8 @@ export default function OmrReportBuilder({
           const current = next[scan.id] ?? draftFor(scan);
           next[scan.id] = {
             // 이미 손으로 고쳐 둔 값이 있으면 덮어쓰지 않는다
+            grade:current.grade||placementGrade(info.grade,info.schoolLevel??""),
+            preferredSchedule:current.preferredSchedule||scan.preferredSchedule||"",
             name: current.name.trim() || info.name,
             school: current.school.trim() || [info.school, info.grade].filter(Boolean).join(" "),
             phone: current.phone.trim() || info.parentPhone,
@@ -136,7 +143,6 @@ export default function OmrReportBuilder({
             teacher: current.teacher.trim() || (info.teacher ?? ""),
             className: current.className.trim() || (info.className ?? ""),
           };
-          filled += 1;
         }
         return next;
       });
@@ -202,6 +208,7 @@ export default function OmrReportBuilder({
         if (!data.ok) return;
         setExistingReports(data.existingReports ?? 0);
         setExistingKeys(new Set<string>(Array.isArray(data.existingKeys) ? data.existingKeys : []));
+        setPlacementReports(data.placementReports??[]);
         const suggestions = data.suggestions ?? {};
         setDrafts((prev) => {
           const next = { ...prev };
@@ -210,6 +217,7 @@ export default function OmrReportBuilder({
             const suggestion = scan.studentId ? suggestions[scan.studentId] : undefined;
             next[scan.id] = {
               ...EMPTY_DRAFT,
+              preferredSchedule:scan.preferredSchedule??"",
               name: suggestion?.name ?? "",
               school: suggestion?.school ?? "",
             };
@@ -222,7 +230,7 @@ export default function OmrReportBuilder({
   }, [exam?.id]);
 
   function draftFor(scan: OmrScan): Draft {
-    return drafts[scan.id] ?? EMPTY_DRAFT;
+    return drafts[scan.id] ?? {...EMPTY_DRAFT,preferredSchedule:scan.preferredSchedule??""};
   }
 
   function setDraft(scanId: string, patch: Partial<Draft>) {
@@ -309,9 +317,9 @@ export default function OmrReportBuilder({
   const newReportCount = reviewed.filter((scan) => !existingKeys.has(scan.studentId as string)).length;
   const refreshCount = reviewed.length - newReportCount;
 
-  async function generate() {
+  async function generate(selectedScanId?:string) {
     if (!exam) return;
-    if (reviewed.length > 0 && newReportCount === 0) {
+    if (!isPlacement && reviewed.length > 0 && newReportCount === 0) {
       const ok = window.confirm(
         "모든 답안지에 이미 성적표가 있습니다. 새로 만들지 않고(중복 생성 안 함) 점수·석차 등 내용만 최신으로 갱신합니다.\n" +
           "링크·담임 의견·발송 기록은 그대로입니다. 진행할까요?",
@@ -327,8 +335,10 @@ export default function OmrReportBuilder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pinRequired,
-          students: reviewed.map((scan) => ({
+          students: reviewed.filter(scan=>!selectedScanId||scan.id===selectedScanId).map((scan) => ({
             scanId: scan.id,
+            grade:draftFor(scan).grade,
+            preferredSchedule:draftFor(scan).preferredSchedule,
             name: draftFor(scan).name,
             school: draftFor(scan).school,
             phone: draftFor(scan).phone,
@@ -339,6 +349,12 @@ export default function OmrReportBuilder({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "성적표를 생성하지 못했습니다.");
+      if(isPlacement){
+        setPlacementReports(data.placementReports??[]);
+        const rows=data.placementRequests??[],sent=rows.filter((r:{notification:string})=>r.notification==='sent').length,queued=rows.filter((r:{notification:string})=>['pending','sending'].includes(r.notification)).length,held=rows.filter((r:{notification:string})=>['blocked','error','uncertain'].includes(r.notification)).length;
+        setMessage(`반배정 요청 ${rows.length}명 저장 · 신규생 슬랙 알림 ${sent}명${queued?` · 순차 전송 대기 ${queued}명`:''}${held?` · 알림 확인 필요 ${held}명`:''}. 반배정 후 아래에서 성적표를 출력할 수 있습니다.`);
+        return;
+      }
       const createdCount = data.reports?.length ?? 0;
       const refreshed = Array.isArray(data.updated) ? data.updated.length : 0;
       const duplicates: string[] = Array.isArray(data.duplicates) ? data.duplicates : [];
@@ -397,7 +413,7 @@ export default function OmrReportBuilder({
         <div className="brand-lockup">
           <AcademyLogo size="large" href="/admin" />
           <div>
-            <strong>성적표 생성</strong>
+            <strong>{isPlacement?'반배정 요청 · 성적표 출력':'성적표 생성'}</strong>
             <span>
               {EXAM_TYPE_LABELS[exam.examType]} · {exam.title}
             </span>
@@ -533,7 +549,7 @@ export default function OmrReportBuilder({
         <div className="section-heading wrap">
           <div>
             <p className="eyebrow">{isMock ? "STEP 4" : "STEP 3"}</p>
-            <h2>학생 확인 · 성적표 생성</h2>
+            <h2>{isPlacement?'학생 확인 · 반배정 요청':'학생 확인 · 성적표 생성'}</h2>
             <p className="subtle">
               검수 완료 {reviewed.length}건이 채점 대상입니다
               {pendingCount > 0 ? ` (검수 대기 ${pendingCount}건은 제외)` : ""} · 이름 입력{" "}
@@ -543,7 +559,7 @@ export default function OmrReportBuilder({
                 : ""}
             </p>
             <p className="subtle">
-              답안지에서 읽히는 학생 정보는 <strong>수험번호</strong> 하나뿐입니다.{" "}
+              답안지에서 수험번호{isPlacement?'와 선호 요일을':'를'} 읽습니다.{" "}
               <strong>학생 정보 불러오기</strong>를 누르면 학생 관리 프로그램에서 이름·학교·학부모
               연락처를 가져와 채웁니다(직접 고쳐 둔 칸은 그대로 둡니다).
               {directoryConfigured === false ? " — 아직 연동이 설정되지 않았습니다." : ""}
@@ -572,11 +588,11 @@ export default function OmrReportBuilder({
                 </button>
                 <button
                   className="button primary"
-                  onClick={generate}
+                  onClick={()=>generate()}
                   disabled={loading || !keyReady || !referenceReady || reviewed.length === 0}
                   title={!referenceReady ? "시험 기반 정보를 먼저 올려 주세요." : undefined}
                 >
-                  {loading
+                  {isPlacement?(loading?"반배정 요청 중…":"반배정 요청하기"):loading
                     ? "채점·생성 중…"
                     : reviewed.length > 0 && newReportCount === 0
                       ? "성적표 갱신 (새 성적표 없음)"
@@ -736,6 +752,7 @@ export default function OmrReportBuilder({
                     <th>이름 *</th>
                     <th>학교 · 학년</th>
                     <th>학부모 연락처(선택 · PIN용)</th>
+                    {isPlacement&&<th>학년 · 선호 요일 · 반배정 요청</th>}
                     <th>담임 · 반</th>
                   </tr>
                 </thead>
@@ -779,6 +796,7 @@ export default function OmrReportBuilder({
                             onChange={(e) => setDraft(scan.id, { phone: e.target.value })}
                           />
                         </td>
+                        {isPlacement&&<td><select aria-label={`${draft.name||scan.studentId} 학년`} value={draft.grade} onChange={e=>setDraft(scan.id,{grade:e.target.value})}><option value="">학년 선택</option>{['초6','중1','중2','중3','고1','고2','고3'].map(g=><option key={g}>{g}</option>)}</select><select aria-label={`${draft.name||scan.studentId} 선호 요일`} value={draft.preferredSchedule} onChange={e=>setDraft(scan.id,{preferredSchedule:e.target.value})}><option value="">마킹 확인</option>{PREFERRED_SCHEDULES.map(d=><option key={d}>{d}</option>)}</select><button className="button secondary" disabled={!canCreate||loading} onClick={()=>generate(scan.id)}>반배정 요청</button></td>}
                         <td>
                           {/* 담임 선생님이 '내 반'에서 이 학생을 찾는 열쇠다. 인사 프로그램의 이름과 같아야 한다. */}
                           <div style={{ display: "flex", gap: 6 }}>
@@ -809,6 +827,7 @@ export default function OmrReportBuilder({
         )}
       </div>
 
+      {isPlacement&&<section className="panel"><h2>반배정 요청 · 성적표 출력</h2><p>신규 응시생만 슬랙으로 알립니다. 반배정은 클래스핏에서 진행하며 배정된 반의 평균으로 출력합니다.</p><a className="button secondary" href="https://classfit.yussam.com" target="_blank" rel="noreferrer">반편성관리 열기</a><button className="button secondary" onClick={async()=>{const r=await fetch(`/api/admin/omr/exams/${exam.id}/reports`);const data=await r.json();if(r.ok)setPlacementReports(data.placementReports??[]);}}>배정 상태 새로고침</button>{placementReports.map(r=><div key={r.reportId} className="toolbar"><b>{r.name}</b><span>선호 {r.preferredSchedule}</span><span>{({sent:'슬랙 알림 완료',skipped:'재원생 · 알림 제외',blocked:'학생 정보 확인 필요',error:'알림 재시도 필요',sending:'알림 처리 중',uncertain:'채널 전송 여부 확인 필요',pending:'알림 대기'} as Record<string,string>)[r.notification]??r.notification}</span>{r.classes.length?r.classes.map(c=><a className="button secondary" key={c.id} href={c.url} target="_blank" rel="noreferrer">{c.name} 성적표 출력</a>):<span>반배정 대기</span>}</div>)}</section>}
       {created.length > 0 ? (
         <section className="panel result-panel">
           <div className="section-heading wrap">
