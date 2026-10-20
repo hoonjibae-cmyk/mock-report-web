@@ -2614,3 +2614,22 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .listening-seg button { padding: 6px 12px; }
 @media (max-width: 720px) { .listening-list li { flex-direction: column; align-items: stretch; } .listening-seg { display: grid; grid-template-columns: 1fr; } .listening-seg button + button { border-left: 0; border-top: 1px solid var(--line); } }
 .group-meta .need { color: #b3261e; }
+
+/* 반배치고사 — 학생 확인 표의 학년·선호 요일 칸. 두 드롭다운 위에 작은 이름표를
+   달고, 아래 한 줄에 판독기가 답안지의 선호 요일 칸을 어떻게 읽었는지 적는다. */
+.placement-cell { min-width: 232px; }
+.placement-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.placement-fields label { display: grid; gap: 3px; font-size: 11px; font-weight: 750; color: var(--muted); }
+.placement-fields select {
+  padding: 7px 9px; font-size: 13px; font-weight: 600; color: var(--ink);
+  border: 1px solid #cfd8e5; border-radius: 9px; background: #fff; min-width: 104px;
+}
+.placement-fields select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,103,177,.1); outline: none; }
+.placement-fields select.missing { border-color: #c0392b; }
+.placement-fields select:disabled { background: #f3f5f8; color: var(--muted); }
+.schedule-read { margin: 7px 0 0; display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+.schedule-read::before { content: ""; flex: none; width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: currentColor; }
+.schedule-read.read { color: #1a7f4b; }
+.schedule-read.uncertain { color: #8a5a00; font-weight: 700; }
+.schedule-read.blank { color: #8a5a00; }
+.schedule-read.unread { color: #b3261e; }
