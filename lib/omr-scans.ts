@@ -1,5 +1,6 @@
 // OMR 스캔 판독 결과(omr_scans) 저장소 — Supabase service-role 경유
 
+import type { EssayGradeSource } from "@/lib/essay-grading";
 import type { ListeningMode } from "@/lib/listening";
 import type { MarkValue } from "@/lib/omr-answers";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -66,8 +67,14 @@ export interface OmrScan {
    * 숫자면 보기 하나, 배열이면 여러 개 표기('모두 고르기' 문항 또는 중복 표기).
    */
   answers: Record<string, MarkValue>;
-  /** 서술형 문항 점수 {문항번호: 점수} — 채점자가 입력 */
+  /** 서술형 문항 점수 {문항번호: 점수} — 자동 채점 또는 채점자가 입력 */
   essayScores: Record<string, number>;
+  /**
+   * {문항번호: 점수 출처} — 'auto'(자동 채점, 다시 돌리면 바뀔 수 있다) 또는
+   * 'teacher'(선생님이 매김, 자동 채점이 건드리지 않는다). 적혀 있지 않은 옛
+   * 점수는 선생님이 매긴 것으로 본다.
+   */
+  essayScoreSources: Record<string, EssayGradeSource>;
   /** {문항번호: 전사된 주관식 답안} — 선생님이 고치면 고친 값이 남는다 */
   essayAnswers: Record<string, string>;
   /** {문항번호: 보관함 경로} — 주관식 칸을 펴서 잘라낸 이미지(전사 대조용) */
@@ -100,6 +107,7 @@ interface ScanRow {
   student_id_bubbles: string | null;
   answers: Record<string, MarkValue> | null;
   essay_scores: Record<string, number> | null;
+  essay_score_sources?: Record<string, unknown> | null;
   essay_answers: Record<string, string> | null;
   essay_crops: Record<string, string> | null;
   review_flags: Array<Record<string, unknown>> | null;
@@ -114,7 +122,16 @@ interface ScanRow {
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,preferred_schedule,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_score_sources,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,preferred_schedule,read_error,created_at,updated_at";
+
+/** 저장된 출처 중 아는 값만 — 엉뚱한 값이 들어 있어도 화면이 죽지 않게 */
+function sourcesOf(value: Record<string, unknown> | null | undefined): Record<string, EssayGradeSource> {
+  const out: Record<string, EssayGradeSource> = {};
+  for (const [key, source] of Object.entries(value ?? {})) {
+    if (source === "auto" || source === "teacher") out[key] = source;
+  }
+  return out;
+}
 
 function mapScan(row: ScanRow): OmrScan {
   return {
@@ -129,6 +146,7 @@ function mapScan(row: ScanRow): OmrScan {
     studentIdBubbles: row.student_id_bubbles,
     answers: row.answers ?? {},
     essayScores: row.essay_scores ?? {},
+    essayScoreSources: sourcesOf(row.essay_score_sources),
     essayAnswers: row.essay_answers ?? {},
     essayCrops: row.essay_crops ?? {},
     reviewFlags: row.review_flags ?? [],
@@ -214,6 +232,7 @@ export interface UpdateScanInput {
   studentId?: string | null;
   answers?: Record<string, MarkValue>;
   essayScores?: Record<string, number>;
+  essayScoreSources?: Record<string, EssayGradeSource>;
   essayAnswers?: Record<string, string>;
   status?: ScanStatus;
   reviewedBy?: string | null;
@@ -230,6 +249,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.reviewFlags !== undefined) patch.review_flags = input.reviewFlags;
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
+  if (input.essayScoreSources !== undefined) patch.essay_score_sources = input.essayScoreSources;
   if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;
   if (input.status !== undefined) patch.status = input.status;
   if (input.reviewedBy !== undefined) patch.reviewed_by = input.reviewedBy;

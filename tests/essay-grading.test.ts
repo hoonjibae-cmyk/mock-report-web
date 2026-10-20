@@ -3,8 +3,9 @@
  *
  * 실행: npm test
  *
- * 여기서 틀리면 학생 점수가 잘못 매겨진다. 특히 "자동으로 넘겨도 되는가"를
- * 촘촘히 본다 — 오답 자동 판정은 학생 손해로 직결되므로 절대 나오면 안 된다.
+ * 여기서 틀리면 학생 점수가 잘못 매겨진다. 특히 "자동 채점이 선생님 점수를
+ * 덮어쓰는가"를 촘촘히 본다 — 자동 0점은 우선 판정이고, 사람이 매긴 점수가
+ * 다시 돌린 자동 채점에 지워지면 학생 손해로 직결된다.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -12,6 +13,7 @@ import test from "node:test";
 import {
   applyGroupScore,
   autoGrade,
+  autoVerdict,
   essayProgress,
   groupEssayAnswers,
   matchesAccepted,
@@ -99,37 +101,58 @@ test("대표 원문은 그 묶음에서 가장 흔한 표기를 쓴다", () => {
   assert.equal(groups[0].text, "I am fine");
 });
 
-test("정답과 정확히 일치하는 묶음만 자동으로 만점 처리한다", () => {
+test("자동 채점 — 정답과 일치하면 만점, 오답으로 보이면 우선 0점", () => {
   const groups = groupEssayAnswers(
     [a("s1", "He's looking forward to seeing you"), a("s2", "He is looking forward to see you.")],
     KEY,
   );
-  const result = autoGrade(groups, 4);
-  assert.deepEqual(result.scores, { s1: 4 });
-  assert.equal(result.autoKeys.length, 1);
-  assert.equal(result.pending.length, 1);
+  const result = autoGrade(groups, 4, { accepted: KEY });
+  assert.deepEqual(result.scores, { s1: 4, s2: 0 });
+  assert.equal(result.autoKeys.length, 1, "만점 묶음");
+  assert.equal(result.zeroKeys.length, 1, "0점 묶음 — 화면에서 확인 필요로 보인다");
+  assert.equal(result.pending.length, 0);
+  assert.equal(result.kept, 0);
 });
 
-test("오답으로 보이는 답안을 자동으로 0점 처리하지 않는다", () => {
-  // 전사가 틀렸는지 학생이 틀렸는지 구분할 수 없다. 점수를 깎는 판정은 사람이 한다.
-  const groups = groupEssayAnswers([a("s1", "He is looking forward to see you.")], KEY);
-  const result = autoGrade(groups, 4);
-  assert.deepEqual(result.scores, {}, "오답을 자동으로 채점하면 안 된다");
-  assert.equal(result.pending.length, 1);
+test("백지는 정답이 없어도 0점이다", () => {
+  const groups = groupEssayAnswers([a("s1", ""), a("s2", "   ")], []);
+  const result = autoGrade(groups, 4, { accepted: [] });
+  assert.deepEqual(result.scores, { s1: 0, s2: 0 });
+  assert.deepEqual(result.zeroKeys, [""]);
 });
 
-test("백지도 자동으로 0점 처리하지 않는다", () => {
-  // 학생이 안 쓴 것과 우리가 못 읽은 것을 구분할 수 없다.
-  const groups = groupEssayAnswers([a("s1", ""), a("s2", "   ")], KEY);
-  const result = autoGrade(groups, 4);
-  assert.deepEqual(result.scores, {});
+test("정답을 입력하지 않았으면 쓰여 있는 답안은 판단하지 않는다 — 사람에게 남긴다", () => {
+  // '오답으로 보인다'는 정답이 있어야 할 수 있는 말이다.
+  const groups = groupEssayAnswers([a("s1", "He is looking forward to seeing you."), a("s2", "")], []);
+  const result = autoGrade(groups, 4, { accepted: [] });
+  assert.deepEqual(result.scores, { s2: 0 }, "백지만 0점");
   assert.equal(result.pending.length, 1);
-  assert.ok(result.pending[0].blank);
+  assert.equal(result.pending[0].members[0].scanId, "s1");
 });
 
-test("정답을 입력하지 않았으면 아무것도 자동 처리하지 않는다", () => {
-  const groups = groupEssayAnswers([a("s1", "He is looking forward to seeing you.")], []);
-  assert.deepEqual(autoGrade(groups, 4).scores, {});
+test("선생님이 매긴 점수는 자동 채점이 덮어쓰지 않고, 자동 점수는 다시 매긴다", () => {
+  // 오답으로 보이던 묶음에 선생님이 부분점수를 줬다. 자동 채점을 다시 돌려도 그대로여야 한다.
+  // 반면 자동으로 0점이던 학생은 정답을 고친 뒤 다시 돌리면 그에 맞게 바뀐다.
+  const groups = groupEssayAnswers(
+    [a("s1", "He is looking forward to see you."), a("s2", "He is looking forward to see you."), a("s3", "")],
+    KEY,
+  );
+  const result = autoGrade(groups, 4, {
+    accepted: KEY,
+    current: { s1: { score: 2, source: "teacher" }, s2: { score: 0, source: "auto" } },
+  });
+  assert.deepEqual(result.scores, { s2: 0, s3: 0 }, "s1 은 건드리지 않는다");
+  assert.equal(result.kept, 1);
+  // 같은 묶음에서 한 명은 선생님 점수, 한 명은 자동 — 묶음은 0점 묶음으로 센다
+  assert.deepEqual(result.zeroKeys.sort(), ["", "he is looking forward to see you"].sort());
+});
+
+test("한 답안의 자동 판정 — 일치 만점 · 백지 0점 · 정답 있고 다르면 0점 · 정답 없으면 모름", () => {
+  assert.equal(autoVerdict("he's looking forward to seeing you", KEY, 4), 4);
+  assert.equal(autoVerdict("", KEY, 4), 0);
+  assert.equal(autoVerdict("  ", [], 4), 0, "백지는 정답이 없어도 0점");
+  assert.equal(autoVerdict("He is looking forward to see you.", KEY, 4), 0);
+  assert.equal(autoVerdict("He is looking forward to see you.", [], 4), null, "정답이 없으면 판단하지 않는다");
 });
 
 test("묶음에 매긴 점수는 그 묶음 전원에게 같이 간다", () => {

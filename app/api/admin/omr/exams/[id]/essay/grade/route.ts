@@ -4,9 +4,12 @@ import { getAiModel } from "@/lib/app-settings";
 import {
   applyGroupScore,
   autoGrade,
+  autoVerdict,
   groupEssayAnswers,
   parseAcceptedAnswers,
+  type CurrentScore,
   type EssayAnswer,
+  type EssayGradeSource,
 } from "@/lib/essay-grading";
 import { updateExamAnswerKey } from "@/lib/omr-exams";
 import { getVisibleExam } from "@/lib/exam-access";
@@ -24,11 +27,17 @@ export const maxDuration = 300;
  * 수렴한다. 같은 답끼리 묶으면 판단 횟수가 크게 줄고 "같은 답에 같은 점수"가
  * 구조적으로 보장된다.
  *
+ * 자동 채점은 일치하면 만점, 오답으로 보이거나 백지면 **우선 0점**이다. 자동
+ * 점수는 출처 'auto'로 남아 다시 돌리면 바뀔 수 있고, 선생님이 확인하거나 매긴
+ * 점수('teacher')는 건드리지 않는다. 손글씨를 읽은 직후와 정답을 고친 직후에도
+ * 자동 채점이 돈다 — 버튼을 한 번 더 누르지 않아도 화면이 맞아떨어지게.
+ *
  * GET   현재 전사·채점 상태(묶음 목록)
- * POST  { action: "transcribe" }        아직 전사하지 않은 답안을 읽어 온다
- *       { action: "autoGrade" }          정답과 정확히 일치하는 묶음만 만점 처리
- *       { action: "gradeGroup", ... }    한 묶음 전체에 같은 점수를 매긴다
- *       { action: "fixText", ... }       전사를 고친다(잘못 읽은 것 정정)
+ * POST  { action: "transcribe" }        아직 전사하지 않은 답안을 읽고 자동 채점
+ *       { action: "autoGrade" }          자동 채점(선생님 점수는 그대로)
+ *       { action: "gradeGroup", ... }    한 묶음 전체에 같은 점수 — 선생님 점수가 된다
+ *       { action: "fixText", ... }       전사를 고친다(그 학생의 자동 점수는 다시 매긴다)
+ *       { action: "setAnswer", ... }     정답을 넣거나 고치고 자동 채점을 다시 돈다
  */
 
 /** 이 시험의 주관식 문항 번호 */
@@ -41,7 +50,9 @@ function gradableScans(scans: OmrScan[]): OmrScan[] {
   return scans.filter((scan) => scan.status === "reviewed" && scan.studentId);
 }
 
-function buildGroups(exam: Awaited<ReturnType<typeof getVisibleExam>>, scans: OmrScan[]) {
+type Exam = NonNullable<Awaited<ReturnType<typeof getVisibleExam>>>;
+
+function buildGroups(exam: Exam | null, scans: OmrScan[]) {
   if (!exam) return [];
   const count = essayCountOf(exam);
   return essayNumbers(exam, count).map((no) => {
@@ -62,7 +73,58 @@ function buildGroups(exam: Awaited<ReturnType<typeof getVisibleExam>>, scans: Om
   });
 }
 
-/** 화면으로 내보낼 모양 — 점수와 이미지 유무를 함께 붙인다 */
+/** 한 문항의 학생별 현재 점수와 출처 — 자동 채점이 덮어써도 되는지 가른다 */
+function currentScores(scans: OmrScan[], no: number): Record<string, CurrentScore | undefined> {
+  const key = String(no);
+  const out: Record<string, CurrentScore | undefined> = {};
+  for (const scan of scans) {
+    const score = scan.essayScores?.[key];
+    if (typeof score !== "number") continue;
+    // 출처를 모르는 옛 점수는 선생님이 매긴 것으로 본다 — 덮어쓰지 않는다
+    out[scan.id] = { score, source: scan.essayScoreSources?.[key] ?? "teacher" };
+  }
+  return out;
+}
+
+export interface AutoSummary {
+  /** 자동 만점 */
+  applied: number;
+  /** 자동 0점 — 확인이 필요한 쪽 */
+  zeroed: number;
+  /** 선생님 점수라 건드리지 않은 답안 */
+  kept: number;
+}
+
+/** 자동 채점을 돌리고 저장한다 — 일치는 만점, 오답으로 보이거나 백지는 0점, 선생님 점수는 그대로 */
+async function runAutoGrade(exam: Exam, scans: OmrScan[]): Promise<AutoSummary> {
+  const summary: AutoSummary = { applied: 0, zeroed: 0, kept: 0 };
+  const scoreUpdates = new Map<string, Record<string, number>>();
+  const sourceUpdates = new Map<string, Record<string, EssayGradeSource>>();
+  for (const q of buildGroups(exam, scans)) {
+    const result = autoGrade(q.groups, q.point, { accepted: q.accepted, current: currentScores(scans, q.no) });
+    summary.kept += result.kept;
+    for (const [scanId, score] of Object.entries(result.scores)) {
+      const scores = scoreUpdates.get(scanId) ?? {};
+      scores[String(q.no)] = score;
+      scoreUpdates.set(scanId, scores);
+      const sources = sourceUpdates.get(scanId) ?? {};
+      sources[String(q.no)] = "auto";
+      sourceUpdates.set(scanId, sources);
+      if (score >= q.point - 1e-9) summary.applied += 1;
+      else summary.zeroed += 1;
+    }
+  }
+  for (const [scanId, scores] of scoreUpdates) {
+    const scan = scans.find((s) => s.id === scanId);
+    await updateScan(scanId, {
+      essayScores: { ...(scan?.essayScores ?? {}), ...scores },
+      essayScoreSources: { ...(scan?.essayScoreSources ?? {}), ...(sourceUpdates.get(scanId) ?? {}) },
+    });
+  }
+  return summary;
+}
+
+/** 화면으로 내보낼 모양 — 점수·출처와 이미지 유무를 함께 붙인다 */
 function serialize(questions: ReturnType<typeof buildGroups>, scans: OmrScan[]) {
   const byId = new Map(scans.map((scan) => [scan.id, scan]));
   return questions.map((q) => ({
@@ -77,10 +139,13 @@ function serialize(questions: ReturnType<typeof buildGroups>, scans: OmrScan[]) 
       blank: group.blank,
       members: group.members.map((member) => {
         const scan = byId.get(member.scanId);
+        const score = scan?.essayScores?.[String(q.no)];
         return {
           scanId: member.scanId,
           studentId: member.studentId,
-          score: scan?.essayScores?.[String(q.no)] ?? null,
+          score: typeof score === "number" ? score : null,
+          // 출처를 모르는 옛 점수는 선생님 것으로 본다
+          source: typeof score === "number" ? (scan?.essayScoreSources?.[String(q.no)] ?? "teacher") : null,
           hasCrop: Boolean(scan?.essayCrops?.[String(q.no)]),
         };
       }),
@@ -198,42 +263,33 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         await updateScan(scanId, { essayAnswers });
       }
 
+      // 읽자마자 자동 채점 — 일치는 만점, 오답으로 보이거나 백지는 우선 0점
+      const auto = await runAutoGrade(exam, await listScans(id));
       const fresh = await listScans(id);
       return NextResponse.json({
         ok: true,
         transcribed: jobs.length,
+        auto,
         studentCount: gradable.length,
         questions: serialize(buildGroups(exam, fresh), fresh),
       });
     }
 
-    // --- 자동 채점: 정답과 정확히 일치하는 묶음만 ---
+    // --- 자동 채점: 선생님 점수는 그대로, 나머지는 일치=만점 · 오답·백지=0점 ---
     if (body.action === "autoGrade") {
-      let applied = 0;
-      const updates = new Map<string, Record<string, number>>();
-      for (const q of buildGroups(exam, scans)) {
-        if (q.accepted.length === 0) continue; // 정답을 안 넣었으면 판단 근거가 없다
-        const result = autoGrade(q.groups, q.point);
-        for (const [scanId, score] of Object.entries(result.scores)) {
-          const current = updates.get(scanId) ?? {};
-          current[String(q.no)] = score;
-          updates.set(scanId, current);
-          applied += 1;
-        }
-      }
-      for (const [scanId, scores] of updates) {
-        const scan = scans.find((s) => s.id === scanId);
-        await updateScan(scanId, { essayScores: { ...(scan?.essayScores ?? {}), ...scores } });
-      }
+      const auto = await runAutoGrade(exam, scans);
       const fresh = await listScans(id);
       return NextResponse.json({
         ok: true,
-        applied,
+        applied: auto.applied,
+        zeroed: auto.zeroed,
+        kept: auto.kept,
+        auto,
         questions: serialize(buildGroups(exam, fresh), fresh),
       });
     }
 
-    // --- 묶음 채점: 같은 답을 쓴 학생 전원에게 같은 점수 ---
+    // --- 묶음 채점: 같은 답을 쓴 학생 전원에게 같은 점수 — 선생님 점수가 된다 ---
     if (body.action === "gradeGroup") {
       const no = Number(body.questionNo);
       if (!numbers.includes(no)) {
@@ -254,6 +310,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const scan = scans.find((s) => s.id === scanId);
         await updateScan(scanId, {
           essayScores: { ...(scan?.essayScores ?? {}), [String(no)]: value },
+          essayScoreSources: { ...(scan?.essayScoreSources ?? {}), [String(no)]: "teacher" },
         });
       }
       const fresh = await listScans(id);
@@ -274,10 +331,29 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const scan = scans.find((s) => s.id === scanId);
       if (!scan) return NextResponse.json({ error: "답안지를 찾지 못했습니다." }, { status: 404 });
 
+      const qk = String(no);
       const text = String(body.text ?? "").slice(0, 2000);
-      await updateScan(scanId, {
-        essayAnswers: { ...(scan.essayAnswers ?? {}), [String(no)]: text },
-      });
+      const essayAnswers = { ...(scan.essayAnswers ?? {}), [qk]: text };
+
+      // 자동으로 매긴 점수는 고친 글로 다시 판정한다. 선생님이 매긴 점수는 그대로 —
+      // 글을 고쳤다고 점수까지 바꿀 권한이 자동 채점에는 없다.
+      const hasScore = typeof scan.essayScores?.[qk] === "number";
+      const source = scan.essayScoreSources?.[qk];
+      if (!hasScore || source === "auto") {
+        const verdict = autoVerdict(text, parseAcceptedAnswers(exam.answerKey?.[qk]), pointFor(exam, no));
+        const essayScores = { ...(scan.essayScores ?? {}) };
+        const essayScoreSources = { ...(scan.essayScoreSources ?? {}) };
+        if (verdict === null) {
+          delete essayScores[qk];
+          delete essayScoreSources[qk];
+        } else {
+          essayScores[qk] = verdict;
+          essayScoreSources[qk] = "auto";
+        }
+        await updateScan(scanId, { essayAnswers, essayScores, essayScoreSources });
+      } else {
+        await updateScan(scanId, { essayAnswers });
+      }
       const fresh = await listScans(id);
       return NextResponse.json({
         ok: true,
@@ -285,7 +361,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       });
     }
 
-    // --- 정답 입력: 채점 화면에서 바로 넣는다(엑셀을 다시 올리러 가지 않아도 되게) ---
+    // --- 정답 입력: 채점 화면에서 바로 넣고, 자동 채점을 다시 돈다 ---
     if (body.action === "setAnswer") {
       const no = Number(body.questionNo);
       if (!numbers.includes(no)) {
@@ -297,10 +373,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       else delete answerKey[String(no)];
       await updateExamAnswerKey(id, answerKey);
 
-      const fresh = await getVisibleExam(id);
+      const freshExam = await getVisibleExam(id);
+      if (!freshExam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+      const auto = await runAutoGrade(freshExam, scans);
+      const fresh = await listScans(id);
       return NextResponse.json({
         ok: true,
-        questions: serialize(buildGroups(fresh, scans), scans),
+        auto,
+        questions: serialize(buildGroups(freshExam, fresh), fresh),
       });
     }
 
