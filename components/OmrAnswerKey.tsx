@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ImportedExamSource from "./ImportedExamSource";
@@ -12,6 +12,7 @@ import {
   type MarkValue,
 } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
+import { clockLabel, saveStateOf, type LastSave } from "@/lib/save-state";
 
 interface Props {
   exam: OmrExam | null;
@@ -66,6 +67,32 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
   const [error, setError] = useState(setupError);
   const [message, setMessage] = useState("");
   const excelRef = useRef<HTMLInputElement>(null);
+
+  // 저장 상태 — 버튼을 눌렀는데 아무 반응이 없으면 두 번 누르거나 저장된 줄 알고
+  // 떠난다. 지금 화면의 내용을 마지막으로 저장한 것과 견주어 버튼 옆에 늘 적는다.
+  const snapshot = useMemo(() => JSON.stringify({ key, essayKey, points, areas }), [key, essayKey, points, areas]);
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const [lastSave, setLastSave] = useState<LastSave | null>(null);
+  // 엑셀 업로드는 서버가 저장하고 화면이 그 값을 받는다 — 받은 뒤의 화면이 곧 저장본이다
+  const adoptNextSnapshot = useRef(false);
+  useEffect(() => {
+    if (adoptNextSnapshot.current) {
+      adoptNextSnapshot.current = false;
+      setSavedSnapshot(snapshot);
+    }
+  }, [snapshot]);
+  const dirty = snapshot !== savedSnapshot;
+  const saveState = saveStateOf({ saving, dirty, lastSave });
+  // 저장 안 된 변경이 있으면 떠나기 전에 묻는다 — 45문항을 다시 치는 일이 없게
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   const total = exam?.numQuestions ?? 0;
   const choices = exam?.numChoices ?? 5;
@@ -167,6 +194,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
       const uploaded: Record<string, MarkValue> = data.exam?.answerKey ?? {};
       const uploadedPoints: Record<string, number> = data.exam?.points ?? {};
       const uploadedMeta: Record<string, { area?: string }> = data.exam?.questionMeta ?? {};
+      adoptNextSnapshot.current = true;
       setKey(() => {
         const next: Record<string, number[]> = {};
         for (let q = 1; q <= total; q += 1) next[String(q)] = toChoices(uploaded[String(q)]);
@@ -194,8 +222,11 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
           : `엑셀에서 ${data.filled}/${data.total}문항을 저장했습니다 — 비어 있는 문항을 확인해 주세요.`) +
           (extras.length ? ` (${extras.join(" · ")} 반영)` : ""),
       );
+      setLastSave({ ok: true, at: clockLabel(), text: `엑셀에서 정답 ${data.filled}/${data.total} 저장` });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "엑셀 업로드 중 오류가 발생했습니다.");
+      const text = err instanceof Error ? err.message : "엑셀 업로드 중 오류가 발생했습니다.";
+      setError(text);
+      setLastSave({ ok: false, at: clockLabel(), text });
     } finally {
       setUploading(false);
       if (excelRef.current) excelRef.current.value = "";
@@ -234,17 +265,29 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "정답을 저장하지 못했습니다.");
-      setMessage(
+      const text =
         filled === total
           ? `정답 ${filled}/${total} 저장 완료`
-          : `정답 ${filled}/${total} 저장됨 — 아직 ${total - filled}문항이 비어 있습니다.`,
-      );
+          : `정답 ${filled}/${total} 저장됨 — 아직 ${total - filled}문항이 비어 있습니다.`;
+      setMessage(text);
+      setLastSave({ ok: true, at: clockLabel(), text });
+      setSavedSnapshot(snapshot);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.");
+      const text = err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.";
+      setError(text);
+      setLastSave({ ok: false, at: clockLabel(), text });
     } finally {
       setSaving(false);
     }
   }
+
+  /** 저장 버튼 옆의 상태 칩 — 위·아래 버튼 둘 다에 붙는다 */
+  const saveChip = (
+    <span className={`save-state ${saveState.kind}`} role="status" aria-live="polite">
+      {saveState.kind === "saved" ? "✓ " : saveState.kind === "failed" ? "✕ " : ""}
+      {saveState.label}
+    </span>
+  );
 
   if (!exam) {
     return (
@@ -287,7 +330,11 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
 
       <ImportedExamSource exam={exam}/>
       {error ? <p className="form-error block">{error}</p> : null}
-      {message ? <p className="subtle">{message}</p> : null}
+      {message ? (
+        <p className="status-message" role="status">
+          {message}
+        </p>
+      ) : null}
 
       <div className="panel">
         <div className="section-heading wrap">
@@ -325,6 +372,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
               >
                 {uploading ? "업로드 중…" : "엑셀 업로드"}
               </button>
+              {saveChip}
               <button className="button primary" onClick={save} disabled={saving}>
                 {saving ? "저장 중…" : "정답 저장"}
               </button>
@@ -570,7 +618,8 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
         </div>
 
         {canEdit ? (
-          <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
+          <div className="save-row">
+            {saveChip}
             <button className="button primary" onClick={save} disabled={saving}>
               {saving ? "저장 중…" : "정답 저장"}
             </button>
