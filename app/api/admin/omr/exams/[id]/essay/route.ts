@@ -140,7 +140,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           scores[String(q)] = Math.min(value, max); // 배점 초과는 배점으로 조정
         });
 
-        await updateScan(scan.id, { essayScores: scores });
+        // 엑셀로 채운 점수는 선생님이 매긴 것 — 자동 채점이 덮어쓰지 않는다
+        await updateScan(scan.id, {
+          essayScores: scores,
+          essayScoreSources: Object.fromEntries(Object.keys(scores).map((q) => [q, "teacher" as const])),
+        });
         updated += 1;
       }
     }

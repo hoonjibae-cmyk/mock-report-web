@@ -4,14 +4,24 @@
 // 수렴한다. 같은 답끼리 묶으면 12~15번으로 줄고, 덤으로 "같은 답에 같은 점수"가
 // 구조적으로 보장된다 — 손으로 채점할 때 생기는 들쭉날쭉함이 없어진다.
 //
-// 자동 채점에는 비대칭이 있다. 이것이 이 파일의 설계를 지배한다.
+// 자동 채점에는 비대칭이 있다.
 //   전사 == 정답  → 거의 확실히 정답. OCR이 우연히 정답 문장을 만들 확률은 낮다.
 //   전사 != 정답  → 학생이 틀렸는지 우리가 잘못 읽었는지 구분할 수 없다.
-// 그래서 정답 판정만 자동으로 넘기고, 오답 판정은 절대 자동으로 넘기지 않는다.
-// 학생 점수를 깎는 방향의 실수는 되돌리기 어렵다.
+// 예전에는 그래서 정답 판정만 자동으로 넘기고 나머지는 사람에게 남겼다. 그러나
+// 60명 중 오답·백지가 40명이면 그 40명을 하나하나 0점으로 누르는 것이 일이었다.
+// 지금은 오답으로 보이는 답안과 백지도 **우선 0점**으로 매기되, 점수의 출처를
+// 'auto'로 남긴다. 자동 점수는 화면에서 '확인 필요'로 보이고, 선생님이 확인하거나
+// 고치면 'teacher'가 되어 자동 채점을 다시 돌려도 건드리지 않는다. 학생 점수를
+// 깎는 방향의 실수는 이렇게 사람의 눈을 한 번 거쳐 막는다.
 
 /** 채점 상태 — 점수가 어디서 왔는지 남긴다 */
 export type EssayGradeSource = "auto" | "teacher";
+
+/** 한 학생의 한 문항 현재 점수 — 자동 채점이 덮어써도 되는지 가르는 근거 */
+export interface CurrentScore {
+  score: number;
+  source: EssayGradeSource;
+}
 
 export interface EssayAnswer {
   scanId: string;
@@ -113,38 +123,68 @@ export function groupEssayAnswers(answers: EssayAnswer[], accepted: string[]): E
 }
 
 export interface AutoGradeResult {
-  /** {scanId: 점수} — 자동으로 매길 수 있는 것만 담는다 */
+  /** {scanId: 점수} — 이번에 자동으로 매긴(또는 다시 매긴) 것 */
   scores: Record<string, number>;
-  /** 자동 처리된 묶음의 key */
+  /** 자동 만점 처리된 묶음의 key */
   autoKeys: string[];
-  /** 사람이 봐야 하는 묶음 */
+  /** 자동 0점 처리된 묶음의 key — 확인이 필요한 쪽 */
+  zeroKeys: string[];
+  /** 점수를 정하지 못한 학생이 남은 묶음(정답이 없어 판단할 수 없는 답안) */
   pending: EssayGroup[];
+  /** 선생님이 매긴 점수가 있어 건드리지 않은 학생 수 */
+  kept: number;
 }
 
 /**
- * 확신할 수 있는 것만 자동으로 채점한다.
- *
- * 허용 답안과 정확히 일치하는 묶음만 만점 처리한다. 나머지는 — 오답으로
- * 보이더라도 — 손대지 않고 사람에게 넘긴다. 전사가 틀렸을 가능성과 학생이
- * 틀렸을 가능성을 구분할 방법이 없기 때문이다.
- *
- * 백지도 자동으로 0점 처리하지 않는다. 학생이 안 쓴 것과 우리가 못 읽은 것을
- * 구분할 수 없고, 0점은 되돌리기 어려운 판정이다.
+ * 한 답안의 자동 판정 — 정답과 일치하면 만점, 백지면 0점, 정답이 있는데 다르면
+ * 0점(오답으로 보임). 정답을 안 넣었는데 무언가 쓰여 있으면 판단할 수 없어 null.
  */
-export function autoGrade(groups: EssayGroup[], point: number): AutoGradeResult {
+export function autoVerdict(text: string, accepted: string[], point: number): number | null {
+  if (matchesAccepted(text, accepted)) return point;
+  if (!normalizeEssay(text)) return 0;
+  return accepted.length > 0 ? 0 : null;
+}
+
+/**
+ * 자동 채점 — 일치하면 만점, 오답으로 보이거나 백지면 우선 0점.
+ *
+ * 선생님이 매긴 점수(source 'teacher')는 절대 덮어쓰지 않는다. 자동으로 매겼던
+ * 점수는 다시 매긴다 — 정답을 고치거나 전사를 바로잡은 뒤 다시 돌리면 그에
+ * 맞게 바뀌어야 한다. 정답이 없는 문항은 백지만 0점이고 나머지는 사람에게 남긴다.
+ */
+export function autoGrade(
+  groups: EssayGroup[],
+  point: number,
+  options: { accepted?: string[]; current?: Record<string, CurrentScore | undefined> } = {},
+): AutoGradeResult {
+  const accepted = options.accepted ?? [];
+  const current = options.current ?? {};
   const scores: Record<string, number> = {};
   const autoKeys: string[] = [];
+  const zeroKeys: string[] = [];
   const pending: EssayGroup[] = [];
+  let kept = 0;
 
   for (const group of groups) {
-    if (group.matchesKey && !group.blank) {
-      for (const member of group.members) scores[member.scanId] = point;
-      autoKeys.push(group.key);
-    } else {
-      pending.push(group);
+    const verdict = group.blank ? 0 : group.matchesKey ? point : accepted.length > 0 ? 0 : null;
+    let scored = 0;
+    let unresolved = 0;
+    for (const member of group.members) {
+      if (current[member.scanId]?.source === "teacher") {
+        kept += 1;
+        continue;
+      }
+      if (verdict === null) {
+        unresolved += 1;
+        continue;
+      }
+      scores[member.scanId] = verdict;
+      scored += 1;
     }
+    if (scored > 0) (verdict === 0 ? zeroKeys : autoKeys).push(group.key);
+    if (unresolved > 0) pending.push(group);
   }
-  return { scores, autoKeys, pending };
+  return { scores, autoKeys, zeroKeys, pending, kept };
 }
 
 /** 한 묶음 전체에 같은 점수를 매긴다 */

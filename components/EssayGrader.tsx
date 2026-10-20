@@ -12,12 +12,19 @@ import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
  * 60명을 한 명씩 보면 60번 판단해야 하지만, 영작은 답이 몇 갈래로 수렴한다.
  * 같은 답끼리 묶어 한 번만 채점하면 판단 횟수가 크게 줄고, 덤으로 "같은 답에
  * 같은 점수"가 구조적으로 보장된다.
+ *
+ * 자동 채점은 일치하면 만점, 오답으로 보이거나 백지면 우선 0점이다. 자동 점수는
+ * 점선 테두리로 '아직 사람이 보지 않았다'를 드러내고, 묶음의 바탕색(초록·빨강·
+ * 주황)으로 맞고 틀림이 한눈에 갈린다. 선생님이 확인하거나 고치면 ✓가 붙고
+ * 자동 채점이 다시 돌아도 바뀌지 않는다.
  */
 
 interface Member {
   scanId: string;
   studentId: string | null;
   score: number | null;
+  /** 'auto' 자동 채점(확인 전) · 'teacher' 선생님이 확인·매김 · null 미채점 */
+  source: "auto" | "teacher" | null;
   hasCrop: boolean;
 }
 
@@ -43,9 +50,45 @@ interface Props {
   canEdit: boolean;
 }
 
+interface AutoSummary {
+  applied: number;
+  zeroed: number;
+  kept: number;
+}
+
 /** 배점 표시 — 균등 배분이면 100/45 같은 값이 나오므로 소수점을 정리한다 */
 function fmtPoint(value: number): string {
   return String(Math.round(value * 10) / 10);
+}
+
+type StateKind = "full" | "zero" | "partial" | "mixed" | "none";
+
+interface GroupState {
+  kind: StateKind;
+  /** 묶음 전원이 같은 점수일 때 그 점수 */
+  score: number | null;
+  /** 점수가 있는 학생이 모두 자동 채점(확인 전)인가 */
+  auto: boolean;
+}
+
+/** 묶음의 채점 상태 — 바탕색과 칩을 정한다 */
+function groupState(group: Group, point: number): GroupState {
+  const scored = group.members.filter((m) => m.score !== null);
+  if (scored.length === 0) return { kind: "none", score: null, auto: false };
+  const first = scored[0].score as number;
+  const allSame = scored.length === group.members.length && scored.every((m) => m.score === first);
+  const auto = scored.every((m) => m.source === "auto");
+  if (!allSame) return { kind: "mixed", score: null, auto };
+  const kind: StateKind = first >= point - 0.05 ? "full" : first <= 0.05 ? "zero" : "partial";
+  return { kind, score: first, auto };
+}
+
+function autoText(auto: AutoSummary | undefined): string {
+  if (!auto) return "";
+  return (
+    `만점 ${auto.applied} · 0점 ${auto.zeroed}` +
+    (auto.kept > 0 ? ` (선생님이 매긴 ${auto.kept}개는 그대로)` : "")
+  );
 }
 
 export default function EssayGrader({ exam, setupError, canEdit }: Props) {
@@ -102,22 +145,25 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
       if (!res.ok) throw new Error(data.error || "처리하지 못했습니다.");
       if (data.questions) setQuestions(data.questions);
       if (typeof data.studentCount === "number") setStudentCount(data.studentCount);
+      const auto = data.auto as AutoSummary | undefined;
       if (action === "transcribe") {
         setMessage(
           data.transcribed > 0
-            ? `${data.transcribed}개 답안을 읽었습니다. 손글씨와 대조해 확인해 주세요.`
+            ? `${data.transcribed}개 답안을 읽고 자동 채점했습니다 — ${autoText(auto)}. 0점은 손글씨를 확인해 주세요.`
             : (data.message ?? "새로 읽을 답안이 없습니다."),
         );
       } else if (action === "autoGrade") {
         setMessage(
-          data.applied > 0
-            ? `정답과 정확히 일치하는 ${data.applied}개 답안을 만점 처리했습니다.`
-            : "정답과 정확히 일치하는 답안이 없습니다. 아래에서 묶음별로 채점해 주세요.",
+          auto && auto.applied + auto.zeroed > 0
+            ? `자동 채점했습니다 — ${autoText(auto)}. 0점은 손글씨를 보고 확인해 주세요.`
+            : "자동으로 매길 답안이 없습니다. 정답을 넣었는지, 손글씨를 읽었는지 확인해 주세요.",
         );
       } else if (action === "gradeGroup") {
-        setMessage(`${data.graded}명에게 점수를 매겼습니다.`);
+        setMessage(`${data.graded}명에게 점수를 매겼습니다. 자동 채점이 다시 돌아도 바뀌지 않습니다.`);
       } else if (action === "setAnswer") {
-        setMessage("정답을 저장했습니다. ‘정답 일치분 자동 채점’을 누르면 반영됩니다.");
+        setMessage(`정답을 저장하고 자동 채점을 다시 했습니다 — ${autoText(auto)}.`);
+      } else if (action === "fixText") {
+        setMessage("전사를 고쳤습니다. 자동 점수였다면 고친 글로 다시 매겼습니다.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "처리 중 오류가 발생했습니다.");
@@ -146,14 +192,11 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
     );
   }
 
-  const totalGraded = questions.reduce(
-    (sum, q) => sum + q.groups.reduce((s, g) => s + g.members.filter((m) => m.score !== null).length, 0),
-    0,
-  );
-  const totalAnswers = questions.reduce(
-    (sum, q) => sum + q.groups.reduce((s, g) => s + g.members.length, 0),
-    0,
-  );
+  const allMembers = questions.flatMap((q) => q.groups.flatMap((g) => g.members));
+  const totalAnswers = allMembers.length;
+  const totalGraded = allMembers.filter((m) => m.score !== null).length;
+  const autoCount = allMembers.filter((m) => m.source === "auto").length;
+  const autoZero = allMembers.filter((m) => m.source === "auto" && (m.score ?? 0) <= 0.05).length;
 
   return (
     <div className="admin-shell">
@@ -207,8 +250,9 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                 className="button primary"
                 disabled={busy !== null}
                 onClick={() => post("autoGrade")}
+                title="정답과 일치하면 만점, 오답으로 보이거나 백지면 0점. 선생님이 매긴 점수는 그대로 둡니다."
               >
-                {busy === "autoGrade" ? "채점 중…" : "정답 일치분 자동 채점"}
+                {busy === "autoGrade" ? "채점 중…" : "자동 채점"}
               </button>
             </div>
           ) : null}
@@ -222,6 +266,11 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
             <span className="auto">
               채점 완료 <strong>{totalGraded}</strong>/{totalAnswers}답안
             </span>
+            {autoCount > 0 ? (
+              <span className={autoZero > 0 ? "need" : ""} title="자동으로 매겨 아직 사람이 확인하지 않은 답안">
+                자동 채점 <strong>{autoCount}</strong>답안{autoZero > 0 ? ` · 확인 필요(0점) ${autoZero}` : ""}
+              </span>
+            ) : null}
             {pendingReview > 0 ? (
               <span className="need">
                 검수 미완료 <strong>{pendingReview}</strong>장
@@ -229,11 +278,12 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
             ) : null}
           </div>
           <p className="review-note">
-            <strong>정답과 정확히 일치하는 답안만</strong> 자동으로 만점 처리합니다. 오답으로 보이는
-            답안과 백지는 자동으로 0점 처리하지 않습니다 — 학생이 틀린 것인지 글씨를 잘못 읽은
-            것인지 구분할 수 없기 때문입니다.{" "}
-            <strong>점수를 누르면 곧바로 저장됩니다</strong>(따로 저장 버튼이 없습니다). 저장된
-            묶음에는 <span className="essay-score-chip">✓ 점수</span>가 표시됩니다.
+            손글씨를 읽으면 바로 자동 채점합니다 — 정답과 일치하면 <strong>만점</strong>, 오답으로 보이거나
+            백지면 <strong>우선 0점</strong>입니다. 0점은 글씨를 잘못 읽었을 수 있으니 손글씨를 보고 확인해
+            주세요. 점선 테두리의 <span className="essay-score-chip zero auto">자동 0점</span>은 아직 사람이
+            보지 않은 점수이고, <strong>이대로 확인</strong>을 누르거나 점수를 고르면{" "}
+            <span className="essay-score-chip full">✓ 점수</span>가 되어 자동 채점을 다시 돌려도 바뀌지
+            않습니다. <strong>점수를 누르면 곧바로 저장됩니다</strong>(따로 저장 버튼이 없습니다).
             {pendingReview > 0 ? (
               <>
                 {" "}
@@ -241,6 +291,13 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                 <Link href={`/admin/omr/${exam.id}/scans`}>스캔 검수로 이동 →</Link>
               </>
             ) : null}
+          </p>
+          <p className="essay-legend" aria-label="색 설명">
+            <span><i style={{ background: "#2e9e5b" }} />만점</span>
+            <span><i style={{ background: "#d9534f" }} />0점</span>
+            <span><i style={{ background: "#d99a1e" }} />부분점수</span>
+            <span><i style={{ background: "#cfd6df" }} />미채점</span>
+            <span>점선 = 자동(확인 전) · ✓ = 선생님 확인</span>
           </p>
         </div>
       </div>
@@ -251,11 +308,10 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
         </div>
       ) : (
         questions.map((q) => {
-          const graded = q.groups.reduce(
-            (s, g) => s + g.members.filter((m) => m.score !== null).length,
-            0,
-          );
-          const total = q.groups.reduce((s, g) => s + g.members.length, 0);
+          const members = q.groups.flatMap((g) => g.members);
+          const graded = members.filter((m) => m.score !== null).length;
+          const total = members.length;
+          const unconfirmed = members.filter((m) => m.source === "auto").length;
           return (
             <div className="panel" key={q.no}>
               <div className="section-heading wrap">
@@ -265,6 +321,7 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                   </h3>
                   <p className="subtle" style={{ margin: "4px 0 0" }}>
                     {total}명 → <strong>{q.groups.length}개 묶음</strong> · 채점 {graded}/{total}
+                    {unconfirmed > 0 ? ` · 자동(확인 전) ${unconfirmed}` : ""}
                   </p>
                 </div>
               </div>
@@ -310,7 +367,8 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                       </p>
                     ) : (
                       <p className="essay-key-text muted">
-                        아직 없습니다. 넣어 두면 일치하는 답안이 자동으로 만점 처리됩니다.
+                        아직 없습니다. 넣어 두면 일치하는 답안은 만점, 나머지는 0점으로 자동 채점됩니다
+                        (정답이 없으면 백지만 0점입니다).
                       </p>
                     )}
                     {canEdit ? (
@@ -336,15 +394,21 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                 <div className="essay-groups">
                   {q.groups.map((group) => {
                     const groupId = `${q.no}:${group.key}`;
-                    const scored = group.members.filter((m) => m.score !== null);
-                    const currentScore = scored[0]?.score ?? null;
-                    const allSame =
-                      scored.length === group.members.length &&
-                      scored.every((m) => m.score === currentScore);
+                    const state = groupState(group, q.point);
                     const isOpen = openGroup === groupId;
+                    const chipLabel =
+                      state.kind === "none"
+                        ? "미채점"
+                        : state.kind === "mixed"
+                          ? "학생별로 다름"
+                          : state.kind === "full"
+                            ? `만점 ${fmtPoint(state.score ?? q.point)}점`
+                            : state.kind === "zero"
+                              ? "0점"
+                              : `${fmtPoint(state.score ?? 0)}점`;
                     return (
                       <div
-                        className={`essay-group${group.matchesKey ? " match" : ""}${group.blank ? " blank" : ""}`}
+                        className={`essay-group state-${state.kind}${group.matchesKey ? " match" : ""}${group.blank ? " blank" : ""}`}
                         key={groupId}
                       >
                         <div className="essay-group-head">
@@ -352,13 +416,22 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                           <p className="essay-text">
                             {group.blank ? <em>(백지)</em> : group.text}
                           </p>
-                          {group.matchesKey ? <span className="essay-badge">정답</span> : null}
-                          {allSame && currentScore !== null ? (
-                            // 누르는 즉시 저장되므로, 저장됐다는 사실을 눈에 보이게 남긴다
-                            <span className="essay-score-chip" title="저장되었습니다">
-                              ✓ {fmtPoint(currentScore)}점
-                            </span>
-                          ) : null}
+                          {group.matchesKey ? <span className="essay-badge">정답 일치</span> : null}
+                          {/* 누르는 즉시 저장되므로, 저장됐다는 사실과 출처를 눈에 보이게 남긴다 */}
+                          <span
+                            className={`essay-score-chip ${state.kind}${state.auto && state.kind !== "none" ? " auto" : ""}`}
+                            title={
+                              state.kind === "none"
+                                ? "아직 점수가 없습니다"
+                                : state.auto
+                                  ? "자동 채점 — 아직 사람이 확인하지 않았습니다"
+                                  : "선생님이 확인한 점수 — 자동 채점이 바꾸지 않습니다"
+                            }
+                          >
+                            {state.kind !== "none" && state.kind !== "mixed" ? (state.auto ? "자동 " : "✓ ") : ""}
+                            {chipLabel}
+                            {state.auto && state.kind === "zero" ? " — 확인 필요" : ""}
+                          </span>
                         </div>
 
                         {canEdit ? (
@@ -367,9 +440,11 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                             {[q.point, q.point / 2, 0].map((value) => {
                               // 화면에는 반올림해 보여 주되, 저장은 정확한 값으로 한다
                               const on =
-                                allSame &&
-                                currentScore !== null &&
-                                Math.abs(currentScore - value) < 0.05;
+                                state.kind !== "none" &&
+                                state.kind !== "mixed" &&
+                                !state.auto &&
+                                state.score !== null &&
+                                Math.abs(state.score - value) < 0.05;
                               return (
                                 <button
                                   key={fmtPoint(value)}
@@ -407,7 +482,12 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                                 const value = Number(raw);
                                 if (!Number.isFinite(value)) return;
                                 const clamped = Math.max(0, Math.min(q.point, value));
-                                if (allSame && currentScore === Math.round(clamped * 10) / 10) return;
+                                if (
+                                  !state.auto &&
+                                  state.score !== null &&
+                                  state.score === Math.round(clamped * 10) / 10
+                                )
+                                  return;
                                 e.target.value = "";
                                 void post(
                                   "gradeGroup",
@@ -416,6 +496,23 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                                 );
                               }}
                             />
+                            {state.auto && state.score !== null ? (
+                              // 자동 점수를 사람이 본 뒤 그대로 둔다 — 출처가 선생님으로 바뀌어 ✓가 된다
+                              <button
+                                className="button tiny secondary"
+                                disabled={busy !== null}
+                                title="자동으로 매긴 이 점수를 확인한 것으로 표시합니다"
+                                onClick={() =>
+                                  post(
+                                    "gradeGroup",
+                                    { questionNo: q.no, groupKey: group.key, score: state.score },
+                                    groupId,
+                                  )
+                                }
+                              >
+                                이대로 확인
+                              </button>
+                            ) : null}
                             <button
                               className="button tiny ghost"
                               onClick={() => setOpenGroup(isOpen ? null : groupId)}
@@ -434,7 +531,9 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                                   <div className="essay-crop-head">
                                     <strong>수험번호 {member.studentId ?? "—"}</strong>
                                     {member.score !== null ? (
-                                      <span>{fmtPoint(member.score)}점</span>
+                                      <span>
+                                        {fmtPoint(member.score)}점{member.source === "auto" ? " (자동)" : ""}
+                                      </span>
                                     ) : null}
                                   </div>
                                   {member.hasCrop ? (
