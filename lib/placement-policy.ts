@@ -3,6 +3,21 @@ import type {GenericReportData,AreaStat} from '@/lib/omr-report-types';
 export const PREFERRED_SCHEDULES=['화목','월수금','미정','상관없음'] as const;
 export type PreferredSchedule=(typeof PREFERRED_SCHEDULES)[number];
 export function preferredSchedule(value:unknown):PreferredSchedule|null{return PREFERRED_SCHEDULES.includes(value as PreferredSchedule)?value as PreferredSchedule:null;}
+
+/** 답안지 '재원 구분' 칸의 보기 — 판독기(omr/layout.py ENROLLMENT_LABELS)와 같은 순서 */
+export const ENROLLMENTS = ["재원생", "신규생"] as const;
+export type Enrollment = (typeof ENROLLMENTS)[number];
+export function enrollmentOf(value: unknown): Enrollment | null {
+  return ENROLLMENTS.includes(value as Enrollment) ? (value as Enrollment) : null;
+}
+
+/**
+ * 신규생 답안지인가 — 수험번호 칸에 쓴 것이 수험번호가 아니라 전화번호 뒤 4자리다.
+ * 표기가 없거나 못 읽은 답안지는 재원생으로 본다(수험번호로 찾는다).
+ */
+export function isNewStudentScan(scan: { enrollment?: string | null }): boolean {
+  return enrollmentOf(scan.enrollment) === "신규생";
+}
 export type RegistryPlacementStudent={status:string;regularEnrolled?:boolean;examOnly?:boolean;grade?:string};
 export function notificationDecision(student:RegistryPlacementStudent|undefined):'send'|'skip'|'hold'{
   if(!student||typeof student.regularEnrolled!=='boolean')return 'hold';

@@ -259,7 +259,10 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
       ? cfg.sheet_title.trim()
       : exam.title;
   const spec: OmrSheetSpec = {
-    ...(exam.examType === "placement" ? {preferred_schedule:true} : {}),
+    // 반배치고사는 선호 요일·재원 구분 칸이 있는 종이다. 재원 구분 칸이 들어오며
+    // 배치 지문이 바뀌었으므로(v1.51.0), 그 전에 뽑은 반배치고사 답안지는
+    // '다른 배치로 출력된 답안지'로 걸러진다 — 새로 뽑아야 한다.
+    ...(exam.examType === "placement" ? { preferred_schedule: true, enrollment_mark: true } : {}),
     exam_id: exam.id,
     title: sheetTitle,
     num_questions: exam.numQuestions,

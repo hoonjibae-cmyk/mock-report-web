@@ -30,6 +30,11 @@ export interface DirectoryStudent {
   status: string;
   schoolLevel?:string;
   regularEnrolled?:boolean;
+  /**
+   * OMR 리포트가 이 학생을 가리킬 열쇠 — 카드번호(수험번호), 없으면 Student-Card가 준
+   * `sc<학생ID>`. 수험번호 조회에 그대로 보내면 다시 찾아진다(Student-Card v1.95.0).
+   */
+  reportKey: string;
 }
 
 export interface LookupResult {
@@ -60,8 +65,10 @@ function normalize(raw: Record<string, unknown>, requested: string): DirectorySt
     }
     return "";
   };
+  const examNumber = pick("examNumber", "exam_number", "cardNo", "card_no", "studentKey", "student_key") || requested;
   return {
-    examNumber: pick("examNumber", "exam_number", "cardNo", "card_no", "studentKey", "student_key") || requested,
+    examNumber,
+    reportKey: pick("reportKey", "report_key") || examNumber,
     name: pick("name", "studentName", "student_name"),
     school: pick("school", "schoolName", "school_name"),
     grade: pick("grade", "schoolLevel", "school_level"),
@@ -138,6 +145,74 @@ export async function lookupStudents(examNumbers: string[]): Promise<LookupResul
         : "학생 관리 프로그램에 연결하지 못했습니다. STUDENT_API_URL 주소를 확인해 주세요.",
     };
   }
+}
+
+export interface PhoneLookupResult {
+  configured: boolean;
+  /** 전화번호 뒤 4자리 → 후보 학생들(지금 응시반인 재원생만). 물어본 번호는 모두 들어 있다 */
+  matches: Map<string, DirectoryStudent[]>;
+  error?: string;
+}
+
+/**
+ * 전화번호 뒤 4자리로 학생을 찾는다 — 반배치고사 신규생용.
+ *
+ * 신규생은 수험번호(출결번호)가 없어 답안지에 전화번호 뒤 4자리를 쓴다. Student-Card는
+ * **지금 응시반인 재원생** 가운데 학생·학부모 번호 뒤 4자리가 맞는 학생을 준다(v1.95.0).
+ * 형제가 같은 날 시험을 보면 후보가 둘 이상이다 — 고르는 것은 화면이 한다.
+ * 실패해도 예외를 던지지 않는다. 이름을 직접 입력하는 길은 늘 열려 있어야 한다.
+ */
+export async function lookupByPhoneSuffix(suffixes: string[]): Promise<PhoneLookupResult> {
+  const keys = [...new Set(suffixes.map((s) => String(s ?? "").trim()).filter((s) => /^\d{4}$/.test(s)))];
+  const empty: PhoneLookupResult = { configured: directoryConfigured(), matches: new Map(keys.map((k) => [k, []])) };
+  if (!empty.configured || keys.length === 0) return empty;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const key = process.env.STUDENT_API_KEY;
+  if (key) headers["x-api-key"] = key;
+
+  try {
+    const res = await fetch(`${base()}/api/students/phone-lookup`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ suffixes: keys }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { ...empty, error: "학생 관리 프로그램이 인증을 거부했습니다. STUDENT_API_KEY를 확인해 주세요." };
+    }
+    if (res.status === 404) {
+      return { ...empty, error: "학생 관리 프로그램에 전화번호 조회 API(/api/students/phone-lookup)가 아직 없습니다. Student-Card v1.95.0 이상이 필요합니다." };
+    }
+    if (!res.ok) return { ...empty, error: `전화번호로 학생을 찾지 못했습니다(${res.status}).` };
+
+    const data = (await res.json()) as { matches?: unknown };
+    return { configured: true, matches: parsePhoneMatches(data.matches, keys) };
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    return {
+      ...empty,
+      error: timedOut
+        ? "학생 관리 프로그램이 제때 응답하지 않았습니다(10초). 잠시 후 다시 시도해 주세요."
+        : "학생 관리 프로그램에 연결하지 못했습니다. STUDENT_API_URL 주소를 확인해 주세요.",
+    };
+  }
+}
+
+/** Student-Card의 phone-lookup 응답(matches 배열)을 뒤 4자리 → 후보 목록으로 */
+export function parsePhoneMatches(raw: unknown, suffixes: string[]): Map<string, DirectoryStudent[]> {
+  const matches = new Map<string, DirectoryStudent[]>(suffixes.map((k) => [k, []]));
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const { suffix, students } = entry as { suffix?: unknown; students?: unknown };
+    const key = String(suffix ?? "").trim();
+    if (!matches.has(key)) continue;
+    const list = (Array.isArray(students) ? students : [])
+      .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object")
+      .map((s) => normalize(s, ""));
+    matches.set(key, list);
+  }
+  return matches;
 }
 
 export interface RosterResult {

@@ -5,6 +5,7 @@ import { readScans } from "@/lib/omr-api";
 import { sheetSpecFor } from "@/lib/omr-exams";
 import { getVisibleExam } from "@/lib/exam-access";
 import { essayCountOf } from "@/lib/omr-scoring";
+import { enrollmentOf } from "@/lib/placement-policy";
 import {
   downloadScanFile,
   listScans,
@@ -254,6 +255,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
         previewPath: previewPaths.get(result.filename) ?? null,
         preferredSchedule: result.preferred_schedule ?? null,
+        // 반배치고사 재원 구분 — '신규생'이면 아래 studentId는 수험번호가 아니라 전화번호 뒤 4자리다
+        enrollment: enrollmentOf(result.enrollment),
         studentId: result.student_id ?? result.student_id_qr ?? result.student_id_bubbles ?? null,
         studentIdQr: result.student_id_qr ?? null,
         studentIdBubbles: result.student_id_bubbles ?? null,

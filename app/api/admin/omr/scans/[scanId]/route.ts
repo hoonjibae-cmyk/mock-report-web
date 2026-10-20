@@ -1,4 +1,4 @@
-import {preferredSchedule} from '@/lib/placement-policy';
+import { enrollmentOf, preferredSchedule } from "@/lib/placement-policy";
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { compactMark, toChoices, type MarkValue } from "@/lib/omr-answers";
@@ -33,6 +33,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ scanI
         return NextResponse.json({ error: "수험번호는 숫자만 입력해 주세요." }, { status: 400 });
       }
       patch.studentId = value || null;
+    }
+
+    // 반배치고사 재원 구분 — 답안지 표기를 사람이 바로잡는다. null은 '표기 없음'으로 되돌림.
+    if (body.enrollment !== undefined) {
+      const value = body.enrollment === null ? null : enrollmentOf(body.enrollment);
+      if (exam.examType !== "placement" || (body.enrollment !== null && !value)) {
+        return NextResponse.json({ error: "재원 구분을 확인해 주세요." }, { status: 400 });
+      }
+      patch.enrollment = value;
+    }
+
+    // 신규생을 학생 관리 프로그램에서 맞춘 열쇠 — 카드번호(숫자) 또는 sc<학생ID>. null이면 되돌림.
+    if (body.studentKey !== undefined) {
+      const value = body.studentKey === null ? null : String(body.studentKey ?? "").trim();
+      if (value && !/^(\d{1,9}|sc\d{1,12})$/.test(value)) {
+        return NextResponse.json({ error: "학생 열쇠가 올바르지 않습니다." }, { status: 400 });
+      }
+      patch.studentKey = value || null;
     }
 
     if (body.answers !== undefined) {

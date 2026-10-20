@@ -7,45 +7,69 @@
 // 값도 플래그도 없으면 판독 당시 선호 요일 칸을 읽지 않은 답안지다 — 칸이
 // 생기기 전에 올렸거나, 판독 서버가 갱신되기 전에 올린 경우.
 
-import { preferredSchedule, type PreferredSchedule } from "@/lib/placement-policy";
+import {
+  enrollmentOf,
+  preferredSchedule,
+  type Enrollment,
+  type PreferredSchedule,
+} from "@/lib/placement-policy";
 
-export type ScheduleRead =
+/** 보기 하나를 고르는 칸(선호 요일·재원 구분)을 판독기가 어떻게 읽었는지 */
+export type FieldRead<T> =
   /** 확실한 단독 표기 — 판독기가 값으로 확정했다 */
-  | { kind: "read"; value: PreferredSchedule }
+  | { kind: "read"; value: T }
   /** 흐리거나 겹쳐 확정하지 못함 — candidate는 가장 진한 칸(없을 수도 있다) */
-  | {
-      kind: "uncertain";
-      status: "faint" | "multiple";
-      candidate: PreferredSchedule | null;
-      selected: PreferredSchedule[];
-    }
+  | { kind: "uncertain"; status: "faint" | "multiple"; candidate: T | null; selected: T[] }
   /** 아무것도 칠하지 않은 것이 확실하다 */
   | { kind: "blank" }
-  /** 판독 당시 선호 요일 칸을 읽지 않았다(값도 플래그도 없다) */
+  /** 판독 당시 그 칸을 읽지 않았다(값도 플래그도 없다) */
   | { kind: "unread" };
+
+export type ScheduleRead = FieldRead<PreferredSchedule>;
+export type EnrollmentRead = FieldRead<Enrollment>;
 
 export interface ScheduleReadable {
   preferredSchedule?: string | null;
   reviewFlags?: Array<Record<string, unknown>> | null;
 }
 
+export interface EnrollmentReadable {
+  enrollment?: string | null;
+  reviewFlags?: Array<Record<string, unknown>> | null;
+}
+
+/** 판독기가 남긴 플래그의 type — 반배치고사 칸들 */
+export const PLACEMENT_FLAG_TYPES = new Set(["preferred_schedule", "enrollment"]);
+
+export function flagOfType(
+  flags: Array<Record<string, unknown>> | null | undefined,
+  type: string,
+): Record<string, unknown> | null {
+  return (flags ?? []).find((flag) => flag && flag.type === type) ?? null;
+}
+
 export function scheduleFlagOf(
   flags: Array<Record<string, unknown>> | null | undefined,
 ): Record<string, unknown> | null {
-  return (flags ?? []).find((flag) => flag && flag.type === "preferred_schedule") ?? null;
+  return flagOfType(flags, "preferred_schedule");
 }
 
-export function scheduleRead(scan: ScheduleReadable): ScheduleRead {
-  const value = preferredSchedule(scan.preferredSchedule);
-  if (value) return { kind: "read", value };
+function readChoiceField<T>(
+  value: unknown,
+  flags: Array<Record<string, unknown>> | null | undefined,
+  flagType: string,
+  parse: (raw: unknown) => T | null,
+): FieldRead<T> {
+  const read = parse(value);
+  if (read !== null) return { kind: "read", value: read };
 
-  const flag = scheduleFlagOf(scan.reviewFlags);
+  const flag = flagOfType(flags, flagType);
   if (!flag) return { kind: "unread" };
 
-  const candidate = preferredSchedule(flag.candidate);
+  const candidate = parse(flag.candidate);
   const selected = (Array.isArray(flag.selected) ? flag.selected : [])
-    .map((entry) => preferredSchedule(entry))
-    .filter((entry): entry is PreferredSchedule => entry !== null);
+    .map((entry) => parse(entry))
+    .filter((entry): entry is T => entry !== null);
 
   if (flag.status === "multiple") {
     return { kind: "uncertain", status: "multiple", candidate, selected };
@@ -54,6 +78,31 @@ export function scheduleRead(scan: ScheduleReadable): ScheduleRead {
   // 빈칸과 흐린 표기를 가르지 못하므로 '확인 필요'로 둔다.
   if (flag.status === "blank" && flag.certain === true) return { kind: "blank" };
   return { kind: "uncertain", status: "faint", candidate, selected };
+}
+
+export function scheduleRead(scan: ScheduleReadable): ScheduleRead {
+  return readChoiceField(scan.preferredSchedule, scan.reviewFlags, "preferred_schedule", preferredSchedule);
+}
+
+export function enrollmentRead(scan: EnrollmentReadable): EnrollmentRead {
+  return readChoiceField(scan.enrollment, scan.reviewFlags, "enrollment", enrollmentOf);
+}
+
+/** 재원 구분 칸 아래에 붙는 한 줄 안내 — 확정값이 아닐 때만 쓴다(확정값은 토글이 보여 준다) */
+export function enrollmentReadLabel(read: EnrollmentRead): string {
+  switch (read.kind) {
+    case "read":
+      return `답안지 표기 ‘${read.value}’`;
+    case "blank":
+      return "재원 구분 표기 없음 — 재원생으로 봅니다";
+    case "unread":
+      return "판독 때 재원 구분 칸을 읽지 않은 답안지 — 재원생으로 봅니다";
+    case "uncertain":
+      if (read.status === "multiple") return "재원생·신규생 둘 다 표기 — 하나를 고르세요";
+      return read.candidate
+        ? `표기가 흐려 ‘${read.candidate}’으로 보임 — 맞으면 눌러 주세요`
+        : "재원 구분을 읽지 못함(비었거나 흐림) — 재원생으로 봅니다";
+  }
 }
 
 /** 선호 요일 드롭다운에 미리 넣을 값 — 확정값, 없으면 가장 진한 칸, 그것도 없으면 빈칸 */
@@ -72,7 +121,7 @@ export function scheduleReadLabel(read: ScheduleRead): string {
     case "blank":
       return "답안지에 표기 없음 — 직접 고르세요";
     case "unread":
-      return "판독 때 선호 요일 칸을 읽지 않은 답안지 — ‘답안지에서 선호 요일 다시 읽기’";
+      return "판독 때 선호 요일 칸을 읽지 않은 답안지 — ‘답안지에서 재원 구분·선호 요일 다시 읽기’";
     case "uncertain":
       if (read.status === "multiple") {
         const marks = read.selected.length > 0 ? `(${read.selected.join(" · ")})` : "";
@@ -125,14 +174,15 @@ export function rereadGroups(
   return { groups: [...byPath.values()], missing };
 }
 
-/** 기존 플래그에서 선호 요일 것만 새 판독 결과로 갈아 끼운다(문항·수험번호 플래그는 그대로) */
+/** 기존 플래그에서 반배치고사 칸(선호 요일·재원 구분) 것만 새 판독 결과로 갈아 끼운다(문항·수험번호 플래그는 그대로) */
 export function mergeScheduleFlags(
   existing: Array<Record<string, unknown>> | null | undefined,
   fresh: Array<Record<string, unknown>> | null | undefined,
 ): Array<Record<string, unknown>> {
+  const placement = (flag: Record<string, unknown>) => Boolean(flag) && PLACEMENT_FLAG_TYPES.has(String(flag.type));
   return [
-    ...(existing ?? []).filter((flag) => !flag || flag.type !== "preferred_schedule"),
-    ...(fresh ?? []).filter((flag) => flag && flag.type === "preferred_schedule"),
+    ...(existing ?? []).filter((flag) => !placement(flag)),
+    ...(fresh ?? []).filter((flag) => placement(flag)),
   ];
 }
 

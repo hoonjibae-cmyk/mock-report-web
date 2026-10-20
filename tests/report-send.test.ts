@@ -38,6 +38,7 @@ function report(over: Partial<SendReportRow> = {}): SendReportRow {
 function student(over: Partial<DirectoryStudent> = {}): DirectoryStudent {
   return {
     examNumber: "1023",
+    reportKey: "1023",
     name: "김민준",
     school: "목운중",
     grade: "3",
@@ -304,8 +305,8 @@ test("쌍둥이 — 이름이 다른 두 학생은 같은 학부모 번호로 �
 
 test("이미 보낸 성적표는 서버가 한 번 더 막는다 — allowResend 가 있어야 다시 나간다", () => {
   const directory = new Map<string, DirectoryStudent>([
-    ["1", { examNumber: "1", name: "김하늘", school: "", grade: "", parentPhone: "010-1111-2222", studentPhone: "", className: "", teacher: "", status: "재원" }],
-    ["2", { examNumber: "2", name: "이바다", school: "", grade: "", parentPhone: "010-3333-4444", studentPhone: "", className: "", teacher: "", status: "재원" }],
+    ["1", { examNumber: "1", reportKey: "1", name: "김하늘", school: "", grade: "", parentPhone: "010-1111-2222", studentPhone: "", className: "", teacher: "", status: "재원" }],
+    ["2", { examNumber: "2", reportKey: "2", name: "이바다", school: "", grade: "", parentPhone: "010-3333-4444", studentPhone: "", className: "", teacher: "", status: "재원" }],
   ]);
   const sentBefore: ReportMessage = {
     id: "m1", reportId: "r1", examId: "e", recipientType: "parent", phoneMasked: "010-****-2222",

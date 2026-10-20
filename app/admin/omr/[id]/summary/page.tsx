@@ -3,7 +3,7 @@ import ExamSummary from "@/components/ExamSummary";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getVisibleExam } from "@/lib/exam-access";
 import { buildSummaryRows, summaryQuestions, type ExamSummaryData, type SummaryStudent } from "@/lib/exam-summary";
-import { listScans } from "@/lib/omr-scans";
+import { listScans, scanKey } from "@/lib/omr-scans";
 import { essayCountOf, maxScore, scoreExam, type ScoreExamResult } from "@/lib/omr-scoring";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
 import { listReviewStudents } from "@/lib/reports";
@@ -50,7 +50,7 @@ export default async function ExamSummaryPage(context: { params: Promise<{ id: s
     });
   }
   // 성적표가 아직 없는 학생은 학생 관리 프로그램에서 이름만 — 연락처는 쓰지 않는다
-  const missing = [...new Set(reviewed.map((scan) => scan.studentId as string).filter((key) => !students.has(key)))];
+  const missing = [...new Set(reviewed.map((scan) => scanKey(scan) as string).filter((key) => !students.has(key)))];
   let directoryError: string | null = null;
   if (missing.length > 0 && directoryConfigured()) {
     const looked = await lookupStudents(missing);

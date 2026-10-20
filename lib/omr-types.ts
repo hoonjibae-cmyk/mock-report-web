@@ -192,7 +192,10 @@ export interface OmrExam {
 
 // Python OMR API `/generate` 요청 스펙
 export interface OmrSheetSpec {
+  /** 선호 요일 칸(반배치고사) */
   preferred_schedule?: boolean;
+  /** 재원 구분(재원생/신규생) 칸(반배치고사) — 켜면 좌측 패널이 재배치된다(배치 지문이 바뀐다) */
+  enrollment_mark?: boolean;
   exam_id: string;
   title: string;
   num_questions: number;

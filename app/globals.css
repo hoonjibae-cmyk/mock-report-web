@@ -2647,3 +2647,13 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .schedule-read.uncertain { color: #8a5a00; font-weight: 700; }
 .schedule-read.blank { color: #8a5a00; }
 .schedule-read.unread { color: #b3261e; }
+
+/* 반배치고사 — 수험번호 칸 아래 재원 구분 토글과 신규생 맞추기 */
+.enrollment-cell { margin-top: 7px; display: grid; gap: 5px; justify-items: start; }
+.enrollment-seg button { padding: 3px 9px; font-size: 11.5px; }
+.newcomer-match { display: grid; gap: 4px; justify-items: start; max-width: 240px; }
+.newcomer-match select {
+  max-width: 240px; padding: 5px 7px; font-size: 12px; color: var(--ink);
+  border: 1px solid #cfd8e5; border-radius: 8px; background: #fff;
+}
+.newcomer-match .schedule-read { margin-top: 0; white-space: normal; }

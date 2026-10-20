@@ -735,6 +735,19 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                                 }
                               />
                             </label>
+                            {/* 반배치고사 — 답안지 '재원 구분' 칸. 신규생이면 위 칸은 수험번호가 아니라 전화번호 뒤 4자리다 */}
+                            {exam?.examType === "placement" && scan.enrollment ? (
+                              <span
+                                className={`status-chip ${scan.enrollment === "신규생" ? "inactive" : "active"}`}
+                                title={
+                                  scan.enrollment === "신규생"
+                                    ? "답안지 '재원 구분'에 신규생으로 표기 — 수험번호 칸에는 전화번호 뒤 4자리를 썼습니다. 성적표 화면에서 학생 관리 프로그램의 학생과 맞춥니다."
+                                    : "답안지 '재원 구분'에 재원생으로 표기"
+                                }
+                              >
+                                {scan.enrollment === "신규생" ? "신규생 · 전화 뒤 4자리" : "재원생"}
+                              </span>
+                            ) : null}
 
                             <span className="subtle">
                               표기 {marked}/{total}

@@ -89,6 +89,16 @@ export interface OmrScan {
    */
   listeningMode: ListeningMode | null;
   preferredSchedule?: string | null;
+  /**
+   * 반배치고사 '재원 구분' 칸 — '재원생' | '신규생' | null(비었거나 못 읽음 → 재원생으로 본다).
+   * 신규생은 수험번호(출결번호)가 없어 student_id 칸에 전화번호 뒤 4자리가 들어 있다.
+   */
+  enrollment?: string | null;
+  /**
+   * 신규생을 학생 관리 프로그램에서 맞춘 뒤의 학생 열쇠(카드번호, 없으면 sc<학생ID>).
+   * 성적표·반배정 요청은 이 열쇠로 학생을 가리킨다. 비어 있으면 student_id가 열쇠다(scanKey).
+   */
+  studentKey?: string | null;
   /** 'auto' = 시스템 자동 통과, 그 외에는 확인한 사용자 ID */
   reviewedBy: string | null;
   readError: string | null;
@@ -116,13 +126,15 @@ interface ScanRow {
   reviewed_by: string | null;
   listening_mode?: string | null;
   preferred_schedule?: string | null;
+  enrollment?: string | null;
+  student_key?: string | null;
   read_error: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_score_sources,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,preferred_schedule,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_score_sources,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,preferred_schedule,enrollment,student_key,read_error,created_at,updated_at";
 
 /** 저장된 출처 중 아는 값만 — 엉뚱한 값이 들어 있어도 화면이 죽지 않게 */
 function sourcesOf(value: Record<string, unknown> | null | undefined): Record<string, EssayGradeSource> {
@@ -131,6 +143,16 @@ function sourcesOf(value: Record<string, unknown> | null | undefined): Record<st
     if (source === "auto" || source === "teacher") out[key] = source;
   }
   return out;
+}
+
+/**
+ * 성적표·반배정이 학생을 가리키는 열쇠.
+ *
+ * 보통은 답안지에 마킹한 수험번호(출결번호)다. 반배치고사 신규생은 그 칸에 전화번호
+ * 뒤 4자리를 쓰므로, 학생 관리 프로그램에서 맞춘 열쇠(studentKey)가 있으면 그것이다.
+ */
+export function scanKey(scan: { studentId: string | null; studentKey?: string | null }): string | null {
+  return (scan.studentKey ?? "").trim() || scan.studentId;
 }
 
 function mapScan(row: ScanRow): OmrScan {
@@ -142,6 +164,8 @@ function mapScan(row: ScanRow): OmrScan {
     previewPath: row.preview_path ?? null,
     studentId: row.student_id,
     preferredSchedule: row.preferred_schedule ?? null,
+    enrollment: row.enrollment ?? null,
+    studentKey: row.student_key ?? null,
     studentIdQr: row.student_id_qr,
     studentIdBubbles: row.student_id_bubbles,
     answers: row.answers ?? {},
@@ -162,6 +186,7 @@ function mapScan(row: ScanRow): OmrScan {
 
 export interface UpsertScanInput {
   preferredSchedule?:string|null;
+  enrollment?: string | null;
   examId: string;
   filename: string;
   scanPath?: string | null;
@@ -191,6 +216,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
         preview_path: input.previewPath ?? null,
         student_id: input.studentId ?? null,
         preferred_schedule: input.preferredSchedule ?? null,
+        enrollment: input.enrollment ?? null,
         student_id_qr: input.studentIdQr ?? null,
         student_id_bubbles: input.studentIdBubbles ?? null,
         answers: input.answers ?? {},
@@ -227,7 +253,9 @@ export async function getScan(id: string): Promise<OmrScan | null> {
 
 export interface UpdateScanInput {
   preferredSchedule?:string|null;
-  /** 판독 플래그 전체를 갈아 끼운다 — 선호 요일만 다시 읽을 때 쓴다 */
+  enrollment?: string | null;
+  studentKey?: string | null;
+  /** 판독 플래그 전체를 갈아 끼운다 — 선호 요일·재원 구분만 다시 읽을 때 쓴다 */
   reviewFlags?: Array<Record<string, unknown>>;
   studentId?: string | null;
   answers?: Record<string, MarkValue>;
@@ -246,6 +274,8 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   const patch: Record<string, unknown> = {};
   if (input.studentId !== undefined) patch.student_id = input.studentId;
   if (input.preferredSchedule !== undefined) patch.preferred_schedule = input.preferredSchedule;
+  if (input.enrollment !== undefined) patch.enrollment = input.enrollment;
+  if (input.studentKey !== undefined) patch.student_key = input.studentKey;
   if (input.reviewFlags !== undefined) patch.review_flags = input.reviewFlags;
   if (input.answers !== undefined) patch.answers = input.answers;
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;

@@ -90,6 +90,8 @@ export interface ReadResultRow {
   student_id_qr: string | null;
   student_id_bubbles: string | null;
   preferred_schedule?: string | null;
+  /** 반배치고사 '재원 구분' 칸 — '재원생' | '신규생' | null(비었거나 흐림·겹침) */
+  enrollment?: string | null;
   exam_id: string | null;
   /** 답안지 QR에 새겨진 레이아웃 지문(구형 답안지는 null) */
   sheet_layout?: string | null;

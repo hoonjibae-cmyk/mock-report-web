@@ -1,11 +1,11 @@
 import {requestPlacement,placementStatuses} from '@/lib/placement-service';
-import {preferredSchedule,placementGrade} from '@/lib/placement-policy';
+import { isNewStudentScan, placementGrade, preferredSchedule } from "@/lib/placement-policy";
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createPublicToken, hashPin } from "@/lib/crypto";
 import { getVisibleExam } from "@/lib/exam-access";
-import { listScans } from "@/lib/omr-scans";
+import { listScans, scanKey } from "@/lib/omr-scans";
 import { scoreExam, maxScore, essayCountOf } from "@/lib/omr-scoring";
 import {
   attachClassification,
@@ -46,7 +46,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     const scans = await listScans(id);
     const keys = [
-      ...new Set(scans.map((scan) => scan.studentId).filter((v): v is string => Boolean(v))),
+      ...new Set(scans.map((scan) => scanKey(scan)).filter((v): v is string => Boolean(v))),
     ];
 
     const supabase = getSupabaseAdmin();
@@ -141,11 +141,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     // 같은 수험번호 답안지가 두 장 이상이면 마지막 것만 쓴다 — 한 학생에게 성적표는 하나다.
     const latestByKey = new Map<string, (typeof reviewedAll)[number]>();
     for (const scan of [...reviewedAll].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
-      latestByKey.set(scan.studentId as string, scan);
+      latestByKey.set(scanKey(scan) as string, scan);
     }
     const reviewed = [...latestByKey.values()].filter(scan=>exam.examType!=='placement'||inputs.some(input=>input.scanId===scan.id));
     const duplicateKeys = [...latestByKey.keys()].filter(
-      (key) => reviewedAll.filter((scan) => scan.studentId === key).length > 1,
+      (key) => reviewedAll.filter((scan) => scanKey(scan) === key).length > 1,
     );
 
     const nameByScan = new Map<string, StudentInput>();
@@ -170,6 +170,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if(exam.examType==='placement')for(const scan of reviewed){
       const input=nameByScan.get(scan.id)!;
       if(!placementGrade(input.grade??'')||!preferredSchedule(input.preferredSchedule??scan.preferredSchedule))return NextResponse.json({error:`${input.name}: 학년과 선호 요일을 선택해 주세요.`},{status:400});
+      // 신규생의 수험번호 칸은 전화번호 뒤 4자리라 그대로는 학생을 가리킬 수 없다 —
+      // 학생 관리 프로그램에서 맞춘 열쇠가 있어야 성적표·반배정 요청이 그 학생에게 간다.
+      if (isNewStudentScan(scan) && !(scan.studentKey ?? "").trim()) {
+        return NextResponse.json(
+          { error: `${input.name}: 신규생은 '학생 정보 불러오기'로 학생 관리 프로그램의 학생과 먼저 맞춰 주세요.` },
+          { status: 400 },
+        );
+      }
     }
 
     // 주관식은 채점하지 않으면 **조용히 0점**으로 들어간다. 그대로 성적표를
@@ -207,7 +215,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     // 성장 추이: 같은 student_key + 같은 시험 유형의 이전 C_generic 성적표
     // + 재생성 시 이전 성적표에 작성해 둔 담임 개별 코멘트 승계
-    const keys = [...new Set(reviewed.map((scan) => scan.studentId as string))];
+    const keys = [...new Set(reviewed.map((scan) => scanKey(scan) as string))];
     const growthByKey = new Map<string, GrowthPoint[]>();
     const commentByKey = new Map<string, unknown>();
     // 이 시험에 이미 살아 있는 성적표(학생마다 가장 최근 것) — 다시 만들지 않고 제자리에서
@@ -261,7 +269,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const prepared = reviewed.map((scan) => {
       const input = nameByScan.get(scan.id)!;
       const result = scoredByScan.get(scan.id)!;
-      const key = scan.studentId as string;
+      const key = scanKey(scan) as string;
       // 기록이 아무리 쌓여도 최근 GROWTH_LIMIT 회차만 싣는다.
       const growth = recentGrowth(growthByKey.get(key) ?? [], {
         examId: id,
