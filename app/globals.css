@@ -350,6 +350,14 @@ button { cursor: pointer; }
 .admin-table td { padding: 12px; border-bottom: 1px solid #e8edf3; vertical-align: middle; font-size: 13px; }
 .admin-table td > strong, .admin-table td > span { display: block; }
 .admin-table td > span { color: var(--muted); font-size: 11px; margin-top: 2px; }
+/* 저장 버튼 옆 상태 칩 — 저장 중 / 실패 / 변경 있음 / 저장됨 / 변경 없음 */
+.save-state { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 99px; font-size: 12.5px; font-weight: 700; white-space: nowrap; max-width: 100%; }
+.save-state.saving { color: #1558b0; background: #e8f1fd; }
+.save-state.saved { color: var(--success); background: var(--success-soft); }
+.save-state.dirty { color: #8a5a00; background: #fff4e0; }
+.save-state.failed { color: var(--danger); background: var(--danger-soft); white-space: normal; }
+.save-state.clean { color: var(--muted); background: #f1f3f6; }
+.save-row { margin-top: 16px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; }
 .status-chip { display: inline-flex !important; width: fit-content; padding: 3px 8px; border-radius: 99px; font-size: 11px !important; font-weight: 800; margin: 0 0 2px !important; }
 .status-chip.active { color: var(--success); background: var(--success-soft); }
 .status-chip.inactive { color: var(--danger); background: var(--danger-soft); }
