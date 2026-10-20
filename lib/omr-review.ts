@@ -11,6 +11,7 @@
 
 import { isMultiAnswer, toChoices, type AnswerKeyValue, type MarkValue } from "@/lib/omr-answers";
 import type { OmrScan } from "@/lib/omr-scans";
+import { isNewStudentScan } from "@/lib/placement-policy";
 
 /** 사람이 봐야 하는 이유 — 화면에 그대로 띄운다. */
 export type ReviewReasonCode =
@@ -24,7 +25,8 @@ export type ReviewReasonCode =
   | "unknownId"
   | "uncertainQuestions"
   | "unexpectedMultiMark"
-  | "allBlank";
+  | "allBlank"
+  | "enrollmentUnclear";
 
 export interface ReviewReason {
   code: ReviewReasonCode;
@@ -134,9 +136,15 @@ export function reviewVerdict(scan: OmrScan, ctx: ReviewContext): ReviewVerdict 
     if (ctx.duplicateIds?.has(normalizeId(id))) {
       add("duplicateId", `수험번호 ${id}가 다른 답안지에도 있습니다. 둘 중 하나는 잘못 읽혔습니다.`);
     }
-    if (ctx.knownIds && ctx.knownIds.size > 0 && !ctx.knownIds.has(normalizeId(id))) {
+    // 신규생(반배치고사)의 수험번호 칸은 전화번호 뒤 4자리다 — 명부의 수험번호와 맞출 수 없다.
+    // 그 학생은 성적표 화면에서 전화번호로 찾는다.
+    if (ctx.knownIds && ctx.knownIds.size > 0 && !isNewStudentScan(scan) && !ctx.knownIds.has(normalizeId(id))) {
       add("unknownId", `수험번호 ${id}를 학생 명부에서 찾지 못했습니다.`);
     }
+  }
+  // 재원 구분(반배치고사)에 둘 다 표기되어 있으면 수험번호를 어느 쪽으로 읽을지 사람이 정해야 한다
+  if ((scan.reviewFlags ?? []).some((flag) => flag && flag.type === "enrollment" && flag.status === "multiple")) {
+    add("enrollmentUnclear", "재원 구분에 재원생·신규생이 둘 다 표기되어 있습니다.");
   }
   if (conf.idUncertain) add("idUncertain", "수험번호 마킹이 흐려 확실하지 않습니다.");
   if (conf.idConflict) {

@@ -4,7 +4,7 @@ import { getVisibleExam } from "@/lib/exam-access";
 import { readScans, type ReadResultRow } from "@/lib/omr-api";
 import { sheetSpecFor } from "@/lib/omr-exams";
 import { downloadScanFile, listScans, updateScan } from "@/lib/omr-scans";
-import { preferredSchedule } from "@/lib/placement-policy";
+import { enrollmentOf, preferredSchedule } from "@/lib/placement-policy";
 import {
   EMPTY_REREAD_SUMMARY,
   mergeScheduleFlags,
@@ -93,7 +93,8 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       }
       const value = preferredSchedule(result.preferred_schedule);
       const reviewFlags = mergeScheduleFlags(scan.reviewFlags, result.review_flags ?? []);
-      await updateScan(scan.id, { preferredSchedule: value, reviewFlags });
+      // 재원 구분 칸도 같은 답안지에 있다 — 함께 다시 읽어 둔다
+      await updateScan(scan.id, { preferredSchedule: value, enrollment: enrollmentOf(result.enrollment), reviewFlags });
       summary.updated += 1;
       summary[scheduleRead({ preferredSchedule: value, reviewFlags }).kind] += 1;
     }

@@ -3,7 +3,7 @@
 
 import { sameChoices, toChoices, type MarkValue } from "@/lib/omr-answers";
 import type { OmrExam } from "@/lib/omr-types";
-import type { OmrScan } from "@/lib/omr-scans";
+import { scanKey, type OmrScan } from "@/lib/omr-scans";
 import { listeningQuestions, resolveListeningMode } from "@/lib/listening";
 import type { AreaStat, Difficulty, GenericItemResult } from "@/lib/omr-report-types";
 
@@ -262,7 +262,8 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
 
     partials.push({
       scanId: scan.id,
-      studentKey: scan.studentId ?? "",
+      // 신규생(반배치고사)은 학생 관리 프로그램에서 맞춘 열쇠 — 수험번호 칸은 전화번호 뒤 4자리다
+      studentKey: scanKey(scan) ?? "",
       objectiveRaw: round1(objectiveRaw),
       essayRaw: round1(essayRaw),
       raw: round1(objectiveRaw + essayRaw),

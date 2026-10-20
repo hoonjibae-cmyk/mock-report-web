@@ -1,6 +1,20 @@
 "use client";
-import { PREFERRED_SCHEDULES, placementGrade } from "@/lib/placement-policy";
-import { rereadMessage, scheduleRead, scheduleReadLabel, suggestedSchedule } from "@/lib/schedule-read";
+import {
+  ENROLLMENTS,
+  PREFERRED_SCHEDULES,
+  enrollmentOf,
+  isNewStudentScan,
+  placementGrade,
+  type Enrollment,
+} from "@/lib/placement-policy";
+import {
+  enrollmentRead,
+  enrollmentReadLabel,
+  rereadMessage,
+  scheduleRead,
+  scheduleReadLabel,
+  suggestedSchedule,
+} from "@/lib/schedule-read";
 
 import {
   isListeningAbsentCandidate,
@@ -14,7 +28,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import { EXAM_TYPE_LABELS, mockSubjectOf, type OmrExam } from "@/lib/omr-types";
-import type { OmrScan } from "@/lib/omr-scans";
+import { scanKey, type OmrScan } from "@/lib/omr-scans";
+
+/** 학생 관리 프로그램이 준 학생 한 명(서버가 정규화한 모양) */
+interface DirectoryInfo {
+  /** 이 학생을 가리킬 열쇠 — 카드번호, 없으면 sc<학생ID> */
+  reportKey: string;
+  examNumber: string;
+  name: string;
+  school: string;
+  grade: string;
+  schoolLevel?: string;
+  parentPhone: string;
+  teacher?: string;
+  className?: string;
+  status?: string;
+}
 
 interface Props {
   exam: OmrExam | null;
@@ -97,14 +126,56 @@ export default function OmrReportBuilder({
   const isPlacement=exam?.examType==='placement';
   const [placementReports,setPlacementReports]=useState<Array<{reportId:string;name:string;preferredSchedule:string;notification:string;classes:Array<{id:string;name:string;url:string}>}>>([]);
   const [rereading, setRereading] = useState(false);
+  // 신규생(반배치고사) — 답안지의 전화번호 뒤 4자리로 응시반에서 찾은 후보 {답안지ID: 후보들}.
+  // 아직 안 찾아본 답안지는 키가 없다.
+  const [candidates, setCandidates] = useState<Record<string, DirectoryInfo[]>>({});
+  // 재원 구분·학생 맞추기를 저장하는 중인 답안지
+  const [matching, setMatching] = useState<string | null>(null);
   const isMock = exam?.examType === "mock";
   const mockSubject = mockSubjectOf(exam?.subject);
   const referenceReady = !isMock || Boolean(reference);
 
-  /** 검수 완료된 수험번호를 모두 조회해 이름·학교·연락처를 채운다 */
+  /**
+   * 학생 관리 프로그램 정보를 초안에 얹는다.
+   *
+   * 보통은 이미 손으로 고쳐 둔 값을 덮어쓰지 않는다. 선생님이 신규생을 다른 학생으로
+   * 바꿔 골랐을 때(overwrite)만 그 학생의 값으로 바꾼다 — 안 그러면 이름은 앞 학생,
+   * 연락처는 뒤 학생이 되는 성적표가 나간다.
+   */
+  function mergeDraft(current: Draft, info: DirectoryInfo, scan: OmrScan, overwrite = false): Draft {
+    const pick = (mine: string, theirs: string) => (overwrite ? theirs || mine : mine.trim() || theirs);
+    const grade = placementGrade(info.grade, info.schoolLevel ?? "");
+    return {
+      ...current,
+      grade: overwrite ? grade || current.grade : current.grade || grade,
+      preferredSchedule: current.preferredSchedule || suggestedSchedule(scan),
+      name: pick(current.name, info.name),
+      school: pick(current.school, [info.school, info.grade].filter(Boolean).join(" ")),
+      phone: pick(current.phone, info.parentPhone),
+      // 담임·반은 학생 관리 프로그램이 원본이다. 성적표에 같이 남겨 담임이 제 반을 찾는다.
+      teacher: pick(current.teacher, info.teacher ?? ""),
+      className: pick(current.className, info.className ?? ""),
+    };
+  }
+
+  /**
+   * 검수 완료된 답안지의 학생 정보를 학생 관리 프로그램에서 가져와 채운다.
+   *
+   * 재원생은 수험번호(출결번호)로 찾는다. 반배치고사 신규생은 수험번호가 없어 답안지에
+   * 전화번호 뒤 4자리를 썼으므로, 그 번호로 **지금 응시반인 학생**을 찾는다. 후보가
+   * 하나면 바로 맞추고, 여럿이면(형제) 선생님이 고른다. 이미 맞춰 둔 신규생은 그
+   * 열쇠(카드번호 또는 sc<학생ID>)로 다시 찾는다.
+   */
   async function loadStudents() {
-    const numbers = reviewed.map((scan) => scan.studentId).filter((v): v is string => Boolean(v));
-    if (numbers.length === 0) return;
+    const pendingNewcomers = reviewed.filter(
+      (scan) => isPlacement && isNewStudentScan(scan) && !(scan.studentKey ?? "").trim(),
+    );
+    const numbers = reviewed
+      .filter((scan) => !pendingNewcomers.includes(scan))
+      .map((scan) => scanKey(scan))
+      .filter((v): v is string => Boolean(v));
+    const suffixes = pendingNewcomers.map((scan) => scan.studentId ?? "").filter((v) => /^\d{4}$/.test(v));
+    if (numbers.length === 0 && suffixes.length === 0) return;
     setDirectoryLoading(true);
     setError("");
     setMessage("");
@@ -112,7 +183,7 @@ export default function OmrReportBuilder({
       const res = await fetch("/api/admin/students/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ examNumbers: numbers }),
+        body: JSON.stringify({ examNumbers: numbers, phoneSuffixes: suffixes }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "학생 정보를 불러오지 못했습니다.");
@@ -128,37 +199,56 @@ export default function OmrReportBuilder({
         return;
       }
 
-      const found = data.students as Record<
-        string,
-        { name: string; school: string; grade: string; schoolLevel?:string; parentPhone: string; teacher?: string; className?: string }
-      >;
-      const filled = reviewed.filter(scan => scan.studentId && found[scan.studentId]).length;
+      const found = (data.students ?? {}) as Record<string, DirectoryInfo>;
+      const phoneMatches = (data.phoneMatches ?? {}) as Record<string, DirectoryInfo[]>;
+      const infoOf = (scan: OmrScan) => (pendingNewcomers.includes(scan) ? undefined : found[scanKey(scan) ?? ""]);
+      const filled = reviewed.filter((scan) => infoOf(scan)).length;
       setDrafts((prev) => {
         const next = { ...prev };
         for (const scan of reviewed) {
-          const info = scan.studentId ? found[scan.studentId] : undefined;
+          const info = infoOf(scan);
           if (!info) continue;
-          const current = next[scan.id] ?? draftFor(scan);
-          next[scan.id] = {
-            // 이미 손으로 고쳐 둔 값이 있으면 덮어쓰지 않는다
-            grade:current.grade||placementGrade(info.grade,info.schoolLevel??""),
-            preferredSchedule: current.preferredSchedule || suggestedSchedule(scan),
-            name: current.name.trim() || info.name,
-            school: current.school.trim() || [info.school, info.grade].filter(Boolean).join(" "),
-            phone: current.phone.trim() || info.parentPhone,
-            // 담임·반은 학생 관리 프로그램이 원본이다. 성적표에 같이 남겨 담임이 제 반을 찾는다.
-            teacher: current.teacher.trim() || (info.teacher ?? ""),
-            className: current.className.trim() || (info.className ?? ""),
-          };
+          next[scan.id] = mergeDraft(next[scan.id] ?? draftFor(scan), info, scan);
         }
         return next;
       });
 
-      const missing: string[] = data.missing ?? [];
+      // 신규생 — 전화번호 뒤 4자리의 후보. 하나뿐이면 그 학생으로 맞춘다.
+      const nextCandidates: Record<string, DirectoryInfo[]> = {};
+      let auto = 0;
+      let several = 0;
+      let none = 0;
+      for (const scan of pendingNewcomers) {
+        const list = phoneMatches[scan.studentId ?? ""] ?? [];
+        nextCandidates[scan.id] = list;
+        if (list.length === 1) auto += 1;
+        else if (list.length > 1) several += 1;
+        else none += 1;
+      }
+      setCandidates((prev) => ({ ...prev, ...nextCandidates }));
+      for (const scan of pendingNewcomers) {
+        const list = nextCandidates[scan.id];
+        if (list.length === 1) await matchNewcomer(scan, list[0]);
+      }
+
+      const missing: string[] = Array.isArray(data.missing) ? data.missing : [];
+      const missingNumbers = missing.filter((key) => !key.startsWith("sc"));
+      const lostNewcomers = missing.length - missingNumbers.length;
       const parts = [`${filled}명 정보를 불러왔습니다.`];
-      if (missing.length > 0) {
+      if (pendingNewcomers.length > 0) {
         parts.push(
-          `학생 관리 프로그램에서 찾지 못한 수험번호 ${missing.length}개: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? " 외" : ""}`,
+          `신규생 ${pendingNewcomers.length}명 — 전화번호로 맞춤 ${auto}명` +
+            (several ? ` · 후보 여럿 ${several}명(아래에서 골라 주세요)` : "") +
+            (none ? ` · 못 찾음 ${none}명` : "") +
+            ".",
+        );
+      }
+      if (lostNewcomers > 0) {
+        parts.push(`맞춰 둔 신규생 ${lostNewcomers}명을 학생 관리 프로그램에서 다시 찾지 못했습니다(‘다시 맞추기’).`);
+      }
+      if (missingNumbers.length > 0) {
+        parts.push(
+          `학생 관리 프로그램에서 찾지 못한 수험번호 ${missingNumbers.length}개: ${missingNumbers.slice(0, 8).join(", ")}${missingNumbers.length > 8 ? " 외" : ""}`,
         );
       }
       setMessage(parts.join(" "));
@@ -167,6 +257,139 @@ export default function OmrReportBuilder({
     } finally {
       setDirectoryLoading(false);
     }
+  }
+
+  /**
+   * 신규생을 학생 관리 프로그램의 학생과 맞춘다(또는 푼다).
+   *
+   * 열쇠(카드번호 또는 sc<학생ID>)를 답안지에 저장해 두어야, 성적표·반배정 요청이
+   * 전화번호 뒤 4자리가 아니라 그 학생을 가리킨다. 고른 학생의 정보로 칸을 채운다.
+   */
+  async function matchNewcomer(scan: OmrScan, candidate: DirectoryInfo | null) {
+    setMatching(scan.id);
+    try {
+      const res = await fetch(`/api/admin/omr/scans/${scan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentKey: candidate?.reportKey ?? null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "학생을 맞추지 못했습니다.");
+      const updated = data.scan as OmrScan;
+      setScans((prev) => prev.map((s) => (s.id === scan.id ? updated : s)));
+      if (candidate) {
+        setDrafts((prev) => ({ ...prev, [scan.id]: mergeDraft(prev[scan.id] ?? draftFor(scan), candidate, scan, true) }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "학생을 맞추는 중 오류가 발생했습니다.");
+    } finally {
+      setMatching(null);
+    }
+  }
+
+  /** 답안지의 재원 구분을 사람이 바로잡는다 — 재원생으로 돌리면 맞춰 둔 신규생 열쇠는 푼다 */
+  async function chooseEnrollment(scan: OmrScan, value: Enrollment) {
+    if ((enrollmentOf(scan.enrollment) ?? "재원생") === value) return;
+    setMatching(scan.id);
+    setError("");
+    try {
+      const body = value === "신규생" ? { enrollment: value } : { enrollment: value, studentKey: null };
+      const res = await fetch(`/api/admin/omr/scans/${scan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "재원 구분을 저장하지 못했습니다.");
+      const updated = data.scan as OmrScan;
+      setScans((prev) => prev.map((s) => (s.id === scan.id ? updated : s)));
+      setCandidates((prev) => {
+        const next = { ...prev };
+        delete next[scan.id];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "재원 구분을 저장하는 중 오류가 발생했습니다.");
+    } finally {
+      setMatching(null);
+    }
+  }
+
+  /** 신규생 칸 아래 한 줄 — 지금 어디까지 왔는지 */
+  function newcomerNote(scan: OmrScan, list: DirectoryInfo[] | undefined, matched: DirectoryInfo | null): string {
+    const digits = scan.studentId ?? "";
+    const key = (scan.studentKey ?? "").trim();
+    if (!/^\d{4}$/.test(digits)) {
+      return `수험번호 칸이 ${digits.length}자리입니다 — 검수 화면에서 전화번호 뒤 4자리로 고쳐 주세요`;
+    }
+    if (key && matched) return `전화 뒤 4자리 ${digits} → ${matched.name} (맞춤)`;
+    if (key) return `맞춤 — ${draftFor(scan).name.trim() || `열쇠 ${key}`}`;
+    if (!list) return "‘학생 정보 불러오기’를 누르면 전화번호 뒤 4자리로 응시반에서 찾습니다";
+    if (list.length === 0) {
+      return `응시반에서 전화번호 뒤 4자리 ${digits}인 학생을 찾지 못함 — 학생 관리 프로그램에 응시반으로 등록한 뒤 다시 불러오세요`;
+    }
+    return list.length === 1 ? "후보 1명 — 위에서 고르세요" : `후보 ${list.length}명(형제 등) — 위에서 고르세요`;
+  }
+
+  /** 반배치고사 — 수험번호 칸 아래 재원 구분 토글과 신규생 맞추기 */
+  function renderEnrollment(scan: OmrScan) {
+    const read = enrollmentRead(scan);
+    const current: Enrollment = enrollmentOf(scan.enrollment) ?? "재원생";
+    const busy = matching === scan.id;
+    const list = candidates[scan.id];
+    const matchedKey = (scan.studentKey ?? "").trim();
+    const matched = list?.find((c) => c.reportKey === matchedKey) ?? null;
+    return (
+      <div className="enrollment-cell">
+        <span className="trend-seg enrollment-seg" role="group" aria-label={`${scan.studentId} 재원 구분`}>
+          {ENROLLMENTS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={current === value ? "on" : ""}
+              disabled={busy || !canCreate}
+              title={value === "신규생" ? "수험번호 칸을 전화번호 뒤 4자리로 보고 응시반에서 학생을 찾습니다" : "수험번호(출결번호)로 학생을 찾습니다"}
+              onClick={() => void chooseEnrollment(scan, value)}
+            >
+              {value}
+            </button>
+          ))}
+        </span>
+        {read.kind !== "read" ? <p className={`schedule-read ${read.kind}`}>{enrollmentReadLabel(read)}</p> : null}
+        {current === "신규생" ? (
+          <div className="newcomer-match">
+            {list && list.length > 0 ? (
+              <select
+                aria-label={`${scan.studentId} 학생 맞추기`}
+                value={matched ? matchedKey : ""}
+                disabled={busy || !canCreate}
+                onChange={(e) => void matchNewcomer(scan, list.find((c) => c.reportKey === e.target.value) ?? null)}
+              >
+                <option value="">{list.length > 1 ? `학생 선택 (${list.length}명)` : "학생 선택"}</option>
+                {list.map((c) => (
+                  <option key={c.reportKey} value={c.reportKey}>
+                    {[c.name, [c.school, c.grade].filter(Boolean).join(" "), c.className].filter(Boolean).join(" · ")}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <p className={`schedule-read ${matchedKey ? "read" : list ? "unread" : "blank"}`}>
+              {newcomerNote(scan, list, matched)}
+            </p>
+            {matchedKey && !list ? (
+              <button
+                type="button"
+                className="button tiny ghost"
+                disabled={busy || !canCreate}
+                onClick={() => void matchNewcomer(scan, null)}
+              >
+                다시 맞추기
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   async function uploadReference(event: React.ChangeEvent<HTMLInputElement>) {
@@ -257,7 +480,7 @@ export default function OmrReportBuilder({
         reviewed.map((scan) => {
           const d = draftFor(scan);
           return {
-            studentKey: scan.studentId,
+            studentKey: scanKey(scan),
             studentName: d.name.trim() || `수험번호 ${scan.studentId}`,
             className: d.className,
           };
@@ -614,9 +837,10 @@ export default function OmrReportBuilder({
             </p>
             {isPlacement ? (
               <p className="subtle">
-                선호 요일은 답안지 표기를 읽어 채웁니다. 표기가 흐리거나 겹치면 가장 진한 칸을 넣고 칸 아래에
-                안내를 달아 두니 확인해 주세요. 선호 요일 칸이 생기기 전에 올린 답안지는{" "}
-                <strong>답안지에서 선호 요일 다시 읽기</strong>로 채울 수 있습니다(수험번호·답안·검수 상태는 그대로).
+                재원 구분·선호 요일은 답안지 표기를 읽어 채웁니다. 표기가 흐리거나 겹치면 가장 진한 칸을 넣고 칸 아래에
+                안내를 달아 두니 확인해 주세요. <strong>신규생</strong>(재원 구분에 ‘신규생’ 표기)은 수험번호 칸에 쓴 전화번호
+                뒤 4자리로 응시반에서 학생을 찾아 맞춥니다 — 후보가 여럿이면(형제) 골라 주세요. 이 칸들이 생기기 전에 올린
+                답안지는 <strong>답안지에서 재원 구분·선호 요일 다시 읽기</strong>로 채울 수 있습니다(수험번호·답안·검수 상태는 그대로).
               </p>
             ) : null}
             {canExport && existingReports > 0 ? (
@@ -647,9 +871,9 @@ export default function OmrReportBuilder({
                     type="button"
                     onClick={rereadSchedules}
                     disabled={rereading || scans.length === 0}
-                    title="보관된 스캔 원본으로 선호 요일 칸만 다시 읽습니다. 수험번호·답안·검수 상태는 바뀌지 않습니다."
+                    title="보관된 스캔 원본으로 재원 구분·선호 요일 칸만 다시 읽습니다. 수험번호·답안·검수 상태는 바뀌지 않습니다."
                   >
-                    {rereading ? "다시 읽는 중…" : "답안지에서 선호 요일 다시 읽기"}
+                    {rereading ? "다시 읽는 중…" : "답안지에서 재원 구분·선호 요일 다시 읽기"}
                   </button>
                 ) : null}
                 <button
@@ -814,7 +1038,7 @@ export default function OmrReportBuilder({
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>수험번호</th>
+                    <th>{isPlacement ? "수험번호 · 재원 구분" : "수험번호"}</th>
                     <th>이름 *</th>
                     <th>학교 · 학년</th>
                     <th>학부모 연락처(선택 · PIN용)</th>
@@ -833,6 +1057,7 @@ export default function OmrReportBuilder({
                         <td>
                           <strong>{scan.studentId}</strong>
                           <span>{scan.filename}</span>
+                          {isPlacement ? renderEnrollment(scan) : null}
                         </td>
                         <td>
                           <input

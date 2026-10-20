@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
-import { directoryConfigured, lookupStudents, pingDirectory } from "@/lib/student-directory";
+import { directoryConfigured, lookupByPhoneSuffix, lookupStudents, pingDirectory } from "@/lib/student-directory";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -19,7 +19,7 @@ export async function GET() {
 }
 
 /**
- * 수험번호로 학생 기본정보 조회.
+ * 수험번호로 학생 기본정보 조회 (+ 반배치고사 신규생은 전화번호 뒤 4자리로).
  * API 키가 브라우저로 나가지 않도록 서버가 대신 호출한다.
  */
 export async function POST(request: Request) {
@@ -28,25 +28,32 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const raw = Array.isArray(body.examNumbers) ? body.examNumbers : [];
-    const examNumbers = raw.map((value: unknown) => String(value ?? "").trim()).filter(Boolean);
-    if (examNumbers.length === 0) {
+    const clean = (list: unknown) =>
+      (Array.isArray(list) ? list : []).map((value: unknown) => String(value ?? "").trim()).filter(Boolean);
+    const examNumbers = clean(body.examNumbers);
+    // 신규생 답안지의 수험번호 칸 = 전화번호 뒤 4자리. 응시반에서 그 번호의 학생을 찾는다.
+    const phoneSuffixes = clean(body.phoneSuffixes);
+    if (examNumbers.length === 0 && phoneSuffixes.length === 0) {
       return NextResponse.json({ error: "조회할 수험번호가 없습니다." }, { status: 400 });
     }
-    if (examNumbers.length > MAX_KEYS) {
+    if (examNumbers.length > MAX_KEYS || phoneSuffixes.length > MAX_KEYS) {
       return NextResponse.json(
         { error: `한 번에 최대 ${MAX_KEYS}명까지 조회할 수 있습니다.` },
         { status: 400 },
       );
     }
 
-    const result = await lookupStudents(examNumbers);
+    const [result, phone] = await Promise.all([
+      lookupStudents(examNumbers),
+      phoneSuffixes.length > 0 ? lookupByPhoneSuffix(phoneSuffixes) : null,
+    ]);
     return NextResponse.json({
       ok: true,
       configured: result.configured,
       students: Object.fromEntries(result.students),
       missing: result.missing,
-      error: result.error ?? null,
+      phoneMatches: phone ? Object.fromEntries(phone.matches) : {},
+      error: result.error ?? phone?.error ?? null,
     });
   } catch (error) {
     console.error(error);

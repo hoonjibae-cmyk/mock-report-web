@@ -82,7 +82,8 @@ export async function resolveAssignedReport(reportId:string,workspaceId?:string,
   if(requestError)throw Error('반배정 데이터베이스 업데이트를 확인해 주세요.');
   const targetId=workspaceId||request?.workspace_id;if(!targetId)return {report:null,reason:'반배정을 마친 뒤 성적표를 출력할 수 있습니다.'};
   const {data:w,error:workspaceError}=await client.from('placement_workspaces').select('id,state').eq('id',targetId).maybeSingle();if(workspaceError||!w)return {report:null,reason:'반편성 회차를 확인해 주세요.'};
-  const workspace=w as PlacementWorkspace,s=workspace.state.students.find(s=>!s.removed&&s.cardNo===row.student_key&&s.registryStatus!=='withdrawn');
+  // 카드번호(=student_key)로 맞추되, 클래스핏이 성적표 ID를 들고 있으면 그것으로도 맞춘다(카드번호 없는 신규생)
+  const workspace=w as PlacementWorkspace,s=workspace.state.students.find(s=>!s.removed&&(s.cardNo===row.student_key||s.reportId===row.id)&&s.registryStatus!=='withdrawn');
   const membership=s?workspace.state.memberships.filter(m=>m.studentId===s.id&&!m.excluded):[];
   const classes=workspace.state.classes.filter(c=>!c.archived&&membership.some(m=>m.classId===c.id));
   const assigned=classId?classes.find(c=>c.id===classId):classes.length===1?classes[0]:null;
@@ -100,7 +101,7 @@ export async function placementStatuses(examId:string){
   const workspaceIds=[...new Set(rows.map(r=>r.workspace_id).filter(Boolean))];
   const {data:workspaces}=workspaceIds.length?await client.from('placement_workspaces').select('id,state').in('id',workspaceIds):{data:[]};
   const {data:reports}=await client.from('student_reports').select('id,student_name').in('id',rows.map(r=>r.report_id));
-  return rows.map(r=>{const w=(workspaces??[]).find(w=>w.id===r.workspace_id) as PlacementWorkspace|undefined,s=w?.state.students.find(s=>s.cardNo===r.student_key&&!s.removed&&s.registryStatus!=='withdrawn');
+  return rows.map(r=>{const w=(workspaces??[]).find(w=>w.id===r.workspace_id) as PlacementWorkspace|undefined,s=w?.state.students.find(s=>(s.cardNo===r.student_key||s.reportId===r.report_id)&&!s.removed&&s.registryStatus!=='withdrawn');
     const classes=s?w!.state.classes.filter(c=>!c.archived&&w!.state.memberships.some(m=>!m.excluded&&m.studentId===s.id&&m.classId===c.id)):[];
     return {reportId:r.report_id,name:reports?.find(p=>p.id===r.report_id)?.student_name??r.student_key,preferredSchedule:r.preferred_schedule,notification:r.notification_state,classes:classes.map(c=>({id:c.id,name:c.name,url:`/placement/print/${r.report_id}?workspace=${w!.id}&class=${encodeURIComponent(c.id)}`}))};
   });
