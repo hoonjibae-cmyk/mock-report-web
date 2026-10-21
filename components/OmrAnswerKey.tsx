@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ImportedExamSource from "./ImportedExamSource";
+import CounsellingPaperUpload from "./CounsellingPaperUpload";
+import type {CounsellingPaper} from "@/lib/counselling-paper";
 import {
   compactMark,
   formatChoices,
@@ -328,7 +330,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
         </div>
       </header>
 
-      <ImportedExamSource exam={exam}/>
+      <ImportedExamSource exam={exam}/>{exam.examType==='placement'&&<CounsellingPaperUpload examId={exam.id} initial={exam.omrConfig.counselling_paper as CounsellingPaper|undefined} canEdit={canEdit}/>}
       {error ? <p className="form-error block">{error}</p> : null}
       {message ? (
         <p className="status-message" role="status">

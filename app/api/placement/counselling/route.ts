@@ -1,0 +1,4 @@
+import {NextResponse} from 'next/server';
+import {verifyCounsellingSignature,counsellingAnalysis} from '@/lib/counselling-ai';
+export const runtime='nodejs';export const maxDuration=90;
+export async function POST(request:Request){const body=await request.text();if(body.length>350000)return NextResponse.json({error:'분석 자료가 너무 큽니다.'},{status:413});if(!verifyCounsellingSignature(body,request.headers.get('x-classfit-timestamp'),request.headers.get('x-classfit-signature'),process.env.SUPABASE_SERVICE_ROLE_KEY))return NextResponse.json({error:'분석 인증을 확인해 주세요.'},{status:401});try{return NextResponse.json(await counsellingAnalysis(JSON.parse(body)),{headers:{'Cache-Control':'private, no-store'}});}catch(e){console.error('Counselling AI failed',e instanceof Error?e.message:'unknown');return NextResponse.json({error:'AI 분석을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.'},{status:503});}}

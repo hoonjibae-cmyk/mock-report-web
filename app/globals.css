@@ -2666,3 +2666,5 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .cohort-compare em { font-style: normal; font-weight: 700; padding: 2px 9px; border-radius: 99px; font-size: 12.5px; }
 .cohort-compare em.up { color: #1a7f4b; background: #e6f4ec; }
 .cohort-compare em.down { color: #b3261e; background: #fbe9e7; }
+
+.counselling-paper-upload{margin:18px 0}.counselling-paper-upload h2{margin:0 0 10px}.paper-upload-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}.paper-upload-controls input{min-width:0;max-width:100%}.paper-question-editor{padding:14px;border:1px solid var(--line);border-radius:8px;margin:10px 0}.paper-question-editor label{display:block;margin:10px 0}.paper-question-editor textarea{display:block;width:100%;min-height:70px}.counselling-paper-upload details{margin:14px 0}.counselling-paper-upload summary{cursor:pointer}
