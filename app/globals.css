@@ -2657,3 +2657,5 @@ body.report-layout-a4 .a4-report-root { display: block; }
   border: 1px solid #cfd8e5; border-radius: 8px; background: #fff;
 }
 .newcomer-match .schedule-read { margin-top: 0; white-space: normal; }
+
+.embedded-placement-report .report-shell{min-height:0}

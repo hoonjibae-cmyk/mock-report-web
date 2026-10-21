@@ -8,5 +8,5 @@ export default function EmbeddedReportSize({enabled,children}:{enabled:boolean;c
     const observer=new ResizeObserver(send);observer.observe(ref.current);send();
     return()=>observer.disconnect();
   },[enabled]);
-  return <div ref={ref} style={{display:'flow-root'}}>{children}</div>;
+  return <div ref={ref} className={enabled?'embedded-placement-report':undefined} style={{display:'flow-root'}}>{children}</div>;
 }
