@@ -16,6 +16,7 @@ import {
   type MockSubject,
 } from "@/lib/omr-types";
 import type { ClassOption } from "@/lib/student-directory";
+import ClassfitWorkspacePicker from '@/components/ClassfitWorkspacePicker';
 
 const TYPE_DEFAULTS: Record<ExamType, { q: number; subjectLabel: string; period: string }> = {
   mock: { q: 45, subjectLabel: "영어 영역", period: "3" },
@@ -176,6 +177,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
     const payload = {
       examType: type,
       classNames: type === "monthly" ? selectedClasses : [],
+      classfitWorkspaceId:type==='placement'?String(fd.get('classfitWorkspaceId')??''):undefined,
       title: String(fd.get("title") || "").trim(),
       subject: String(fd.get("subject") || ""),
       examDate: String(fd.get("examDate") || ""),
@@ -260,6 +262,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
           </select>
         </label>
 
+        {type==='placement'&&<ClassfitWorkspacePicker/>}
         {type === "monthly" ? (
           <fieldset className="class-picker">
             <legend>

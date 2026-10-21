@@ -27,6 +27,7 @@ import { attendanceSummary } from "@/lib/attendance";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import ClassfitWorkspacePicker from "@/components/ClassfitWorkspacePicker";
 import { EXAM_TYPE_LABELS, mockSubjectOf, type OmrExam } from "@/lib/omr-types";
 import { scanKey, type OmrScan } from "@/lib/omr-scans";
 
@@ -1170,7 +1171,7 @@ export default function OmrReportBuilder({
         )}
       </div>
 
-      {isPlacement&&<section className="panel"><h2>반배정 요청 · 성적표 출력</h2><p>신규 응시생만 슬랙으로 알립니다. 반배정은 클래스핏에서 진행하며 배정된 반의 평균으로 출력합니다.</p><a className="button secondary" href="https://classfit.yussam.com" target="_blank" rel="noreferrer">반편성관리 열기</a><button className="button secondary" onClick={async()=>{const r=await fetch(`/api/admin/omr/exams/${exam.id}/reports`);const data=await r.json();if(r.ok)setPlacementReports(data.placementReports??[]);}}>배정 상태 새로고침</button>{placementReports.map(r=><div key={r.reportId} className="toolbar"><b>{r.name}</b><span>선호 {r.preferredSchedule}</span><span>{({sent:'슬랙 알림 완료',skipped:'재원생 · 알림 제외',blocked:'학생 정보 확인 필요',error:'알림 재시도 필요',sending:'알림 처리 중',uncertain:'채널 전송 여부 확인 필요',pending:'알림 대기'} as Record<string,string>)[r.notification]??r.notification}</span>{r.classes.length?r.classes.map(c=><a className="button secondary" key={c.id} href={c.url} target="_blank" rel="noreferrer">{c.name} 성적표 출력</a>):<span>반배정 대기</span>}</div>)}</section>}
+      {isPlacement&&<section className="panel"><h2>반배정 요청 · 성적표 출력</h2><ClassfitWorkspacePicker examId={exam.id} initialId={exam.omrConfig.classfit_workspace_id} disabled={!canCreate}/><p>신규 응시생만 슬랙으로 알립니다. 반배정은 클래스핏에서 진행하며 배정된 반의 평균으로 출력합니다.</p><a className="button secondary" href="https://classfit.yussam.com" target="_blank" rel="noreferrer">반편성관리 열기</a><button className="button secondary" onClick={async()=>{const r=await fetch(`/api/admin/omr/exams/${exam.id}/reports`);const data=await r.json();if(r.ok)setPlacementReports(data.placementReports??[]);}}>배정 상태 새로고침</button>{placementReports.map(r=><div key={r.reportId} className="toolbar"><b>{r.name}</b><span>선호 {r.preferredSchedule}</span><span>{({sent:'슬랙 알림 완료',skipped:'재원생 · 알림 제외',blocked:'학생 정보 확인 필요',error:'알림 재시도 필요',sending:'알림 처리 중',uncertain:'채널 전송 여부 확인 필요',pending:'알림 대기'} as Record<string,string>)[r.notification]??r.notification}</span>{r.classes.length?r.classes.map(c=><a className="button secondary" key={c.id} href={c.url} target="_blank" rel="noreferrer">{c.name} 성적표 출력</a>):<span>반배정 대기</span>}</div>)}</section>}
       {created.length > 0 ? (
         <section className="panel result-panel">
           <div className="section-heading wrap">

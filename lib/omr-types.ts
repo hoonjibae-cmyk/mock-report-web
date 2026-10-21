@@ -117,6 +117,8 @@ export function reportFamilyFor(type: ExamType): ReportFamily {
 }
 
 export interface OmrConfig {
+  /** 반배치고사의 요청 학생을 자동 반영할 클래스핏 회차. */
+  classfit_workspace_id?: string;
   per_column?: number;
   period?: string;
   subject_label?: string;

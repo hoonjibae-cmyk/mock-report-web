@@ -3,6 +3,7 @@ import {getSupabaseAdmin} from '@/lib/supabase-admin';
 import {lookupStudents} from '@/lib/student-directory';
 import {applyAssignedClass,notificationDecision,placementGrade,preferredSchedule} from '@/lib/placement-policy';
 import {isGenericReport,type GenericReportData} from '@/lib/omr-report-types';
+import {deliverToClassfit} from '@/lib/classfit-delivery';
 
 export const PLACEMENT_CHANNEL='C06PAG818TZ';
 type PlacementRequest={report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
@@ -17,12 +18,15 @@ export function validSummarySignature(token:string,expires:number,signature:stri
 function summaryUrl(token:string){const expires=Date.now()+7*86400000;return `https://report.yussam.com/api/placement/summary/${token}?expires=${expires}&signature=${summarySignature(token,expires)}`;}
 async function notifyRequest(row:PlacementRequest,name:string){
   const client=getSupabaseAdmin(),claim=randomUUID();
+  const destination=await client.from('placement_requests').select('workspace_id,grade').eq('report_id',row.report_id).single();
+  if(destination.error||!destination.data.workspace_id)throw Error('클래스핏 자동 반영 후 알림을 보낼 수 있습니다.');
+  const classfitUrl=`https://classfit.yussam.com/?workspace=${encodeURIComponent(destination.data.workspace_id)}&grade=${encodeURIComponent(destination.data.grade)}`;
   const {data,error}=await client.rpc('placement_claim_notification',{p_report_id:row.report_id,p_claim:claim});
   if(error)throw Error('반배정 알림 처리에 필요한 데이터베이스 업데이트를 확인해 주세요.');
   if(!data?.length)return {state:row.notification_state};
   let state='uncertain',reason='알림 응답을 확인하지 못했습니다. 중복 전송을 막기 위해 채널 확인이 필요합니다.';
   try{
-    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\nhttps://classfit.yussam.com`,imageUrl:summaryUrl(row.image_token),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
+    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(row.image_token),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
     const result=await response.json().catch(()=>null);
     if(result?.delivered===true&&result.imageIncluded===true){state='sent';reason='';}
     else if(result?.delivered===false||response.status===400||response.status===401||response.status===403){state='error';reason=result?.error??'슬랙 알림 서비스 설정을 확인해 주세요.';}
@@ -33,7 +37,7 @@ async function notifyRequest(row:PlacementRequest,name:string){
 }
 export async function requestPlacement(rows:Array<{id:string;key:string;data:GenericReportData;grade?:string;preferredSchedule?:unknown}>,actor:string){
   const client=getSupabaseAdmin(),directory=await lookupStudents(rows.map(r=>r.key));
-  const results=[];let immediate=0;
+  const savedRows:Array<{saved:PlacementRequest;name:string;decision:string}>=[];
   for(const row of rows){
     const student=directory.students.get(row.key),decision=directory.error?'hold':notificationDecision(student);
     const grade=placementGrade(row.grade??student?.grade??'',student?.schoolLevel??'');
@@ -48,14 +52,24 @@ export async function requestPlacement(rows:Array<{id:string;key:string;data:Gen
       const {data,error}=await client.from('placement_requests').update(patch).eq('report_id',saved.report_id).eq('notification_state',saved.notification_state).select('*').maybeSingle();if(error)throw Error('반배정 요청을 갱신하지 못했습니다.');
       if(data)saved=data as PlacementRequest;else{const current=await client.from('placement_requests').select('*').eq('exam_id',row.data.examId).eq('student_key',row.key).single();if(current.error)throw Error('반배정 요청 상태를 확인하지 못했습니다.');saved=current.data as PlacementRequest;}
     }
+    savedRows.push({saved,name:row.data.student.name,decision});
+  }
+  // Persist ClassFit first: following the Slack link must immediately show the request.
+  await deliverToClassfit(savedRows.map(r=>r.saved.report_id));
+  const results=[];let immediate=0;
+  for(const {saved,name,decision} of savedRows){
     const sendNow=decision==='send'&&immediate===0&&['pending','error'].includes(saved.notification_state);if(sendNow)immediate++;
-    const notification=sendNow?await notifyRequest(saved,row.data.student.name):{state:saved.notification_state};
-    results.push({reportId:row.id,studentKey:row.key,name:row.data.student.name,preferredSchedule:schedule,notification:notification.state,reason:'reason' in notification?notification.reason:undefined});
+    const notification=sendNow?await notifyRequest(saved,name):{state:saved.notification_state};
+    results.push({reportId:saved.report_id,studentKey:saved.student_key,name,preferredSchedule:saved.preferred_schedule,notification:notification.state,reason:'reason' in notification?notification.reason:undefined});
   }
   return results;
 }
 export async function dispatchPlacementNotifications(){
   const client=getSupabaseAdmin(),retryBefore=new Date(Date.now()-5*60000).toISOString();
+  // Recover old unlinked requests as well as deliveries interrupted before Slack.
+  const backlog=await client.from('placement_requests').select('report_id,exams!inner(omr_config)').is('workspace_id',null).not('exams.omr_config->>classfit_workspace_id','is',null).order('requested_at').limit(100);
+  if(backlog.error)throw Error('클래스핏 자동 반영 대기를 확인하지 못했습니다.');
+  if(backlog.data?.length)await deliverToClassfit(backlog.data.map(r=>r.report_id));
   // 중간에 실행이 끊긴 요청은 실제 전송 여부를 알 수 없다. 재전송 대신 확인 대상으로 남긴다.
   const stale=await client.from('placement_requests').update({notification_state:'uncertain',notification_reason:'알림 처리가 중단되었습니다. 중복 전송을 피하려면 슬랙 채널을 확인해 주세요.'}).eq('notification_state','sending').lt('notification_at',retryBefore);
   if(stale.error)throw Error('반배정 알림 처리 상태를 확인하지 못했습니다.');
@@ -69,6 +83,7 @@ export async function dispatchPlacementNotifications(){
     if(decision==='skip'){await client.from('placement_requests').update({notification_state:'skipped',notification_reason:null}).eq('report_id',row.report_id).eq('notification_state',row.notification_state);checked++;continue;}
     if(row.notification_state==='blocked'){const changed=await client.from('placement_requests').update({notification_state:'pending',notification_reason:null}).eq('report_id',row.report_id).eq('notification_state','blocked').select('report_id');if(!changed.data?.length)continue;}
     const {data:report}=await client.from('student_reports').select('student_name,is_active').eq('id',row.report_id).maybeSingle();if(!report?.is_active)continue;
+    try{await deliverToClassfit([row.report_id]);}catch{console.warn('ClassFit delivery pending; Slack deferred');continue;}
     const result=await notifyRequest({...row,notification_state:'pending'},report.student_name);checked++;if(result.state==='sent')sent++;
     await new Promise(resolve=>setTimeout(resolve,1100));
   }

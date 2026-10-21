@@ -18,6 +18,7 @@ import { isGenericReport, recentGrowth } from "@/lib/omr-report-types";
 import { gradeRange } from "@/lib/school-grade";
 import { maskPhoneForGate, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
+import {requireClassfitWorkspace} from '@/lib/classfit-workspaces';
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -105,6 +106,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     const exam = await getVisibleExam(id);
     if (!exam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+    if(exam.examType==='placement'){
+      try{await requireClassfitWorkspace(exam.omrConfig.classfit_workspace_id);}catch{return NextResponse.json({error:'아래 시험 정보에서 반편성 회차를 먼저 선택하고 저장해 주세요.'},{status:400});}
+    }
 
     const keyFilled = Object.keys(exam.answerKey ?? {}).length;
     if (keyFilled < exam.numQuestions) {

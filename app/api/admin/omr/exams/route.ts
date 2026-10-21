@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { createExam, listExams } from "@/lib/omr-exams";
 import { EXAM_TYPE_LABELS, type ExamType, type OmrConfig } from "@/lib/omr-types";
+import {requireClassfitWorkspace} from '@/lib/classfit-workspaces';
+import {canViewExamType} from '@/lib/auth';
 
 export const runtime = "nodejs";
 
@@ -50,6 +52,10 @@ export async function POST(request: Request) {
     }
 
     const omrConfig: OmrConfig = {};
+    if(examType==='placement'){
+      if(!canViewExamType(auth.user,'placement'))return NextResponse.json({error:'반배치고사 생성 권한이 없습니다.'},{status:403});
+      try{omrConfig.classfit_workspace_id=(await requireClassfitWorkspace(body.classfitWorkspaceId)).id;}catch(error){return NextResponse.json({error:error instanceof Error?error.message:'반편성 회차를 선택해 주세요.'},{status:400});}
+    }
     if (body.perColumn != null && Number.isInteger(Number(body.perColumn))) {
       omrConfig.per_column = Number(body.perColumn);
     }
