@@ -1,24 +1,11 @@
 import {Resvg} from '@resvg/resvg-js';
 import path from 'node:path';
 import type {GenericReportData} from '@/lib/omr-report-types';
+// 영역 순서(과목별 · 하→중→상)는 성적표 화면과 같은 곳에서 정한다
+import {PLACEMENT_SUBJECTS as SUBJECTS,areaParts,orderedPlacementAreas,type PlacementArea as Area} from '@/lib/placement-areas';
+export {orderedPlacementAreas};
 
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
-const SUBJECTS=['독해','문법','서술형','어휘'];
-const TIERS=['상','중','하'];
-type Area=GenericReportData['areas'][number];
-function areaParts(name:string){
-  const match=name.normalize('NFKC').trim().match(/^(독해|문법|서술형|어휘)(?:\s*[-·ㆍ–—:/_(]?\s*([상중하])\s*[)]?)?$/);
-  return {subject:match?.[1]??name.trim(),tier:match?.[2]??''};
-}
-// Sort a copy so other report consumers retain their original data.
-export function orderedPlacementAreas(areas:Area[]){
-  const rank=(value:string,list:string[])=>{const i=list.indexOf(value);return i<0?list.length:i;};
-  return [...areas].sort((a,b)=>{
-    const x=areaParts(a.area),y=areaParts(b.area);
-    return rank(x.subject,SUBJECTS)-rank(y.subject,SUBJECTS)||
-      (x.subject===y.subject?rank(x.tier,TIERS)-rank(y.tier,TIERS):0);
-  });
-}
 // Fit long labels inside their allocated space without discarding text.
 function text(x:number,y:number,value:unknown,size:number,color:string,width?:number,weight=400){
   const label=String(value??'');

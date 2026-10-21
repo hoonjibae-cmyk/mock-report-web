@@ -2,6 +2,7 @@ import AcademyLogo from "@/components/AcademyLogo";
 import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { formatChoices, toChoices } from "@/lib/omr-answers";
 import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
+import { orderedPlacementAreas } from "@/lib/placement-areas";
 import { gradeRangeSentence } from "@/lib/school-grade";
 import { shortDate, trendSentence } from "@/lib/score-history";
 
@@ -244,6 +245,9 @@ export default function GenericReport({
   // 학원 방침으로 뺐다(반 인원이 적어 그 숫자가 곧 특정 학생을 가리킨다).
   const placement = report.examType === "placement";
   const meanDiff = Math.round((score.raw - cohort.mean) * 10) / 10;
+  // 반배치고사의 영역은 과목별로 모아 하 → 중 → 상 순서로 — 성취율 순으로 늘어놓으면
+  // '독해-하' 다음에 '문법-상'이 오는 식으로 뒤섞여 읽기 어렵다. 다른 유형은 성취율 순.
+  const areas = placement ? orderedPlacementAreas(report.areas) : report.areas;
   // 학생 관리 프로그램에서 맞춘 신규생은 수험번호 대신 sc<학생ID> 열쇠를 쓴다 — 종이에 찍을 번호가 아니다
   const hasExamNumber = !/^sc\d+$/.test(report.student.key);
   // 채점하지 않은 듣기 문항(미응시)은 오답이 아니다
@@ -420,12 +424,16 @@ export default function GenericReport({
           </section>
         ) : null}
 
-        {report.areas.length > 0 ? (
+        {areas.length > 0 ? (
           <BreakdownSection
             title="영역별 분석"
             hint="막대 = 내 성취율 · 세로선 = 반 평균"
-            note="듣기·문법·독해처럼 큰 갈래로 묶은 결과입니다. 성취율이 낮은 영역부터 표시했으니, 반 평균보다 낮은 영역을 먼저 보완하면 총점이 빠르게 오릅니다."
-            areas={report.areas}
+            note={
+              placement
+                ? "독해·문법·서술형·어휘를 과목별로 모아 하 → 중 → 상 순서로 표시했습니다. 반 평균보다 낮은 영역을 먼저 보완하면 총점이 빠르게 오릅니다."
+                : "듣기·문법·독해처럼 큰 갈래로 묶은 결과입니다. 성취율이 낮은 영역부터 표시했으니, 반 평균보다 낮은 영역을 먼저 보완하면 총점이 빠르게 오릅니다."
+            }
+            areas={areas}
           />
         ) : null}
 
