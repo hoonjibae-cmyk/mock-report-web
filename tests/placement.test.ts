@@ -38,10 +38,11 @@ test('성적 요약은 학생명·점수·영역·선호 요일이 포함된 실
   const png=placementSummaryPng(report('A',65),'화목');assert.equal(png.subarray(0,8).toString('hex'),'89504e470d0a1a0a');assert.ok(png.byteLength>1000);
 });
 
-test('슬랙 영역은 독해·문법·서술형·어휘 및 상중하 순서이며 원본과 추가 영역을 보존한다',()=>{
+test('영역은 독해·문법·서술형·어휘 과목별로 모아 하→중→상 순서이며 원본과 추가 영역을 보존한다',()=>{
+  // 성적표 화면(영역별 분석)과 슬랙 성적 요약이 같은 순서를 쓴다
   const names=['어휘','문법-하','독해 - 중','서술형','독해·하','문법(상)','독해_상','문법 중','듣기'];
   const areas=names.map((area,i)=>({...report('A',65).areas[0],area,earned:i}));
-  assert.deepEqual(orderedPlacementAreas(areas).map(a=>a.area),['독해_상','독해 - 중','독해·하','문법(상)','문법 중','문법-하','서술형','어휘','듣기']);
+  assert.deepEqual(orderedPlacementAreas(areas).map(a=>a.area),['독해·하','독해 - 중','독해_상','문법-하','문법 중','문법(상)','서술형','어휘','듣기']);
   assert.deepEqual(areas.map(a=>a.area),names);
   const data={...report('A',65),areas};
   const svg=placementSummarySvg(data,'월수금');
