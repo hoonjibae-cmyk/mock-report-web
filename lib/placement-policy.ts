@@ -57,3 +57,8 @@ export function applyAssignedClass(report:GenericReportData,peers:GenericReportD
   });
   return {...report,student:{...report.student,className},cohort:{count:scores.length,mean:round(mean),stdev:round(stdev),max:Math.max(...scores),min:Math.min(...scores)},standardScore,rank,topPercent:round(rank/scores.length*100),areas:stats(report.areas,'areas'),contents:stats(report.contents??[],'contents'),items,weakItems:items.filter(i=>!i.absent&&!i.correct).sort((a,b)=>a.correctRate-b.correctRate).map(i=>i.no),growth};
 }
+
+/** Counselling reports include assigned and waiting students without duplicate seats. */
+export function reportClassMembers(state:{memberships:Array<{studentId:string;classId:string;excluded?:boolean}>;waitlist?:Array<{studentId:string;classId:string}>}):Array<{studentId:string;classId:string;excluded?:boolean}>{
+  return [...state.memberships.filter(m=>!m.excluded),...(state.waitlist??[])];
+}

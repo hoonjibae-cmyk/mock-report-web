@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {notificationDecision,preferredSchedule,placementGrade,applyAssignedClass} from '../lib/placement-policy';
+import {reportClassMembers,notificationDecision,preferredSchedule,placementGrade,applyAssignedClass} from '../lib/placement-policy';
 import {signPrintScope,validPrintScope} from '../lib/placement-print';
 import {placementSummaryPng,placementSummarySvg,orderedPlacementAreas} from '../lib/placement-summary';
 import type {GenericReportData} from '../lib/omr-report-types';
@@ -61,4 +61,13 @@ test('빈 영역·0점·평균 대체 점수·긴 이름·특수문자도 요약
   assert.ok(svg.includes('평균 대체 점수'));assert.ok(!svg.includes('NaN'));
   const png=placementSummaryPng({...data,areas:[]},'월수금');
   assert.equal(png.readUInt32BE(16),1000);assert.ok(png.readUInt32BE(20)>400);
+});
+
+test('상담 성적표는 대기 학생을 해당 반에 포함하고 제외 배정과 중복 인원을 계산하지 않는다',()=>{
+  const members=reportClassMembers({memberships:[{studentId:'A',classId:'one'},{studentId:'removed',classId:'one',excluded:true}],waitlist:[{studentId:'B',classId:'one'},{studentId:'A',classId:'one'},{studentId:'C',classId:'other'}]});
+  const ids=new Set(members.filter(m=>m.classId==='one').map(m=>m.studentId));
+  assert.deepEqual([...ids],['A','B']);
+  const result=applyAssignedClass(report('B',70),[report('A',90)],'상담반');
+  assert.equal(result.student.className,'상담반');assert.equal(result.cohort.count,2);assert.equal(result.cohort.mean,80);assert.equal(result.rank,2);
+  assert.equal(reportClassMembers({memberships:[]}).length,0);
 });

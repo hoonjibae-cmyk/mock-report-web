@@ -1,7 +1,7 @@
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {getSupabaseAdmin} from '@/lib/supabase-admin';
 import {lookupStudents} from '@/lib/student-directory';
-import {applyAssignedClass,notificationDecision,placementGrade,preferredSchedule} from '@/lib/placement-policy';
+import {reportClassMembers,applyAssignedClass,notificationDecision,placementGrade,preferredSchedule} from '@/lib/placement-policy';
 import {isGenericReport,type GenericReportData} from '@/lib/omr-report-types';
 import {deliverToClassfit} from '@/lib/classfit-delivery';
 
@@ -9,7 +9,7 @@ export const PLACEMENT_CHANNEL='C06PAG818TZ';
 type PlacementRequest={report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
 type Member={studentId:string;classId:string;excluded?:boolean};
 type PlacementStudent={id:string;cardNo:string;reportId?:string;examId?:string;removed?:boolean;registryStatus?:string};
-type PlacementWorkspace={id:string;state:{students:PlacementStudent[];memberships:Member[];classes:Array<{id:string;name:string;schedule?:string;archived?:boolean}>}};
+type PlacementWorkspace={id:string;state:{students:PlacementStudent[];memberships:Member[];waitlist?:Member[];classes:Array<{id:string;name:string;schedule?:string;archived?:boolean}>}};
 export function summarySignature(token:string,expires:number){return createHmac('sha256',process.env.AUTH_SECRET??'').update(`placement-summary:${token}:${expires}`).digest('hex');}
 export function validSummarySignature(token:string,expires:number,signature:string){
   if(!process.env.AUTH_SECRET||!Number.isSafeInteger(expires)||expires<Date.now()||expires>Date.now()+8*86400000)return false;
@@ -99,12 +99,12 @@ export async function resolveAssignedReport(reportId:string,workspaceId?:string,
   const {data:w,error:workspaceError}=await client.from('placement_workspaces').select('id,state').eq('id',targetId).maybeSingle();if(workspaceError||!w)return {report:null,reason:'반편성 회차를 확인해 주세요.'};
   // 카드번호(=student_key)로 맞추되, Where’s My Class?이 성적표 ID를 들고 있으면 그것으로도 맞춘다(카드번호 없는 신규생)
   const workspace=w as PlacementWorkspace,s=workspace.state.students.find(s=>!s.removed&&(s.cardNo===row.student_key||s.reportId===row.id)&&s.registryStatus!=='withdrawn');
-  const membership=s?workspace.state.memberships.filter(m=>m.studentId===s.id&&!m.excluded):[];
+  const membership=s?reportClassMembers(workspace.state).filter(m=>m.studentId===s.id&&!m.excluded):[];
   const classes=workspace.state.classes.filter(c=>!c.archived&&membership.some(m=>m.classId===c.id));
   const assigned=classId?classes.find(c=>c.id===classId):classes.length===1?classes[0]:null;
   if(!assigned)return {report:null,classes:classes.map(c=>({id:c.id,name:c.name})),reason:classes.length>1?'출력할 배정 반을 선택해 주세요.':'반배정을 마친 뒤 성적표를 출력할 수 있습니다.'};
   if(!request||request.workspace_id!==workspace.id)return {report:null,reason:'이 회차에 반배정 요청을 먼저 불러와 주세요.'};
-  const ids=new Set(workspace.state.memberships.filter(m=>m.classId===assigned.id&&!m.excluded).map(m=>m.studentId));
+  const ids=new Set(reportClassMembers(workspace.state).filter(m=>m.classId===assigned.id&&!m.excluded).map(m=>m.studentId));
   const keys=[...new Set(workspace.state.students.filter(s=>ids.has(s.id)&&!s.removed&&s.registryStatus!=='withdrawn').map(s=>s.cardNo).filter(Boolean))];
   const peers:GenericReportData[]=[];
   for(let from=0;;from+=500){const {data,error}=await client.from('student_reports').select('student_key,report_data,created_at').eq('exam_id',row.exam_id).eq('is_active',true).in('student_key',keys).order('created_at',{ascending:false}).range(from,from+499);if(error)throw Error('배정 반의 성적 평균을 불러오지 못했습니다.');for(const peer of data??[])if(isGenericReport(peer.report_data)&&!peers.some(p=>p.student.key===peer.student_key))peers.push(peer.report_data);if((data?.length??0)<500)break;}

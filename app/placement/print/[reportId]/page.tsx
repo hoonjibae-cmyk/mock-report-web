@@ -2,6 +2,7 @@ import {isGenericReport} from '@/lib/omr-report-types';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
 import GenericReport from '@/components/GenericReport';
+import EmbeddedReportSize from '@/components/EmbeddedReportSize';
 import {getCurrentUser,hasPermission,canViewExamType} from '@/lib/auth';
 import {PRINT_COOKIE,validPrintScope} from '@/lib/placement-print';
 import {resolveAssignedReport} from '@/lib/placement-service';
@@ -19,5 +20,5 @@ export default async function PlacementPrint({params,searchParams}:{params:Promi
   const {data:row}=await getSupabaseAdmin().from('student_reports').select('teacher_comment').eq('id',reportId).single();
   const personal=parseTeacherComment(row?.teacher_comment),overview=await getExamOverview(report.examId).catch(()=>null);
   const overviewFinal=overview?.status==='final',personalFinal=personal.status==='final';
-  return <GenericReport report={report} comments={{overview:overviewFinal?overview.final:null,style:overview?.style??'free',areaNotes:overviewFinal?overview.areaNotes:[],personal:personalFinal?personal.personalFinal:null,areaFeedback:personalFinal?personal.areaFeedback:[],keywords:personalFinal?personal.displayKeywords:[]}}/>;
+  return <EmbeddedReportSize enabled={q.preview==='1'}><GenericReport report={report} comments={{overview:overviewFinal?overview.final:null,style:overview?.style??'free',areaNotes:overviewFinal?overview.areaNotes:[],personal:personalFinal?personal.personalFinal:null,areaFeedback:personalFinal?personal.areaFeedback:[],keywords:personalFinal?personal.displayKeywords:[]}}/></EmbeddedReportSize>;
 }
