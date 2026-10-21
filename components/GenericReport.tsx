@@ -240,6 +240,12 @@ export default function GenericReport({
   comments?: ReportComments;
 }) {
   const { score, cohort } = report;
+  // 반배치고사 — 집단은 배정 반이고, 반 평균만 싣는다. 표준편차·반 최고·최저 점수는
+  // 학원 방침으로 뺐다(반 인원이 적어 그 숫자가 곧 특정 학생을 가리킨다).
+  const placement = report.examType === "placement";
+  const meanDiff = Math.round((score.raw - cohort.mean) * 10) / 10;
+  // 학생 관리 프로그램에서 맞춘 신규생은 수험번호 대신 sc<학생ID> 열쇠를 쓴다 — 종이에 찍을 번호가 아니다
+  const hasExamNumber = !/^sc\d+$/.test(report.student.key);
   // 채점하지 않은 듣기 문항(미응시)은 오답이 아니다
   const wrongItems = report.items.filter((item) => !item.correct && !item.absent);
   const listeningAbsent = report.listeningAbsent ?? null;
@@ -278,7 +284,7 @@ export default function GenericReport({
           </div>
           <div className="student-strip">
             <div><span>학생명</span><strong>{report.student.name}</strong></div>
-            <div><span>수험번호</span><strong>{report.student.key}</strong></div>
+            {hasExamNumber ? <div><span>수험번호</span><strong>{report.student.key}</strong></div> : null}
             <div><span>학교·학년</span><strong>{report.student.school || "미입력"}</strong></div>
             {report.student.className ? (
               <div><span>반</span><strong>{report.student.className}</strong></div>
@@ -308,9 +314,9 @@ export default function GenericReport({
               </div>
             ) : null}
             <div>
-              <span>학원 평균</span>
+              <span>{placement ? "반 평균" : "학원 평균"}</span>
               <strong>{cohort.mean}</strong>
-              <small>응시 {cohort.count}명</small>
+              <small>{placement ? "배정 반" : "응시"} {cohort.count}명</small>
             </div>
             <div>
               <span>표준점수</span>
@@ -321,13 +327,27 @@ export default function GenericReport({
 
           <section className="analysis-card">
             <div className="card-title-row">
-              <h4>응시 집단 내 위치</h4>
+              <h4>{placement ? "반 평균과 비교" : "응시 집단 내 위치"}</h4>
               <span>
-                {cohort.count}명 응시 · 평균 {cohort.mean}점 · 표준편차 {cohort.stdev}
+                {placement
+                  ? `배정 반 ${cohort.count}명 · 반 평균 ${cohort.mean}점`
+                  : `${cohort.count}명 응시 · 평균 ${cohort.mean}점 · 표준편차 ${cohort.stdev}`}
               </span>
             </div>
             <GradeRangeNotice report={report} />
-            <DistributionBar report={report} />
+            {placement ? (
+              <p className="cohort-compare">
+                내 점수 <strong>{score.raw}점</strong>
+                <span className="sep">·</span>
+                반 평균 <strong>{cohort.mean}점</strong>
+                <em className={meanDiff >= 0 ? "up" : "down"}>
+                  {meanDiff >= 0 ? "+" : ""}
+                  {meanDiff}점
+                </em>
+              </p>
+            ) : (
+              <DistributionBar report={report} />
+            )}
             <p className="subtle" style={{ marginTop: 10 }}>
               맞은 문항 {score.correctCount} · 틀린 문항 {score.wrongCount}
               {score.blankCount > 0 ? ` · 미표기 ${score.blankCount}` : ""}

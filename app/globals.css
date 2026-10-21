@@ -2659,3 +2659,10 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .newcomer-match .schedule-read { margin-top: 0; white-space: normal; }
 
 .embedded-placement-report .report-shell{min-height:0}
+/* 반배치고사 성적표 — 반 평균과 내 점수만(표준편차·최고·최저 없음) */
+.cohort-compare { margin: 18px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; font-size: 14px; color: var(--ink); }
+.cohort-compare strong { font-size: 20px; color: var(--navy-deep); }
+.cohort-compare .sep { color: var(--muted); }
+.cohort-compare em { font-style: normal; font-weight: 700; padding: 2px 9px; border-radius: 99px; font-size: 12.5px; }
+.cohort-compare em.up { color: #1a7f4b; background: #e6f4ec; }
+.cohort-compare em.down { color: #b3261e; background: #fbe9e7; }
