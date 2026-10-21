@@ -89,11 +89,14 @@ export async function dispatchPlacementNotifications(){
   }
   return {checked,sent};
 }
-export async function resolveAssignedReport(reportId:string,workspaceId?:string,classId?:string):Promise<{report:GenericReportData|null;reason?:string;classes?:Array<{id:string;name:string}>}>{
-  const client=getSupabaseAdmin();const {data:row,error}=await client.from('student_reports').select('id,student_key,report_data,is_active,exam_id').eq('id',reportId).maybeSingle();
+export async function resolveAssignedReport(reportId:string,workspaceId?:string,classId?:string):Promise<{report:GenericReportData|null;teacherComment?:unknown;reason?:string;classes?:Array<{id:string;name:string}>}>{
+  const client=getSupabaseAdmin();
+  const [{data:row,error},{data:request,error:requestError}]=await Promise.all([
+    client.from('student_reports').select('id,student_key,report_data,is_active,exam_id,teacher_comment').eq('id',reportId).maybeSingle(),
+    client.from('placement_requests').select('workspace_id').eq('report_id',reportId).maybeSingle(),
+  ]);
   if(error||!row||!row.is_active||!isGenericReport(row.report_data))return {report:null,reason:'성적표를 찾을 수 없습니다.'};
-  const body=row.report_data;if(body.examType!=='placement')return {report:body};
-  const {data:request,error:requestError}=await client.from('placement_requests').select('workspace_id').eq('report_id',reportId).maybeSingle();
+  const body=row.report_data;if(body.examType!=='placement')return {report:body,teacherComment:row.teacher_comment};
   if(requestError)throw Error('반배정 데이터베이스 업데이트를 확인해 주세요.');
   const targetId=workspaceId||request?.workspace_id;if(!targetId)return {report:null,reason:'반배정을 마친 뒤 성적표를 출력할 수 있습니다.'};
   const {data:w,error:workspaceError}=await client.from('placement_workspaces').select('id,state').eq('id',targetId).maybeSingle();if(workspaceError||!w)return {report:null,reason:'반편성 회차를 확인해 주세요.'};
@@ -108,7 +111,7 @@ export async function resolveAssignedReport(reportId:string,workspaceId?:string,
   const keys=[...new Set(workspace.state.students.filter(s=>ids.has(s.id)&&!s.removed&&s.registryStatus!=='withdrawn').map(s=>s.cardNo).filter(Boolean))];
   const peers:GenericReportData[]=[];
   for(let from=0;;from+=500){const {data,error}=await client.from('student_reports').select('student_key,report_data,created_at').eq('exam_id',row.exam_id).eq('is_active',true).in('student_key',keys).order('created_at',{ascending:false}).range(from,from+499);if(error)throw Error('배정 반의 성적 평균을 불러오지 못했습니다.');for(const peer of data??[])if(isGenericReport(peer.report_data)&&!peers.some(p=>p.student.key===peer.student_key))peers.push(peer.report_data);if((data?.length??0)<500)break;}
-  return {report:applyAssignedClass(body,peers,`${assigned.name}${assigned.schedule?` · ${assigned.schedule}`:''}`)};
+  return {teacherComment:row.teacher_comment,report:applyAssignedClass(body,peers,`${assigned.name}${assigned.schedule?` · ${assigned.schedule}`:''}`)};
 }
 export async function placementStatuses(examId:string){
   const client=getSupabaseAdmin(),{data:rows,error}=await client.from('placement_requests').select('report_id,student_key,workspace_id,preferred_schedule,notification_state').eq('exam_id',examId).order('requested_at');if(error)throw Error('반배정 요청 데이터베이스 업데이트를 확인해 주세요.');
