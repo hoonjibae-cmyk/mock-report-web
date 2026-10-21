@@ -8,7 +8,7 @@ import {deliverToClassfit} from '@/lib/classfit-delivery';
 export const PLACEMENT_CHANNEL='C06PAG818TZ';
 type PlacementRequest={report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
 type Member={studentId:string;classId:string;excluded?:boolean};
-type PlacementStudent={id:string;cardNo:string;reportId?:string;examId?:string;removed?:boolean;registryStatus?:string};
+type PlacementStudent={id:string;cardNo:string;reportId?:string;reportWorkspaceId?:string;examId?:string;removed?:boolean;registryStatus?:string};
 type PlacementWorkspace={id:string;state:{students:PlacementStudent[];memberships:Member[];waitlist?:Member[];classes:Array<{id:string;name:string;schedule?:string;archived?:boolean}>}};
 export function summarySignature(token:string,expires:number){return createHmac('sha256',process.env.AUTH_SECRET??'').update(`placement-summary:${token}:${expires}`).digest('hex');}
 export function validSummarySignature(token:string,expires:number,signature:string){
@@ -106,7 +106,7 @@ export async function resolveAssignedReport(reportId:string,workspaceId?:string,
   const classes=workspace.state.classes.filter(c=>!c.archived&&membership.some(m=>m.classId===c.id));
   const assigned=classId?classes.find(c=>c.id===classId):classes.length===1?classes[0]:null;
   if(!assigned)return {report:null,classes:classes.map(c=>({id:c.id,name:c.name})),reason:classes.length>1?'출력할 배정 반을 선택해 주세요.':'반배정을 마친 뒤 성적표를 출력할 수 있습니다.'};
-  if(!request||request.workspace_id!==workspace.id)return {report:null,reason:'이 회차에 반배정 요청을 먼저 불러와 주세요.'};
+  if(!request||![workspace.id,s?.reportWorkspaceId].filter(Boolean).includes(request.workspace_id))return {report:null,reason:'이 회차에 반배정 요청을 먼저 불러와 주세요.'};
   const ids=new Set(reportClassMembers(workspace.state).filter(m=>m.classId===assigned.id&&!m.excluded).map(m=>m.studentId));
   const keys=[...new Set(workspace.state.students.filter(s=>ids.has(s.id)&&!s.removed&&s.registryStatus!=='withdrawn').map(s=>s.cardNo).filter(Boolean))];
   const peers:GenericReportData[]=[];
