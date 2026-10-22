@@ -1,3 +1,4 @@
+import {importedPrintTitle} from './imported-exam-title';
 // 시험(exams) 저장소 — Supabase service-role 경유
 
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -172,6 +173,13 @@ export async function getExam(id: string): Promise<OmrExam | null> {
   return data ? mapExam(data as ExamRow) : null;
 }
 
+/** OMR 이름만 변경한다. 원본 스냅샷·정답·채점·검토 상태는 보존한다. */
+export async function renameImportedExam(id:string,title:string,previousTitle:string):Promise<boolean> {
+  const {data,error}=await getSupabaseAdmin().from('exams').update({title}).eq('id',id).eq('title',previousTitle).select('id');
+  if(error)throw new Error('시험 이름을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  return !!data?.length;
+}
+
 /** 정답키·배점·영역 저장 (전달된 항목만 갱신) */
 export async function updateExamAnswerKey(
   id: string,
@@ -257,7 +265,7 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
   const sheetTitle =
     typeof cfg.sheet_title === "string" && cfg.sheet_title.trim()
       ? cfg.sheet_title.trim()
-      : exam.title;
+      : importedPrintTitle(exam) ?? exam.title;
   const spec: OmrSheetSpec = {
     // 반배치고사는 선호 요일·재원 구분 칸이 있는 종이다. 재원 구분 칸이 들어오며
     // 배치 지문이 바뀌었으므로(v1.51.0), 그 전에 뽑은 반배치고사 답안지는
