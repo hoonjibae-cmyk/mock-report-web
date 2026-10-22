@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHmac} from 'node:crypto';
-import {validatePaperQuestions,paperFileType,paperPathValid} from '../lib/counselling-paper';
+import {validatePaperQuestions,paperFileType,paperPathValid,usablePaperQuestions} from '../lib/counselling-paper';
+test('판독 보류·빈 문항만 제외하고 나머지 문항은 부분 연결한다',()=>{const q={no:1,stem:'발문',passage:'',choices:[],explanation:'',unclear:false};assert.deepEqual(usablePaperQuestions([q,{...q,no:50,unclear:true},{...q,no:51,stem:''}]).map(q=>q.no),[1]);});
 import {verifyCounsellingSignature,CounsellingEvidenceSchema} from '../lib/counselling-ai';
 const exam='11111111-1111-4111-8111-111111111111',file='22222222-2222-4222-8222-222222222222';
 test('시험지 파일은 해당 시험의 비공개 경로와 허용 형식만 받는다',()=>{assert.equal(paperFileType('시험지.PDF'),'application/pdf');assert.equal(paperFileType('실행.html'),null);assert.equal(paperPathValid('counselling-papers/'+exam+'/'+file+'.pdf',exam),true);assert.equal(paperPathValid('counselling-papers/'+exam+'/../other.pdf',exam),false);assert.equal(paperPathValid('counselling-papers/'+file+'/'+file+'.pdf',exam),false);});
