@@ -146,3 +146,15 @@ test("답안지 제목은 판독 호환에 영향을 주는 값이 아니다", (
   }
   assert.notEqual(a.title, b.title, "제목은 달라도 된다");
 });
+
+
+test("연동 시험 이름을 바꿔도 OMR 인쇄 제목은 원본 제목을 유지한다 — 기존 연동 자료 포함", () => {
+  const source={snapshot:{title:'10월 월말평가_M7B'}};
+  const cfg={exam_generator:source};
+  const before=exam({title:'10월 월말평가_M7B'},cfg);
+  const after={...before,title:'M7B 화목 채점 관리'};
+  assert.deepEqual(sheetSpecFor(before),sheetSpecFor(after));
+  assert.equal(sheetSpecFor(after).title,source.snapshot.title);
+  assert.equal(sheetSpecFor(exam({title:'OMR 관리 이름'},{...cfg,sheet_title:'별도 답안지 제목'})).title,'별도 답안지 제목');
+  assert.equal(source.snapshot.title,'10월 월말평가_M7B');
+});

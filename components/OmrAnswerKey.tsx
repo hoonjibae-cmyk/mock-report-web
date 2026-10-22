@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import ImportedExamTitle from './ImportedExamTitle';
+import {importedPrintTitle} from '@/lib/imported-exam-title';
 import ImportedExamSource from "./ImportedExamSource";
 import CounsellingPaperUpload from "./CounsellingPaperUpload";
 import type {CounsellingPaper} from "@/lib/counselling-paper";
@@ -20,9 +22,10 @@ interface Props {
   exam: OmrExam | null;
   setupError: string;
   canEdit: boolean;
+  canRename?: boolean;
 }
 
-export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
+export default function OmrAnswerKey({ exam, setupError, canEdit, canRename = false }: Props) {
   // 문항별 정답을 항상 배열로 다룬다 — 원소가 2개 이상이면 '모두 고르기' 문항이다.
   const [key, setKey] = useState<Record<string, number[]>>(() => {
     const out: Record<string, number[]> = {};
@@ -330,6 +333,7 @@ export default function OmrAnswerKey({ exam, setupError, canEdit }: Props) {
         </div>
       </header>
 
+      {importedPrintTitle(exam)&&<ImportedExamTitle key={exam.id} id={exam.id} title={exam.title} printTitle={typeof exam.omrConfig.sheet_title==='string'&&exam.omrConfig.sheet_title.trim()?exam.omrConfig.sheet_title:importedPrintTitle(exam)!} canEdit={canRename}/>}
       <ImportedExamSource exam={exam}/>{exam.examType==='placement'&&<CounsellingPaperUpload examId={exam.id} initial={exam.omrConfig.counselling_paper as CounsellingPaper|undefined} canEdit={canEdit}/>}
       {error ? <p className="form-error block">{error}</p> : null}
       {message ? (

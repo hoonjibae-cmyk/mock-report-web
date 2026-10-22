@@ -1,3 +1,4 @@
+import {importedExamTitleSchema} from '@/lib/imported-exam-title';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {authorizeApi} from '@/lib/api-auth';
@@ -17,17 +18,17 @@ export async function POST(request:Request) {
     if(!request.headers.get('content-type')?.includes('application/json'))throw new ImportError('JSON 요청이 필요합니다.',415);
     const raw=await request.text();
     if(Buffer.byteLength(raw)>8192)throw new ImportError('요청이 너무 큽니다.',413);
-    const input=z.object({token:z.string().min(20).max(4096),action:z.enum(['preview','import']),pointMode:z.enum(['source','equal']).optional()}).parse(JSON.parse(raw));
+    const input=z.object({token:z.string().min(20).max(4096),action:z.enum(['preview','import']),pointMode:z.enum(['source','equal']).optional(),title:importedExamTitleSchema.shape.title.optional()}).parse(JSON.parse(raw));
     const snapshot=await loadExamGeneratorSource(input.token,auth.user);
     if(input.action==='preview')return NextResponse.json({snapshot},{headers:{'Cache-Control':'no-store'}});
     if(!input.pointMode)throw new ImportError('배점 방식을 선택해 주세요.');
     const plan=importPlan(snapshot,input.pointMode);
     // One atomic INSERT includes answers and analysis metadata; the primary key makes retries race-safe.
     const {error}=await getSupabaseAdmin().from('exams').insert({
-      id:plan.id,exam_type:'monthly',report_family:'C_generic',title:snapshot.title,subject:'english',
+      id:plan.id,exam_type:'monthly',report_family:'C_generic',title:input.title??snapshot.title,subject:'english',
       exam_date:snapshot.examDate||null,num_questions:snapshot.questions.length,num_choices:5,
       id_digits:FIXED_ID_DIGITS,omr_style:'exam',
-      omr_config:{per_column:20,subject_label:'영어 영역',essay_count:0,exam_generator:{snapshot,fingerprint:plan.fingerprint,pointMode:input.pointMode}},
+      omr_config:{sheet_title:snapshot.title,per_column:20,subject_label:'영어 영역',essay_count:0,exam_generator:{snapshot,fingerprint:plan.fingerprint,pointMode:input.pointMode}},
       answer_key:plan.answerKey,points:plan.points,question_meta:plan.questionMeta,grade_cuts:[],
       class_names:snapshot.className?[snapshot.className]:[],use_teacher_comment:true,
       created_by_username:auth.user.username,created_by_name:auth.user.displayName,

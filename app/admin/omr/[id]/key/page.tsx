@@ -1,3 +1,4 @@
+import {canRenameImportedExam} from '@/lib/imported-exam-title';
 import { notFound } from "next/navigation";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getVisibleExam } from "@/lib/exam-access";
@@ -20,6 +21,6 @@ export default async function OmrAnswerKeyPage(context: { params: Promise<{ id: 
   if (!exam && !setupError) notFound();
 
   return (
-    <OmrAnswerKey exam={exam} setupError={setupError} canEdit={hasPermission(user, "createReports")} />
+    <OmrAnswerKey exam={exam} setupError={setupError} canEdit={hasPermission(user, "createReports")} canRename={!!exam&&hasPermission(user,"createReports")&&canRenameImportedExam(user,exam)} />
   );
 }

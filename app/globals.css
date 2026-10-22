@@ -2668,3 +2668,9 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .cohort-compare em.down { color: #b3261e; background: #fbe9e7; }
 
 .counselling-paper-upload{margin:18px 0}.counselling-paper-upload h2{margin:0 0 10px}.paper-upload-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}.paper-upload-controls input{min-width:0;max-width:100%}.paper-question-editor{padding:14px;border:1px solid var(--line);border-radius:8px;margin:10px 0}.paper-question-editor label{display:block;margin:10px 0}.paper-question-editor textarea{display:block;width:100%;min-height:70px}.counselling-paper-upload details{margin:14px 0}.counselling-paper-upload summary{cursor:pointer}
+
+.import-title-field{display:grid;gap:8px;margin:0 0 16px;max-width:680px;font-size:14px;font-weight:600}
+.import-title-field input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font:inherit;background:white;color:var(--ink)}
+.import-title-field input:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+.import-title-field small{font-weight:400;line-height:1.6}
+.imported-title-editor .hint{line-height:1.7;margin:0 0 16px}
