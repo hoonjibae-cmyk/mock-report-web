@@ -42,3 +42,12 @@ test('personal AI receives saved reasoning and outcomes, without original questi
  assert.equal(JSON.stringify(payload).includes('RAW SECRET SOURCE'),false);
  assert.equal(payload.commonItems[0].correctReason,'saved reasoning');
 });
+
+test('refresh replaces persisted personal analysis once and ordinary reads reuse refreshed result',async()=>{
+ const db=database({personal:{state:'ready',fingerprint:'v1',result:0,completedAt:1},common:{state:'ready',result:'keep'}});let calls=0;
+ const generate=async()=>{calls++;await new Promise(r=>setTimeout(r,20));return 1;};
+ const results=await Promise.all(Array.from({length:10},()=>sharedAnalysis(db.store(),'personal','v1',generate,{...options,refresh:true})));
+ assert.deepEqual(results,Array(10).fill(1));assert.equal(calls,1);
+ assert.equal(await sharedAnalysis(db.store(),'personal','v1',generate,options),1);assert.equal(calls,1);
+ assert.deepEqual((await db.store().read())?.common,{state:'ready',result:'keep'});
+});
