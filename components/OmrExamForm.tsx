@@ -459,7 +459,13 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
         )}
 
         <label className="checkbox-row">
-          <input type="checkbox" name="useTeacherComment" />
+          {/* 월말평가는 담임 의견이 성적표의 일부다 — 기본으로 켜 둔다. 유형을 바꾸면 그 유형의 기본값으로 돌아간다. */}
+          <input
+            key={`c-${type}`}
+            type="checkbox"
+            name="useTeacherComment"
+            defaultChecked={type === "monthly"}
+          />
           <span>담임 의견 사용 (성적표에 담임 코멘트 포함)</span>
         </label>
 
