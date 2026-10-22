@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {createHmac} from 'node:crypto';
-import {validatePaperQuestions,paperFileType,paperPathValid,usablePaperQuestions} from '../lib/counselling-paper';
+import {validatePaperQuestions,paperFileType,paperPathValid,usablePaperQuestions,expandPaperSubquestions} from '../lib/counselling-paper';
+test('서술형 빈칸 a·b·c는 연속 OMR 번호로 연결하며 기존 원문 문항은 덮어쓰지 않는다',()=>{const q={no:49,stem:'본문에서 찾아 쓰시오',passage:'eye (a)_____ are (b)____ so humans (c)____',choices:[],explanation:'',unclear:false},empty={...q,no:50,stem:'',passage:'',unclear:true};const expanded=expandPaperSubquestions([q,empty,{...empty,no:51}],45,51);assert.deepEqual(expanded.map(q=>q.no),[49,50,51]);assert.equal(usablePaperQuestions(expanded).length,3);assert.equal(expanded[1].passage,q.passage);assert.match(expanded[1].stem,/소문항 \(b\)/);assert.deepEqual(expandPaperSubquestions(expanded,45,51),expanded);assert.equal(expandPaperSubquestions([q,{...q,no:50,stem:'다른 원문'}],45,51).length,2);});
 test('판독 보류·빈 문항만 제외하고 나머지 문항은 부분 연결한다',()=>{const q={no:1,stem:'발문',passage:'',choices:[],explanation:'',unclear:false};assert.deepEqual(usablePaperQuestions([q,{...q,no:50,unclear:true},{...q,no:51,stem:''}]).map(q=>q.no),[1]);});
 import {verifyCounsellingSignature,CounsellingEvidenceSchema} from '../lib/counselling-ai';
 const exam='11111111-1111-4111-8111-111111111111',file='22222222-2222-4222-8222-222222222222';
