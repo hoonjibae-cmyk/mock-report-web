@@ -2678,3 +2678,7 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .report-key-feedback-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.report-key-feedback-grid>section{min-width:0}.report-key-feedback h3{font-size:16px;margin:0 0 12px;color:#264a43}.report-key-feedback ul{padding-left:18px;margin:0}.report-key-feedback li+li{margin-top:12px}.report-key-feedback strong{font-size:14px}.report-key-feedback small{display:block;color:#6a7a78;font-size:11px;margin-top:3px}.report-key-feedback p{font-size:13px;line-height:1.65;margin:5px 0 0;overflow-wrap:anywhere}
 @media(max-width:640px){.report-key-feedback-grid{grid-template-columns:1fr;gap:20px}}
 @media print{.report-key-feedback{break-inside:auto}.report-key-feedback li{break-inside:avoid}.report-key-feedback-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.report-key-feedback p{font-size:10pt;line-height:1.5}}
+
+body.report-layout-a4 .placement-report-document{display:block;width:190mm;margin:0 auto}
+@page placement-report{size:A4 portrait;margin:10mm}
+@media print{html:has(.placement-report-document),body:has(.placement-report-document){width:auto!important}.placement-report-document{display:block!important;page:placement-report;width:100%!important;box-shadow:none;border-radius:0}.placement-report-document .analysis-card{break-inside:avoid}.placement-report-document .report-key-feedback{break-inside:auto}}

@@ -276,7 +276,7 @@ export default function GenericReport({
   return (
     <main className="report-shell">
       <ReportLayoutEffects />
-      <article className="report-document web-report-document">
+      <article className={placement?"report-document web-report-document placement-report-document":"report-document web-report-document"}>
         <header className="report-hero">
           <div className="brand-lockup report-brand">
             <AcademyLogo size="large" />
