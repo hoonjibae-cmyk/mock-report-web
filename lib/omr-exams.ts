@@ -218,6 +218,13 @@ export async function renameImportedExam(id:string,title:string,previousTitle:st
   return !!data?.length;
 }
 
+/** Repair the roster link in place. Never rewrite scans, grading, source, reports or review. */
+export async function updateImportedExamClasses(id:string,classNames:string[],previousClassNames:string[]):Promise<boolean> {
+  const {data,error}=await getSupabaseAdmin().from('exams').update({class_names:classNames}).eq('id',id).eq('class_names',JSON.stringify(previousClassNames)).select('id');
+  if(error)throw new Error('응시반을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  return !!data?.length;
+}
+
 /** 정답키·배점·영역 저장 (전달된 항목만 갱신) */
 export async function updateExamAnswerKey(
   id: string,

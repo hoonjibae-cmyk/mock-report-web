@@ -4,6 +4,7 @@ import { getVisibleExam } from "@/lib/exam-access";
 import { listScans, type OmrScan } from "@/lib/omr-scans";
 import { fetchClassRosters } from "@/lib/student-directory";
 import OmrReportBuilder from "@/components/OmrReportBuilder";
+import {canEditImportedClasses} from '@/lib/imported-exam-classes';
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export default async function OmrReportsPage(context: { params: Promise<{ id: st
       setupError={setupError}
       canCreate={hasPermission(user, "createReports")}
       canExport={hasPermission(user, "exportReports")}
+      canEditClasses={!!exam&&hasPermission(user,'createReports')&&canEditImportedClasses(user,exam)}
       rosters={rosters}
       rosterError={rosterError}
     />
