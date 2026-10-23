@@ -18,6 +18,7 @@ import {
 import type { ClassOption } from "@/lib/student-directory";
 import { inferPeriodMonth, levelOfClassName } from "@/lib/monthly-cohort";
 import ClassfitWorkspacePicker from '@/components/ClassfitWorkspacePicker';
+import MonthlyClassPicker from '@/components/MonthlyClassPicker';
 
 /** 오늘 — 시행월을 유추할 때 연도의 기준(현지 날짜, YYYY-MM-DD) */
 function todayLocalIso(): string {
@@ -294,46 +295,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
         </label>
 
         {type==='placement'&&<ClassfitWorkspacePicker/>}
-        {type === "monthly" ? (
-          <fieldset className="class-picker">
-            <legend>
-              <span>시험을 치르는 반{classOptions.length > 0 ? " *" : ""}</span>
-            </legend>
-            {classOptions.length > 0 ? (
-              <>
-                <div className="class-picker-grid">
-                  {classOptions.map((c) => {
-                    const on = selectedClasses.includes(c.className);
-                    return (
-                      <label key={c.className} className={`class-picker-item${on ? " on" : ""}`}>
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          onChange={(e) => toggleClass(c.className, e.target.checked)}
-                        />
-                        <span className="class-picker-name">{c.className}</span>
-                        <span className="class-picker-meta">
-                          {classesMine ? "" : c.teacher ? `${c.teacher} · ` : ""}
-                          {c.count}명
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <small className="hint">
-                  {classesMine
-                    ? "담당하시는 반만 보입니다. 두 반을 합쳐 치르면 둘 다 고르세요. 운영진 검토 화면의 미응시 확인은 여기서 고른 반을 기준으로 합니다."
-                    : "담당 반을 찾지 못해 전체 반을 보입니다. 이 시험을 치르는 반을 고르세요. 운영진 검토 화면의 미응시 확인은 여기서 고른 반을 기준으로 합니다."}
-                </small>
-              </>
-            ) : (
-              <small className="hint">
-                반 목록을 불러오지 못했습니다{classesError ? ` — ${classesError}` : ""}. 반 없이 만들 수 있지만,
-                운영진 검토 화면에서 미응시 학생을 가려내지 못합니다.
-              </small>
-            )}
-          </fieldset>
-        ) : null}
+        {type === "monthly" && <MonthlyClassPicker classOptions={classOptions} classesMine={classesMine} classesError={classesError} selected={selectedClasses} onToggle={toggleClass}/>}
 
         {type === "monthly" ? (
           <div className="form-row">

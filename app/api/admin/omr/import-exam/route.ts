@@ -1,13 +1,14 @@
-import {importedExamTitleSchema} from '@/lib/imported-exam-title';
 import {NextResponse} from 'next/server';
 import {z} from 'zod';
 import {authorizeApi} from '@/lib/api-auth';
 import {siteBaseUrl} from '@/lib/utils';
 import {loadExamGeneratorSource,ImportError} from '@/lib/exam-generator-source';
-import {importPlan} from '@/lib/exam-generator-import';
+import {examImportRequestSchema,importPlan} from '@/lib/exam-generator-import';
 import {getSupabaseAdmin} from '@/lib/supabase-admin';
 import {getExam} from '@/lib/omr-exams';
 import {FIXED_ID_DIGITS} from '@/lib/omr-types';
+import {fetchClassBoard} from '@/lib/student-directory';
+import {monthlyClassSelection,requireMonthlyClasses} from '@/lib/monthly-class-selection';
 export const runtime='nodejs';
 export const maxDuration=60;
 export async function POST(request:Request) {
@@ -18,11 +19,12 @@ export async function POST(request:Request) {
     if(!request.headers.get('content-type')?.includes('application/json'))throw new ImportError('JSON 요청이 필요합니다.',415);
     const raw=await request.text();
     if(Buffer.byteLength(raw)>8192)throw new ImportError('요청이 너무 큽니다.',413);
-    const input=z.object({token:z.string().min(20).max(4096),action:z.enum(['preview','import']),pointMode:z.enum(['source','equal']).optional(),title:importedExamTitleSchema.shape.title.optional()}).parse(JSON.parse(raw));
+    const input=examImportRequestSchema.parse(JSON.parse(raw));
     const snapshot=await loadExamGeneratorSource(input.token,auth.user);
-    if(input.action==='preview')return NextResponse.json({snapshot},{headers:{'Cache-Control':'no-store'}});
-    if(!input.pointMode)throw new ImportError('배점 방식을 선택해 주세요.');
-    const plan=importPlan(snapshot,input.pointMode);
+    const selection=monthlyClassSelection(auth.user.displayName,await fetchClassBoard());
+    if(input.action==='preview')return NextResponse.json({snapshot,...selection},{headers:{'Cache-Control':'no-store'}});
+    const classNames=requireMonthlyClasses(input.classNames,selection);
+    const plan=importPlan(snapshot,input.pointMode,{classNames,username:auth.user.username});
     // One atomic INSERT includes answers and analysis metadata; the primary key makes retries race-safe.
     const {error}=await getSupabaseAdmin().from('exams').insert({
       id:plan.id,exam_type:'monthly',report_family:'C_generic',title:input.title??snapshot.title,subject:'english',
@@ -30,13 +32,13 @@ export async function POST(request:Request) {
       id_digits:FIXED_ID_DIGITS,omr_style:'exam',
       omr_config:{sheet_title:snapshot.title,per_column:20,subject_label:'영어 영역',essay_count:0,exam_generator:{snapshot,fingerprint:plan.fingerprint,pointMode:input.pointMode}},
       answer_key:plan.answerKey,points:plan.points,question_meta:plan.questionMeta,grade_cuts:[],
-      class_names:snapshot.className?[snapshot.className]:[],use_teacher_comment:true,
+      class_names:classNames,use_teacher_comment:true,
       created_by_username:auth.user.username,created_by_name:auth.user.displayName,
     });
     if(error&&error.code!=='23505')throw new ImportError('OMR 시험을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',503);
     const exam=await getExam(plan.id);
     const source=exam?.omrConfig.exam_generator as {fingerprint?:string}|undefined;
-    if(!exam||source?.fingerprint!==plan.fingerprint)throw new ImportError('연동 시험을 확인하지 못했습니다.',409);
+    if(!exam||source?.fingerprint!==plan.fingerprint||exam.createdByUsername!==auth.user.username||JSON.stringify([...exam.classNames].sort())!==JSON.stringify(classNames))throw new ImportError('연동 시험의 응시반을 확인하지 못했습니다.',409);
     return NextResponse.json({id:exam.id,url:`/admin/omr/${exam.id}/key`,existing:!!error},{headers:{'Cache-Control':'no-store'}});
   }catch(e){
     const status=e instanceof ImportError?e.status:400;

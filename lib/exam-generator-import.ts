@@ -1,5 +1,12 @@
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
+import {importedExamTitleSchema} from './imported-exam-title';
+
+const handoff={token:z.string().min(20).max(4096)};
+export const examImportRequestSchema=z.discriminatedUnion('action',[
+  z.object({...handoff,action:z.literal('preview')}).strict(),
+  z.object({...handoff,action:z.literal('import'),pointMode:z.enum(['source','equal']),title:importedExamTitleSchema.shape.title.optional(),classNames:z.array(z.string().trim().min(1).max(60)).min(1).max(30)}).strict(),
+]);
 
 export const sourceQuestionSchema=z.object({
   number:z.number().int().min(1).max(120),id:z.uuid(),area:z.enum(['듣기','문법','독해']),
@@ -25,7 +32,9 @@ export function sameRecipient(recipient:{empNo:string;email:string},account:{hr_
   return typeof account.hr_emp_no==='string'&&account.hr_emp_no===recipient.empNo&&
     typeof account.email==='string'&&account.email.toLowerCase()===recipient.email.toLowerCase();
 }
-export function importPlan(snapshot:SourceSnapshot,pointMode:PointMode) {
+export function importPlan(snapshot:SourceSnapshot,pointMode:PointMode,target:{classNames:readonly string[];username:string}) {
+  const classNames=[...new Set(target.classNames)].sort();
+  if(!classNames.length||!target.username)throw new Error('응시반과 생성 계정을 확인해 주세요.');
   if(pointMode==='source'&&snapshot.questions.some(q=>q.points===null||q.points<=0))throw new Error('배점이 비어 있거나 0점인 문항이 있습니다. 균등 100점 배점을 선택하거나 원본에 배점을 설정해 주세요.');
   const answerKey:Record<string,number>={},points:Record<string,number>={},questionMeta:Record<string,{area:string;content:string;difficulty:string}>={};
   for(const q of snapshot.questions){
@@ -36,8 +45,8 @@ export function importPlan(snapshot:SourceSnapshot,pointMode:PointMode) {
   if(Object.values(points).reduce((n,p)=>n+p,0)<=0)throw new Error('총 배점은 0보다 커야 합니다.');
   // Content identity excludes save version, so saving unchanged drafts does not duplicate a grading exam.
   const {sourceVersion:_version,...content}=snapshot;
-  const fingerprint=createHash('sha256').update(JSON.stringify({content,points})).digest('hex');
-  const hash=createHash('sha256').update('yussam-exam-omr-v1:'+fingerprint).digest('hex');
+  const fingerprint=createHash('sha256').update(JSON.stringify({content,points,target:{classNames,username:target.username}})).digest('hex');
+  const hash=createHash('sha256').update('yussam-exam-omr-v2:'+fingerprint).digest('hex');
   const id=`${hash.slice(0,8)}-${hash.slice(8,12)}-5${hash.slice(13,16)}-a${hash.slice(17,20)}-${hash.slice(20,32)}`;
   return {id,fingerprint,answerKey,points,questionMeta};
 }
