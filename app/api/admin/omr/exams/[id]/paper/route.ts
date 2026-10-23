@@ -9,7 +9,7 @@ import {createSignedViewUrl} from '@/lib/omr-scans';
 import {DEFAULT_AI_MODEL} from '@/lib/ai-models';
 import {ensureCommonItemAnalysis,readyCommonAnalysis,type CommonAnalysis} from '@/lib/common-item-analysis';
 import {PaperSchema,expandPaperSubquestions,usablePaperQuestions,validatePaperQuestions,paperFileType,paperPathValid,type CounsellingPaper} from '@/lib/counselling-paper';
-export const runtime='nodejs';export const maxDuration=180;
+export const runtime='nodejs';export const maxDuration=300;
 const MAX=20*1024*1024;
 export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){const auth=await authorizeApi('viewReports');if(auth.response)return auth.response;const exam=await getVisibleExam((await params).id);if(!exam)return NextResponse.json({error:'시험을 찾을 수 없습니다.'},{status:404});const saved=exam.omrConfig.counselling_paper as CounsellingPaper|undefined,expanded=saved?expandPaperSubquestions(saved.questions,exam.numQuestions,exam.numQuestions+Number(exam.omrConfig.essay_count??0)):[],changed=saved&&JSON.stringify(saved.questions)!==JSON.stringify(expanded),paper=saved?{...saved,questions:expanded,status:changed?'draft' as const:saved.status}:undefined;return NextResponse.json({paper:paper??null,analysis:changed?null:readyCommonAnalysis(exam.omrConfig,exam.answerKey,exam.questionMeta),url:paper?await createSignedViewUrl(paper.path):null},{headers:{'Cache-Control':'private, no-store'}});}
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
