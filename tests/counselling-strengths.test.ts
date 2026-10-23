@@ -13,5 +13,6 @@ test('강점은 공통 유형 분석과 실제 정답 번호를 연결하고 이
  const payload=personalCounsellingPayload(evidence,{items:[{no:1,skill:'복수 근거 통합',correctReason:'공통 근거',choiceNotes:[],reviewPoints:[],caution:''}]});
  assert.equal(payload.strengthCandidates[0].skill,'복수 근거 통합');assert.equal(payload.strengthCandidates[0].gradeAttempts,20);assert.equal(payload.commonItems[0].no,1);
  const old={summary:'저장 결과',strengths:[{title:'기존 강점',evidence:'기존 근거'}],weaknesses:[],plan:[],programRecommendations:[]};assert.deepEqual(savedStudentAnalysis({counselling_student_analysis:{state:'ready',result:old}}),old);
- const result=counsellingForStudent({...old,strengths:[{title:'추론',evidence:'근거 통합',questionNos:[1,2,3]}]},new Set([2]),{essayResults:{earned:0,possible:0},items:[{no:1,correct:true,hasDetailedEvidence:true},{no:3,correct:true,hasDetailedEvidence:false}]});assert.deepEqual(result.strengths[0].questionNos,[1]);
+ const result=counsellingForStudent({...old,strengths:[{title:'추론',evidence:'근거 통합',questionNos:[1,2,3]}]},new Set([2]),{essayResults:{earned:0,possible:0},items:[{no:1,correct:true,hasDetailedEvidence:true},{no:3,correct:true,hasDetailedEvidence:false}]});assert.deepEqual(result.strengths,[]);
+ const valid=counsellingForStudent({...old,strengths:[{title:'추론',evidence:'근거 통합',questionNos:[1]}]},new Set(),{essayResults:{earned:0,possible:0},strengthCandidates:[{no:1}]});assert.deepEqual(valid.strengths[0].questionNos,[1]);
 });
