@@ -51,3 +51,10 @@ test('refresh replaces persisted personal analysis once and ordinary reads reuse
  assert.equal(await sharedAnalysis(db.store(),'personal','v1',generate,options),1);assert.equal(calls,1);
  assert.deepEqual((await db.store().read())?.common,{state:'ready',result:'keep'});
 });
+
+test('completed common chunks survive a partial failure and are not generated again on retry',async()=>{
+ const db=database();const calls=[0,0];let fail=true;
+ const generate=async()=>Promise.all([0,1].map(index=>sharedAnalysis(db.store(),'chunk'+index,'v1',async()=>{calls[index]++;if(index===1&&fail){await new Promise(r=>setTimeout(r,10));throw Error('retry');}return index;},options)));
+ await assert.rejects(sharedAnalysis(db.store(),'common','v1',generate,options));fail=false;
+ assert.deepEqual(await sharedAnalysis(db.store(),'common','v1',generate,options),[0,1]);assert.deepEqual(calls,[1,2]);
+});
