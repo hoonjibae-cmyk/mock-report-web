@@ -1,3 +1,4 @@
+import {loadPlacementReportFeedback,type PlacementReportFeedback} from '@/lib/placement-report-feedback';
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {getSupabaseAdmin} from '@/lib/supabase-admin';
 import {lookupStudents} from '@/lib/student-directory';
@@ -8,7 +9,7 @@ import {deliverToClassfit} from '@/lib/classfit-delivery';
 export const PLACEMENT_CHANNEL='C06PAG818TZ';
 type PlacementRequest={report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
 type Member={studentId:string;classId:string;excluded?:boolean};
-type PlacementStudent={id:string;cardNo:string;reportId?:string;reportWorkspaceId?:string;examId?:string;removed?:boolean;registryStatus?:string};
+type PlacementStudent={id:string;cardNo:string;reportId?:string;reportWorkspaceId?:string;examId?:string;removed?:boolean;registryStatus?:string;examOnly?:boolean;regularEnrolled?:boolean};
 type PlacementWorkspace={id:string;state:{students:PlacementStudent[];memberships:Member[];waitlist?:Member[];classes:Array<{id:string;name:string;schedule?:string;archived?:boolean}>}};
 export function summarySignature(token:string,expires:number){return createHmac('sha256',process.env.AUTH_SECRET??'').update(`placement-summary:${token}:${expires}`).digest('hex');}
 export function validSummarySignature(token:string,expires:number,signature:string){
@@ -89,7 +90,7 @@ export async function dispatchPlacementNotifications(){
   }
   return {checked,sent};
 }
-export async function resolveAssignedReport(reportId:string,workspaceId?:string,classId?:string):Promise<{report:GenericReportData|null;teacherComment?:unknown;reason?:string;classes?:Array<{id:string;name:string}>}>{
+export async function resolveAssignedReport(reportId:string,workspaceId?:string,classId?:string):Promise<{report:GenericReportData|null;teacherComment?:unknown;keyFeedback?:PlacementReportFeedback|null;reason?:string;classes?:Array<{id:string;name:string}>}>{
   const client=getSupabaseAdmin();
   const [{data:row,error},{data:request,error:requestError}]=await Promise.all([
     client.from('student_reports').select('id,student_key,report_data,is_active,exam_id,teacher_comment').eq('id',reportId).maybeSingle(),
@@ -111,7 +112,7 @@ export async function resolveAssignedReport(reportId:string,workspaceId?:string,
   const keys=[...new Set(workspace.state.students.filter(s=>ids.has(s.id)&&!s.removed&&s.registryStatus!=='withdrawn').map(s=>s.cardNo).filter(Boolean))];
   const peers:GenericReportData[]=[];
   for(let from=0;;from+=500){const {data,error}=await client.from('student_reports').select('student_key,report_data,created_at').eq('exam_id',row.exam_id).eq('is_active',true).in('student_key',keys).order('created_at',{ascending:false}).range(from,from+499);if(error)throw Error('배정 반의 성적 평균을 불러오지 못했습니다.');for(const peer of data??[])if(isGenericReport(peer.report_data)&&!peers.some(p=>p.student.key===peer.student_key))peers.push(peer.report_data);if((data?.length??0)<500)break;}
-  return {teacherComment:row.teacher_comment,report:applyAssignedClass(body,peers,`${assigned.name}${assigned.schedule?` · ${assigned.schedule}`:''}`)};
+  return {keyFeedback:await loadPlacementReportFeedback(body,s),teacherComment:row.teacher_comment,report:applyAssignedClass(body,peers,`${assigned.name}${assigned.schedule?` · ${assigned.schedule}`:''}`)};
 }
 export async function placementStatuses(examId:string){
   const client=getSupabaseAdmin(),{data:rows,error}=await client.from('placement_requests').select('report_id,student_key,workspace_id,preferred_schedule,notification_state').eq('exam_id',examId).order('requested_at');if(error)throw Error('반배정 요청 데이터베이스 업데이트를 확인해 주세요.');

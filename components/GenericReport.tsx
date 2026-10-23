@@ -1,3 +1,4 @@
+import type {PlacementReportFeedback} from '@/lib/placement-report-feedback';
 import AcademyLogo from "@/components/AcademyLogo";
 import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { formatChoices, toChoices } from "@/lib/omr-answers";
@@ -236,9 +237,11 @@ function BreakdownSection({
 export default function GenericReport({
   report,
   comments,
+  keyFeedback,
 }: {
   report: GenericReportData;
   comments?: ReportComments;
+  keyFeedback?: PlacementReportFeedback | null;
 }) {
   const { score, cohort } = report;
   // 반배치고사 — 집단은 배정 반이고, 반 평균만 싣는다. 표준편차·반 최고·최저 점수는
@@ -436,6 +439,15 @@ export default function GenericReport({
             areas={areas}
           />
         ) : null}
+
+        {placement&&keyFeedback&&(keyFeedback.strengths.length>0||keyFeedback.weaknesses.length>0)&&(
+          <section className="analysis-card report-key-feedback" aria-label="핵심 강점과 핵심 약점">
+            <div className="report-key-feedback-grid">
+              <section><h3>핵심 강점</h3>{keyFeedback.strengths.length?<ul>{keyFeedback.strengths.map((item,index)=><li key={index}><strong>{item.title}</strong>{item.questionNos?.length? <small>{item.questionNos.map(no=>`${no}번`).join(' · ')}</small>:null}<p>{item.evidence}</p></li>)}</ul>:<p>현재 채점 자료에서 별도로 확인된 강점이 없습니다.</p>}</section>
+              <section><h3>핵심 약점</h3>{keyFeedback.weaknesses.length?<ul>{keyFeedback.weaknesses.map((item,index)=><li key={index}><strong>{item.title}</strong>{item.questionNos?.length? <small>{item.questionNos.map(no=>`${no}번`).join(' · ')}</small>:null}<p>{item.analysis}</p></li>)}</ul>:<p>현재 채점 자료에서 뚜렷한 약점이 없습니다.</p>}</section>
+            </div>
+          </section>
+        )}
 
         {(report.contents?.length ?? 0) > 0 ? (
           <BreakdownSection

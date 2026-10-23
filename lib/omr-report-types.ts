@@ -140,6 +140,8 @@ export interface GenericReportData {
   examDate: string | null;
   academy: string;
   student: {
+    /** 시험 응시 당시 재원 구분. 등록 이후에도 신입생 성적표 설명을 유지한다. */
+    enrollment?: '신규생' | '재원생' | null;
     /** 수험번호(student_key) */
     key: string;
     name: string;

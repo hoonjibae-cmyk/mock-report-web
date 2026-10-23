@@ -2674,3 +2674,7 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .import-title-field input:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
 .import-title-field small{font-weight:400;line-height:1.6}
 .imported-title-editor .hint{line-height:1.7;margin:0 0 16px}
+
+.report-key-feedback-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.report-key-feedback-grid>section{min-width:0}.report-key-feedback h3{font-size:16px;margin:0 0 12px;color:#264a43}.report-key-feedback ul{padding-left:18px;margin:0}.report-key-feedback li+li{margin-top:12px}.report-key-feedback strong{font-size:14px}.report-key-feedback small{display:block;color:#6a7a78;font-size:11px;margin-top:3px}.report-key-feedback p{font-size:13px;line-height:1.65;margin:5px 0 0;overflow-wrap:anywhere}
+@media(max-width:640px){.report-key-feedback-grid{grid-template-columns:1fr;gap:20px}}
+@media print{.report-key-feedback{break-inside:auto}.report-key-feedback li{break-inside:avoid}.report-key-feedback-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.report-key-feedback p{font-size:10pt;line-height:1.5}}

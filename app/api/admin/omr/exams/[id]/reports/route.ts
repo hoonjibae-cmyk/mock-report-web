@@ -1,5 +1,5 @@
 import {requestPlacement,placementStatuses} from '@/lib/placement-service';
-import { isNewStudentScan, placementGrade, preferredSchedule } from "@/lib/placement-policy";
+import { enrollmentOf, isNewStudentScan, placementGrade, preferredSchedule } from "@/lib/placement-policy";
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
@@ -294,6 +294,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         examDate: exam.examDate,
         academy: ACADEMY_NAME,
         student: {
+          ...(exam.examType==='placement'?{enrollment:enrollmentOf(scan.enrollment)}:{}),
           key,
           name: input.name.trim(),
           school: input.school?.trim() ?? "",

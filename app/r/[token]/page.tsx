@@ -1,3 +1,4 @@
+import type {PlacementReportFeedback} from '@/lib/placement-report-feedback';
 import AcademyLogo from "@/components/AcademyLogo";
 import GenericReport, { type ReportComments } from "@/components/GenericReport";
 import PinGate from "@/components/PinGate";
@@ -57,11 +58,11 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
   if (!staffViewing) await recordReportView(row.id, row.view_count).catch(() => undefined);
   const genericData:unknown=row.report_data;
   if (isGenericReport(genericData)) {
-    let report=genericData;
+    let report=genericData;let keyFeedback:PlacementReportFeedback|null|undefined=null;
     if(report.examType==='placement'){
       const assigned=await resolveAssignedReport(row.id);
       if(!assigned.report)return <Unavailable title="반배정 대기 중입니다" message={assigned.reason??'반배정 후 성적표를 확인할 수 있습니다.'}/>;
-      report=assigned.report;
+      report=assigned.report;keyFeedback=assigned.keyFeedback;
     }
     // 담임 의견(총평·개별)은 성적표 생성 이후에도 수정되므로 열람 시점에 읽는다.
     const personal = parseTeacherComment(row.teacher_comment);
@@ -79,7 +80,7 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
       areaFeedback: personalFinal ? personal.areaFeedback : [],
       keywords: personalFinal ? personal.displayKeywords : [],
     };
-    return <GenericReport report={report} comments={comments} />;
+    return <GenericReport report={report} keyFeedback={keyFeedback} comments={comments} />;
   }
   return <ReportView report={row.report_data} />;
 }
