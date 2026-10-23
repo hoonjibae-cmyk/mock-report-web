@@ -29,6 +29,8 @@ import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ClassfitWorkspacePicker from "@/components/ClassfitWorkspacePicker";
 import CohortModeBox from "@/components/CohortModeBox";
+import ImportedExamClasses from './ImportedExamClasses';
+import {importedPrintTitle} from '@/lib/imported-exam-title';
 import { EXAM_TYPE_LABELS, mockSubjectOf, type OmrExam } from "@/lib/omr-types";
 import { scanKey, type OmrScan } from "@/lib/omr-scans";
 
@@ -53,6 +55,7 @@ interface Props {
   setupError: string;
   canCreate: boolean;
   canExport: boolean;
+  canEditClasses?:boolean;
   /** 반별 재원생 명단(학생 관리 프로그램) — 반 인원 대비 응시 현황에 쓴다 */
   rosters?: Array<{ className: string; students: Array<{ examNumber: string; name: string }> }>;
   rosterError?: string | null;
@@ -88,6 +91,7 @@ export default function OmrReportBuilder({
   setupError,
   canCreate,
   canExport,
+  canEditClasses=false,
   rosters = [],
   rosterError = null,
 }: Props) {
@@ -709,6 +713,7 @@ export default function OmrReportBuilder({
 
       {error ? <p className="form-error block">{error}</p> : null}
       {message ? <p className="status-message">{message}</p> : null}
+      {exam.examType==='monthly'&&importedPrintTitle(exam)&&<ImportedExamClasses key={`classes-${exam.id}`} id={exam.id} classNames={exam.classNames} canEdit={canEditClasses}/>}
 
       {!keyReady ? (
         <div className="panel">
