@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {sharedAnalysis,type AnalysisDocument,type AnalysisStore} from '../lib/analysis-cache';
 import {commonFingerprint} from '../lib/common-item-analysis';
-import {personalCounsellingPayload,type CounsellingEvidenceSchema} from '../lib/counselling-ai';
+import {personalCounsellingPayload,savedStudentAnalysis,type CounsellingEvidenceSchema} from '../lib/counselling-ai';
 import type {z} from 'zod';
 
 function database(initial:AnalysisDocument={}){
@@ -10,6 +10,20 @@ function database(initial:AnalysisDocument={}){
  return {store:():AnalysisStore=>({read:async()=>document,compareAndSwap:async(before,after)=>{if(before!==document)return false;document=after;return true;}}),change:(patch:Record<string,unknown>)=>{document={...document,...patch};}};
 }
 const options={pollMs:1,waitMs:1000};
+
+test('completed student analysis survives changed inputs until explicit regeneration, including refresh failure',async()=>{
+ const slot='counselling_student_analysis',result={summary:'저장된 분석',strengths:[],weaknesses:[],plan:[],programRecommendations:[]};
+ const db=database();let calls=0;const generate=async()=>{calls++;return result;};
+ await sharedAnalysis(db.store(),slot,'old-input',generate,{...options,reusePersisted:true});
+ for(const fingerprint of ['new-model','changed-average','changed-programs'])assert.deepEqual(await sharedAnalysis(db.store(),slot,fingerprint,generate,{...options,reusePersisted:true}),result);
+ assert.equal(calls,1);assert.deepEqual(savedStudentAnalysis(await db.store().read()),result);
+ await assert.rejects(sharedAnalysis(db.store(),slot,'new-input',async()=>{calls++;assert.deepEqual(savedStudentAnalysis(await db.store().read()),result);throw Error('AI unavailable');},{...options,reusePersisted:true,refresh:true}));
+ assert.deepEqual(savedStudentAnalysis(await db.store().read()),result);
+ assert.deepEqual(await sharedAnalysis(db.store(),slot,'new-input',generate,{...options,reusePersisted:true}),result);assert.equal(calls,2);
+ const updated={...result,summary:'직접 다시 분석'};
+ assert.deepEqual(await sharedAnalysis(db.store(),slot,'new-input',async()=>{calls++;return updated;},{...options,reusePersisted:true,refresh:true}),updated);assert.equal(calls,3);
+ assert.deepEqual(savedStudentAnalysis(await db.store().read()),updated);assert.equal(savedStudentAnalysis({}),null);
+});
 test('concurrent servers and later fresh instances reuse one persisted generation',async()=>{
  const db=database();let calls=0;const generate=async()=>{calls++;await new Promise(r=>setTimeout(r,15));return {items:[1,2]};};
  const results=await Promise.all(Array.from({length:20},()=>sharedAnalysis(db.store(),'common','v1',generate,options)));

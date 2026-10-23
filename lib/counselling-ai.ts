@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 import {zodTextFormat} from 'openai/helpers/zod';
 import {z} from 'zod';
 import {STUDENT_COUNSELLING_MODEL,STUDENT_REASONING_EFFORT} from '@/lib/counselling-models';
-import {ensureCommonItemAnalysis,readyCommonAnalysis,commonFingerprint,type CommonAnalysis} from '@/lib/common-item-analysis';
+import {ensureCommonItemAnalysis,type CommonAnalysis} from '@/lib/common-item-analysis';
 import {sharedAnalysis} from '@/lib/analysis-cache';
 import {databaseAnalysisStore} from '@/lib/analysis-store';
 import {readAcademyPrograms,attachProgramNames,type AcademyProgram} from '@/lib/academy-programs';
@@ -29,21 +29,20 @@ export function personalCounsellingPayload(evidence:Evidence,common:CommonAnalys
  const essay=items.filter(i=>i.essay),essayResults={total:essay.length,correct:essay.filter(i=>i.correct).length,earned:essay.reduce((sum,i)=>sum+i.earned,0),possible:essay.reduce((sum,i)=>sum+i.point,0),wrongNos:essay.filter(i=>!i.correct).map(i=>i.no)};
  return {grade:evidence.grade,score:evidence.score,max:evidence.max,levelMean:evidence.levelMean,gradeMean:evidence.gradeMean,areas:evidence.areas,essayResults,programs,items,commonItems:common.items.filter(i=>needed.has(i.no)&&trusted.has(i.no)).map(({caution,...item})=>item)};
 }
+export function savedStudentAnalysis(document:Record<string,unknown>|null|undefined){
+ const entry=document?.counselling_student_analysis as {state?:string;result?:unknown;previousResult?:unknown}|undefined;
+ const parsed=AnalysisSchema.safeParse(entry?.state==='ready'?entry.result:entry?.previousResult);
+ return parsed.success?parsed.data:null;
+}
 export async function counsellingAnalysis(input:unknown){
  const mode=z.object({mode:z.enum(['read','ensure','regenerate']).default('ensure')}).parse(input).mode;
  const evidence=CounsellingEvidenceSchema.parse(input);if(!evidence.items.length)throw Error('문항별 채점 자료가 없습니다.');
  const {data:report,error}=await getSupabaseAdmin().from('student_reports').select('id,exam_id,is_active,report_data').eq('id',evidence.reportId).single();if(error||!report?.is_active||report.exam_id!==evidence.examId)throw Error('학생 성적이 변경되었습니다. 새로고침해 주세요.');
- let common;
- if(mode==='read'){
-  const {data:exam,error:examError}=await getSupabaseAdmin().from('exams').select('omr_config,answer_key,question_meta').eq('id',evidence.examId).single();
-  if(examError||!exam)throw Error('시험 문항 분석 자료를 읽지 못했습니다.');
-  const analysis=readyCommonAnalysis(exam.omr_config??{},exam.answer_key,exam.question_meta);
-  if(!analysis)return null;
-  common={analysis,fingerprint:commonFingerprint(exam.omr_config,exam.answer_key,exam.question_meta)};
- }else common=await ensureCommonItemAnalysis(evidence.examId);
+ const saved=savedStudentAnalysis(report.report_data);
+ if(mode!=='regenerate'&&(saved||mode==='read'))return saved?attachProgramNames(saved,await readAcademyPrograms()):null;
+ const common=await ensureCommonItemAnalysis(evidence.examId);
  const programs=await readAcademyPrograms(),payload=personalCounsellingPayload(evidence,common.analysis,programs);const fingerprint=createHash('sha256').update(JSON.stringify({version:7,model:STUDENT_COUNSELLING_MODEL,reasoning:{effort:STUDENT_REASONING_EFFORT},common:common.fingerprint,payload})).digest('hex');
- if(mode==='read'){const entry=report.report_data?.counselling_student_analysis;const cached=AnalysisSchema.safeParse(entry?.result);return entry?.state==='ready'&&entry.fingerprint===fingerprint&&cached.success?attachProgramNames(cached.data,programs):null;}
  return attachProgramNames(AnalysisSchema.parse(await sharedAnalysis(databaseAnalysisStore('student_reports',evidence.reportId,'report_data'),'counselling_student_analysis',fingerprint,async()=>{
   if(!process.env.OPENAI_API_KEY)throw Error('OMR 리포트의 AI API 설정을 확인해 주세요.');const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY,timeout:65000,maxRetries:0});const response=await client.responses.parse({model:STUDENT_COUNSELLING_MODEL,reasoning:{effort:STUDENT_REASONING_EFFORT},max_output_tokens:3500,store:false,input:[{role:'system',content:STUDENT_COUNSELLING_PROMPT},{role:'user',content:JSON.stringify(payload)}],text:{format:zodTextFormat(AnalysisSchema,'counselling_analysis')}});const analysis=response.output_parsed;if(!analysis)throw Error('AI 분석을 만들지 못했습니다.');const wrong=new Set(payload.items.filter(i=>!i.correct).map(i=>i.no));return counsellingForStudent(analysis,wrong,payload);
- },{refresh:mode==='regenerate',leaseMs:180000,waitMs:75000})),programs);
+ },{refresh:mode==='regenerate',reusePersisted:true,leaseMs:180000,waitMs:75000})),programs);
 }
