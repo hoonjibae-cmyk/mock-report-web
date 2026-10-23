@@ -27,7 +27,8 @@ function exam(over: Partial<OmrExam> = {}): OmrExam {
     id: "exam-1", examType: "saturday", reportFamily: "B_english", title: "토모", subject: null, examDate: null,
     numQuestions: 20, numChoices: 5, idDigits: 5, omrStyle: "exam", omrConfig: {}, answerKey, points: {},
     questionMeta, mockReference: null, gradeCuts: [], useTeacherComment: false, createdByName: null,
-    createdByUsername: null, createdAt: "", classNames: [], review: EMPTY_REVIEW, ...over,
+    createdByUsername: null, createdAt: "", classNames: [], level: null, periodMonth: null, cohortMode: "class",
+    review: EMPTY_REVIEW, ...over,
   };
 }
 

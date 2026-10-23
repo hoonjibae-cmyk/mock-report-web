@@ -321,9 +321,12 @@ export default function GenericReport({
               </div>
             ) : null}
             <div>
-              <span>{placement ? "반 평균" : "학원 평균"}</span>
+              <span>{report.cohortLabel ?? (placement ? "반 평균" : "학원 평균")}</span>
               <strong>{cohort.mean}</strong>
-              <small>{placement ? "배정 반" : "응시"} {cohort.count}명</small>
+              <small>
+                {report.cohortScope === "level" ? "같은 레벨" : placement ? "배정 반" : report.cohortScope === "class" ? "우리 반" : "응시"}{" "}
+                {cohort.count}명
+              </small>
             </div>
             <div>
               <span>표준점수</span>
@@ -342,6 +345,7 @@ export default function GenericReport({
               </span>
             </div>
             <GradeRangeNotice report={report} />
+            {report.cohortNote ? <p className="cohort-note">{report.cohortNote}</p> : null}
             {placement ? (
               <p className="cohort-compare">
                 내 점수 <strong>{score.raw}점</strong>

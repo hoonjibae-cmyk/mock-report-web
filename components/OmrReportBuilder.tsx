@@ -28,6 +28,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ClassfitWorkspacePicker from "@/components/ClassfitWorkspacePicker";
+import CohortModeBox from "@/components/CohortModeBox";
 import { EXAM_TYPE_LABELS, mockSubjectOf, type OmrExam } from "@/lib/omr-types";
 import { scanKey, type OmrScan } from "@/lib/omr-scans";
 
@@ -966,6 +967,11 @@ export default function OmrReportBuilder({
                   들어오면 성적표를 다시 만들어 주세요. 미응시 학생의 듣기 점수가 새 평균으로 바뀝니다.
                 </p>
               </div>
+            ) : null}
+
+            {/* 월말평가 — 성적표의 평균을 우리 반으로 낼지 같은 레벨의 내 다른 반과 합칠지 */}
+            {exam.examType === "monthly" ? (
+              <CohortModeBox examId={exam.id} canEdit={canCreate} existingReports={existingReports} />
             ) : null}
 
             {exam.examType === "monthly" || exam.classNames.length > 0 ? (

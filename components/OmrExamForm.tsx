@@ -16,7 +16,14 @@ import {
   type MockSubject,
 } from "@/lib/omr-types";
 import type { ClassOption } from "@/lib/student-directory";
+import { inferPeriodMonth, levelOfClassName } from "@/lib/monthly-cohort";
 import ClassfitWorkspacePicker from '@/components/ClassfitWorkspacePicker';
+
+/** 오늘 — 시행월을 유추할 때 연도의 기준(현지 날짜, YYYY-MM-DD) */
+function todayLocalIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const TYPE_DEFAULTS: Record<ExamType, { q: number; subjectLabel: string; period: string }> = {
   mock: { q: 45, subjectLabel: "영어 영역", period: "3" },
@@ -61,6 +68,27 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
   // 월말평가에서 담임이 고른 반 — 검수 화면이 이 반의 명단과 응시 인원을 맞춘다.
   // 여러 반을 합쳐 한 시험으로 치르는 일이 있어 복수 선택이다.
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  // 월말평가의 레벨·시행월 — 성적표의 '같은 레벨 평균'이 어느 시험을 합칠지 정하는 열쇠.
+  // 손대지 않으면 고른 반 이름('M4 화목 R' → M4)과 제목의 'N월'에서 읽은 값을 그대로 보이고
+  // 그대로 보낸다. 지웠으면 다시 자동으로 돌아간다.
+  const [levelInput, setLevelInput] = useState("");
+  const [levelTouched, setLevelTouched] = useState(false);
+  const [periodInput, setPeriodInput] = useState("");
+  const [periodTouched, setPeriodTouched] = useState(false);
+  // 제목·시험일은 비제어 입력이지만 시행월을 유추하려고 값을 따라 둔다
+  const [titleText, setTitleText] = useState("");
+  const [examDateText, setExamDateText] = useState("");
+  const [today] = useState(todayLocalIso);
+
+  const autoLevel = levelOfClassName(selectedClasses[0] ?? "");
+  const autoPeriodMonth = inferPeriodMonth({
+    periodMonth: null,
+    title: titleText,
+    examDate: examDateText || null,
+    createdAt: today,
+  });
+  const levelValue = levelTouched ? levelInput : autoLevel;
+  const periodValue = periodTouched ? periodInput : autoPeriodMonth;
 
   function toggleClass(name: string, on: boolean) {
     setSelectedClasses((prev) => (on ? [...new Set([...prev, name])] : prev.filter((n) => n !== name)));
@@ -194,6 +222,9 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
       period: type === "saturday" ? SATURDAY_SHEET.period : String(fd.get("period") || ""),
       subjectLabel: type === "saturday" ? SATURDAY_SHEET.subjectLabel : String(fd.get("subjectLabel") || ""),
       useTeacherComment: fd.get("useTeacherComment") === "on",
+      // 월말평가의 레벨·시행월 — 화면에 보이는 값(자동으로 읽은 값 포함)을 그대로 보낸다
+      level: type === "monthly" ? levelValue.trim() : undefined,
+      periodMonth: type === "monthly" ? periodValue : undefined,
     };
     try {
       const res = await fetch("/api/admin/omr/exams", {
@@ -304,6 +335,50 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
           </fieldset>
         ) : null}
 
+        {type === "monthly" ? (
+          <div className="form-row">
+            <label>
+              <span>레벨</span>
+              <input
+                name="level"
+                value={levelValue}
+                maxLength={40}
+                placeholder="예: M4"
+                onChange={(e) => {
+                  setLevelInput(e.target.value);
+                  setLevelTouched(e.target.value.trim() !== "");
+                }}
+              />
+              <small className="hint">
+                {levelTouched
+                  ? "적은 레벨을 씁니다. 지우면 반 이름에서 다시 읽습니다."
+                  : autoLevel
+                    ? `고른 반 이름에서 읽었습니다(${selectedClasses[0]} → ${autoLevel}). 다르면 고쳐 적으세요.`
+                    : "반을 고르면 반 이름에서 읽어 둡니다(‘M4 화목 R’ → M4)."}{" "}
+                성적표의 ‘같은 레벨 평균’은 레벨·시행월·담임이 같은 다른 반 시험과 평균을 합칩니다.
+              </small>
+            </label>
+            <label>
+              <span>시행월</span>
+              <input
+                name="periodMonth"
+                type="month"
+                value={periodValue}
+                onChange={(e) => {
+                  setPeriodInput(e.target.value);
+                  setPeriodTouched(e.target.value !== "");
+                }}
+              />
+              <small className="hint">
+                {periodTouched
+                  ? "적은 달을 씁니다. 지우면 제목·시험일에서 다시 읽습니다."
+                  : "제목의 ‘N월’(없으면 시험일, 그것도 없으면 오늘)에서 읽었습니다."}{" "}
+                같은 달의 시험끼리만 레벨 평균을 합칩니다.
+              </small>
+            </label>
+          </div>
+        ) : null}
+
         {isMock ? (
           <label>
             <span>과목 * (국어 · 영어 · 수학은 답안지를 각각 따로 만듭니다)</span>
@@ -326,6 +401,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
             name="title"
             required
             placeholder={isMock ? `예: 3월 전국 모의고사 · ${subjectDefault.label}` : "예: 4월 월말평가 · 영어"}
+            onChange={(e) => setTitleText(e.target.value)}
           />
           <small className="hint">목록과 성적표에 쓰는 이름입니다. 회차를 알아볼 수 있게 적어 주세요.</small>
         </label>
@@ -427,7 +503,7 @@ export default function OmrExamForm({ classOptions = [], classesMine = false, cl
           </label>
           <label>
             <span>시험일</span>
-            <input name="examDate" type="date" />
+            <input name="examDate" type="date" onChange={(e) => setExamDateText(e.target.value)} />
           </label>
         </div>
 

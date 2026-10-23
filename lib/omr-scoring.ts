@@ -171,9 +171,20 @@ export interface ListeningSummary {
  * 평균**을 준다. 그 학생은 듣기 문항 정답률과 듣기 영역 반 평균의 분모에서
  * 빠진다 — 안 본 사람이 평균을 움직이면 안 된다. 총점·석차·표준점수는 평균을
  * 받은 점수로 매긴다. 누가 안 봤는지는 lib/listening 이 정한다.
+ *
+ * peerScans(월말평가 '레벨 평균'): 같은 시험지를 치른 다른 반의 검수 완료 답안지.
+ * 평균·표준편차·석차·문항 정답률·영역 평균의 분모에 함께 들어가지만, 결과(scored)는
+ * 이 시험의 답안지에 대해서만 돌려준다 — 성적표는 이 시험 학생에게만 만든다.
+ * 같은 시험지여야 한다는 것은 부르는 쪽(lib/monthly-cohort.samePaper)이 보장한다.
  */
-export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
+export function scoreExam(
+  exam: OmrExam,
+  scans: OmrScan[],
+  options: { peerScans?: OmrScan[] } = {},
+): ScoreExamResult {
   const objectiveCount = exam.numQuestions;
+  const mainIds = new Set(scans.map((scan) => scan.id));
+  const cohortScans = [...scans, ...(options.peerScans ?? []).filter((scan) => !mainIds.has(scan.id))];
   const numbers = allQuestionNumbers(exam);
 
   const listeningNos = listeningQuestions(exam);
@@ -209,7 +220,7 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
   }
   const partials: Partial0[] = [];
 
-  for (const scan of scans) {
+  for (const scan of cohortScans) {
     const listeningAbsent = listeningNos.length > 0 && resolveListeningMode(exam, scan) === "absent";
     let objectiveRaw = 0;
     let essayRaw = 0;
@@ -499,5 +510,6 @@ export function scoreExam(exam: OmrExam, scans: OmrScan[]): ScoreExamResult {
     };
   });
 
-  return { cohort, itemRates, scored, listening };
+  // 다른 반 답안지는 집단에만 들어간다 — 성적표는 이 시험의 학생에게만
+  return { cohort, itemRates, scored: scored.filter((s) => mainIds.has(s.scanId)), listening };
 }

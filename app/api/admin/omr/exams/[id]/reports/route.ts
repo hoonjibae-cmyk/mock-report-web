@@ -5,7 +5,11 @@ import { authorizeApi } from "@/lib/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { createPublicToken, hashPin } from "@/lib/crypto";
 import { getVisibleExam } from "@/lib/exam-access";
-import { listScans, scanKey } from "@/lib/omr-scans";
+import { listScans, scanKey, type OmrScan } from "@/lib/omr-scans";
+import { listExams } from "@/lib/omr-exams";
+import { cohortLabelFor, cohortNoteFor, levelSiblings } from "@/lib/monthly-cohort";
+import { fetchClassTeacherMap } from "@/lib/student-directory";
+import type { CohortMode } from "@/lib/omr-types";
 import { scoreExam, maxScore, essayCountOf } from "@/lib/omr-scoring";
 import {
   attachClassification,
@@ -208,8 +212,27 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       }
     }
 
-    // 채점(검수 완료 전체가 응시 집단)
-    const { cohort, scored, listening } = scoreExam(exam, reviewed);
+    // 채점 — 응시 집단은 보통 검수 완료 전체(= 이 시험을 치른 반). 월말평가에서 담임이
+    // '레벨 평균'을 골랐으면 같은 레벨·같은 달·같은 담임·같은 시험지의 다른 반 답안지를
+    // 평균·석차·정답률의 분모에 합친다. 성적표는 그래도 이 시험의 학생에게만 만든다.
+    const cohortMode: CohortMode = exam.examType === "monthly" ? exam.cohortMode : "class";
+    const peerScans: OmrScan[] = [];
+    let cohortLabel: string | undefined;
+    let cohortNote: string | undefined;
+    if (exam.examType === "monthly") {
+      cohortLabel = cohortLabelFor(cohortMode);
+      let included: typeof exam[] = [];
+      if (cohortMode === "level") {
+        const [all, board] = await Promise.all([listExams(), fetchClassTeacherMap()]);
+        included = levelSiblings(exam, all, board).filter((s) => s.included).map((s) => s.exam);
+        for (const sibling of included) {
+          const scans = await listScans(sibling.id);
+          peerScans.push(...scans.filter((scan) => scan.status === "reviewed" && scan.studentId));
+        }
+      }
+      cohortNote = cohortNoteFor(exam, included);
+    }
+    const { cohort, scored, listening } = scoreExam(exam, reviewed, { peerScans });
     // 국영수 모의고사 기준 자료 — 있으면 전국 비교·문항 분류를 얹는다
     const reference = exam.examType === "mock" ? exam.mockReference : null;
     const scoredByScan = new Map(scored.map((s) => [s.scanId, s]));
@@ -312,6 +335,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           totalQuestions: exam.numQuestions,
         },
         cohort,
+        ...(cohortLabel ? { cohortScope: cohortMode, cohortLabel, cohortNote } : {}),
         standardScore: result.standardScore,
         rank: result.rank,
         topPercent: result.topPercent,

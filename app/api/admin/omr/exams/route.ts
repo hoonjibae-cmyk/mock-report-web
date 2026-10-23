@@ -93,6 +93,12 @@ export async function POST(request: Request) {
         omrStyle,
         omrConfig,
         useTeacherComment: Boolean(body.useTeacherComment),
+        // 월말평가의 레벨·시행월 — 비우면 반 이름·제목에서 유추한다(lib/monthly-cohort)
+        level: typeof body.level === "string" ? body.level.trim().slice(0, 40) : undefined,
+        periodMonth:
+          typeof body.periodMonth === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(body.periodMonth.trim())
+            ? body.periodMonth.trim()
+            : undefined,
       },
       { username: auth.user.username, displayName: auth.user.displayName },
     );
