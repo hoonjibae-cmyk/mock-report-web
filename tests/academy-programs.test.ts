@@ -17,3 +17,8 @@ test('concise consultation schema limits each category and prevents long-form ou
  const payload=personalCounsellingPayload(evidence,{items:[]},[program]);assert.equal(payload.grade,'중2');assert.deepEqual(payload.programs,[program]);
  assert.notDeepEqual(payload,personalCounsellingPayload(evidence,{items:[]},[{...program,description:'수업 내용 수정'}]));
 });
+
+test('program guidance allows two short sentences connecting educational effect and student benefit',()=>{
+ const recommendation={programId:'reading',focus:'상위 독해 근거 파악',direction:'지문을 어휘·구문·요약으로 연결해 정리하는 학습은 글의 구조와 근거를 체계적으로 이해하는 데 도움이 됩니다. 이 학생은 상위 독해에서 근거를 놓친 오답을 바탕으로, 핵심 문장과 선택지의 연결을 연습할 수 있습니다.'};
+ const result={summary:'요약',strengths:[],weaknesses:[],plan:[],programRecommendations:[recommendation]};assert.equal(AnalysisSchema.safeParse(result).success,true);assert.equal(AnalysisSchema.safeParse({...result,programRecommendations:[{...recommendation,direction:'가'.repeat(221)}]}).success,false);
+});
