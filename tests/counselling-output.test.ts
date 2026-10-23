@@ -1,6 +1,13 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {counsellingForStudent,internalReviewText,normalizeCounsellingAreas,directiveDiagnosis} from '../lib/counselling-output';
-import {personalCounsellingPayload,CounsellingEvidenceSchema} from '../lib/counselling-ai';
+import {personalCounsellingPayload,CounsellingEvidenceSchema,usableCommonReasoning} from '../lib/counselling-ai';
+
+test('format-only notes do not suppress complete essay reasoning; missing content still does',()=>{
+ assert.equal(usableCommonReasoning('보기는 소문자이나 제목식 대문자 허용 범위는 교사 확인이 필요하다.'),true);
+ assert.equal(usableCommonReasoning('대소문자와 보기 누락을 확인할 것.'),false);
+ assert.equal(usableCommonReasoning('대소문자뿐 아니라 정답이 지문과 맞지 않는다.'),false);
+ assert.equal(usableCommonReasoning('교사 확인: 조건을 알 수 없습니다.'),false);
+});
 test('uncertain question reasoning is excluded, while actual area scores remain available',()=>{
  const evidence=CounsellingEvidenceSchema.parse({examId:'d1a5070f-2d02-4b1b-82f3-4dca990205c9',reportId:'d1a5070f-2d02-4b1b-82f3-4dca990205c9',score:79,max:100,levelMean:null,gradeMean:70,areas:[],items:[47,14].map(no=>({no,essay:false,answer:3,marked:4,earned:0,point:2,correct:false,area:'문법',content:'',difficulty:'',levelRate:null,gradeRate:0,question:null}))});
  const payload=personalCounsellingPayload(evidence,{items:[{no:47,skill:'서술형',correctReason:'불확실한 근거',choiceNotes:[],reviewPoints:[],caution:'보기 누락 · 교사 확인'},{no:14,skill:'조동사',correctReason:'조건 표현',choiceNotes:[],reviewPoints:['조동사'],caution:''}]});

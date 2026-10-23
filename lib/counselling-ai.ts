@@ -17,8 +17,13 @@ export function verifyCounsellingSignature(body:string,timestamp:string|null,sig
  const expected=createHmac('sha256',key).update('classfit-counselling:v1:'+timestamp+':'+body).digest('hex');return timingSafeEqual(Buffer.from(signature!),Buffer.from(expected));
 }
 type Evidence=z.infer<typeof CounsellingEvidenceSchema>;
+export function usableCommonReasoning(caution:string){
+ if(!caution.trim())return true;
+ // Capitalisation/punctuation policy does not invalidate the underlying skill or solution.
+ return /대소문자|대문자|소문자|문장\s*부호|제목식/u.test(caution)&&!/누락|판독|불명확|불확실|충돌|정답.{0,15}(?:다르|오류|불일치|맞지)|(?:보기|조건|지문).{0,15}(?:없|빠|알 수 없)/u.test(caution);
+}
 export function personalCounsellingPayload(evidence:Evidence,common:CommonAnalysis,programs:AcademyProgram[]=[]){
- const trusted=new Set(common.items.filter(i=>!i.caution?.trim()).map(i=>i.no));
+ const trusted=new Set(common.items.filter(i=>usableCommonReasoning(i.caution??'')).map(i=>i.no));
  // Grading is authoritative even when a question's detailed source is incomplete.
  const items=evidence.items.map(({question,...result})=>({...result,hasDetailedEvidence:trusted.has(result.no)})),wrong=new Set(items.filter(i=>!i.correct).map(i=>i.no));const strengths=items.filter(i=>i.correct).sort((a,b)=>(a.gradeRate??100)-(b.gradeRate??100)).slice(0,6);const needed=new Set([...wrong,...strengths.map(i=>i.no)]);
  const essay=items.filter(i=>i.essay),essayResults={total:essay.length,correct:essay.filter(i=>i.correct).length,earned:essay.reduce((sum,i)=>sum+i.earned,0),possible:essay.reduce((sum,i)=>sum+i.point,0),wrongNos:essay.filter(i=>!i.correct).map(i=>i.no)};
