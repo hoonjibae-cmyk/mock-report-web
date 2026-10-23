@@ -97,6 +97,8 @@ button { cursor: pointer; }
 .login-form label { font-size: 13px; font-weight: 750; color: #344054; }
 .login-form input,
 .upload-form input[type="text"],
+.upload-form input[type="date"],
+.upload-form input[type="month"],
 .upload-form input:not([type]),
 .toolbar input {
   width: 100%;
@@ -2682,3 +2684,28 @@ body.report-layout-a4 .a4-report-root { display: block; }
 body.report-layout-a4 .placement-report-document{display:block;width:190mm;margin:0 auto}
 @page placement-report{size:A4 portrait;margin:10mm}
 @media print{html:has(.placement-report-document),body:has(.placement-report-document){width:auto!important}.placement-report-document{display:block!important;page:placement-report;width:100%!important;box-shadow:none;border-radius:0}.placement-report-document .analysis-card{break-inside:avoid}.placement-report-document .report-key-feedback{break-inside:auto}}
+
+/* 성적표 생성 — 월말평가 평균 기준(우리 반 / 같은 레벨) */
+.cohort-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.cohort-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12.5px; color: var(--muted); }
+.cohort-meta strong { color: var(--ink); }
+.cohort-meta em { font-style: normal; font-size: 11.5px; }
+.cohort-meta .sep { color: #c4ccd8; }
+.cohort-meta .button { margin-left: 6px; }
+.cohort-edit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 10px; padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
+.cohort-edit label { display: grid; gap: 4px; margin: 0; }
+.cohort-edit label span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.cohort-edit input { width: 160px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 13.5px; background: #fff; }
+.cohort-edit .hint { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+.cohort-siblings { margin-top: 10px; }
+.cohort-siblings > p { margin: 0; }
+.cohort-siblings ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.cohort-siblings li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 10px; background: #fff; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.cohort-siblings li strong { color: var(--navy-deep); }
+.cohort-siblings li.out { opacity: 0.72; }
+.cohort-tag { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 99px; }
+.cohort-tag.in { color: #1a7f4b; background: #e6f4ec; }
+.cohort-tag.out { color: #b3261e; background: #fbe9e7; }
+.cohort-foot { margin: 10px 0 0; }
+/* 성적표 — 비교 집단 설명(‘같은 레벨(M4) 2개 반 기준 — …’) */
+.cohort-note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }

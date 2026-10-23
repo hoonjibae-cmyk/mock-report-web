@@ -188,9 +188,26 @@ export interface OmrExam {
    * 응시 인원은 이 반을 기준으로 맞춘다. 그 전에 만든 시험은 빈 배열이다.
    */
   classNames: string[];
+  /**
+   * 레벨(월말평가, v1.52.0) — 예: 'M4'. 비어 있으면 반 이름에서 유추한다
+   * (lib/monthly-cohort). 같은 레벨·같은 달·같은 담임의 시험끼리 '레벨 평균'을 낸다.
+   */
+  level: string | null;
+  /** 시행월 'YYYY-MM' — 비어 있으면 제목의 'N월'(없으면 시험일·만든 날)에서 유추한다 */
+  periodMonth: string | null;
+  /** 성적표 비교 집단 — 'class' 우리 반 평균(기본) / 'level' 같은 레벨 평균 */
+  cohortMode: CohortMode;
   /** 운영진 검토 상태 — 월말평가는 컨펌 전에 알림톡이 나가지 않는다(lib/review.ts) */
   review: ExamReview;
 }
+
+/** 월말평가 성적표의 비교 집단 */
+export type CohortMode = "class" | "level";
+export const COHORT_MODES: readonly CohortMode[] = ["class", "level"];
+export const COHORT_MODE_LABELS: Record<CohortMode, string> = {
+  class: "우리 반 평균",
+  level: "같은 레벨 평균",
+};
 
 // Python OMR API `/generate` 요청 스펙
 export interface OmrSheetSpec {

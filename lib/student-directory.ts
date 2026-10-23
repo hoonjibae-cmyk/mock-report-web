@@ -349,6 +349,15 @@ export async function fetchClassBoard(): Promise<{ classes: ClassOption[]; error
   }
 }
 
+/**
+ * 반 이름 → 담임 — 월말평가 '레벨 평균'이 "같은 담임의 반"을 가리는 데 쓴다.
+ * 실패하면 빈 맵을 돌려주고, 부르는 쪽은 시험을 만든 사람으로 물러난다.
+ */
+export async function fetchClassTeacherMap(): Promise<Map<string, string>> {
+  const { classes } = await fetchClassBoard();
+  return new Map(classes.map((c) => [c.className, c.teacher]));
+}
+
 /** 설정 화면의 연결 확인용 — 상대 쪽이 살아 있는지만 본다 */
 export async function pingDirectory(): Promise<{ ok: boolean; message: string }> {
   if (!directoryConfigured()) {

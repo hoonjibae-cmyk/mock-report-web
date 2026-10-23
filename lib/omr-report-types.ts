@@ -169,6 +169,15 @@ export interface GenericReportData {
     max: number;
     min: number;
   };
+  /**
+   * 비교 집단이 무엇인지(월말평가, v1.52.0) — 'class' 이 시험을 치른 반 / 'level'
+   * 같은 레벨·같은 달·같은 담임의 다른 반까지. 없으면 그 시험의 응시생 전체(예전 성적표).
+   */
+  cohortScope?: "class" | "level";
+  /** 평균 칸의 이름 — '반 평균' · '레벨 평균'. 없으면 화면이 유형에 맞춰 정한다 */
+  cohortLabel?: string;
+  /** 비교 집단 설명 한 줄 — 예: "같은 레벨(M4) 2개 반 · M4 화목 R, M4 월수 S" */
+  cohortNote?: string;
   /** 20 × (원점수 − 평균) ÷ 표준편차 + 100 */
   standardScore: number;
   rank: number;

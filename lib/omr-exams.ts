@@ -8,6 +8,7 @@ import type { MockReference } from "@/lib/mock-reference";
 import {
   ACADEMY_NAME,
   applyFixedSheet,
+  type CohortMode,
   type ExamType,
   type OmrConfig,
   type OmrExam,
@@ -45,6 +46,9 @@ interface ExamRow {
   review_approved_at?: string | null;
   review_edits?: unknown;
   class_names?: unknown;
+  level?: string | null;
+  period_month?: string | null;
+  cohort_mode?: string | null;
 }
 
 /** 마이그레이션 미실행으로 컬럼이 없을 때, 실행할 파일을 알려준다. */
@@ -56,6 +60,9 @@ function describeExamDbError(message: string): string {
       review_status: "supabase/migration_v13_review.sql",
       review_edits: "supabase/migration_v14_review_edits.sql",
       class_names: "supabase/migration_v15_exam_classes.sql",
+      level: "supabase/migration_v21_exam_level_cohort.sql",
+      period_month: "supabase/migration_v21_exam_level_cohort.sql",
+      cohort_mode: "supabase/migration_v21_exam_level_cohort.sql",
       question_meta: "supabase/migration_v2_omr.sql",
       points: "supabase/migration_v2_omr.sql",
       overview_comment: "supabase/migration_v2_omr.sql",
@@ -94,6 +101,9 @@ function mapExam(row: ExamRow): OmrExam {
     classNames: Array.isArray(row.class_names)
       ? row.class_names.filter((v): v is string => typeof v === "string" && v.trim() !== "")
       : [],
+    level: typeof row.level === "string" && row.level.trim() ? row.level.trim() : null,
+    periodMonth: typeof row.period_month === "string" && /^\d{4}-\d{2}$/.test(row.period_month) ? row.period_month : null,
+    cohortMode: row.cohort_mode === "level" ? "level" : "class",
     review: {
       status: (["none", "requested", "approved"] as const).includes(row.review_status as ReviewStatus)
         ? (row.review_status as ReviewStatus)
@@ -110,7 +120,7 @@ function mapExam(row: ExamRow): OmrExam {
 }
 
 const SELECT =
-  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at,review_edits,class_names";
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,omr_config,answer_key,mock_reference,points,question_meta,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at,review_edits,class_names,level,period_month,cohort_mode";
 
 export interface CreateExamInput {
   examType: ExamType;
@@ -125,6 +135,10 @@ export interface CreateExamInput {
   useTeacherComment: boolean;
   /** 월말평가에서 담임이 고른 반 — 없으면 빈 배열 */
   classNames?: string[];
+  /** 레벨(월말평가) — 비우면 반 이름에서 유추한다 */
+  level?: string | null;
+  /** 시행월 'YYYY-MM'(월말평가) — 비우면 제목·시험일에서 유추한다 */
+  periodMonth?: string | null;
 }
 
 export async function createExam(
@@ -147,12 +161,36 @@ export async function createExam(
       omr_config: input.omrConfig,
       use_teacher_comment: input.useTeacherComment,
       class_names: input.classNames ?? [],
+      level: input.level?.trim() || null,
+      period_month: input.periodMonth && /^\d{4}-\d{2}$/.test(input.periodMonth) ? input.periodMonth : null,
       created_by_username: user.username,
       created_by_name: user.displayName,
     })
     .select(SELECT)
     .single();
-  if (error || !data) throw new Error(`시험 저장 실패: ${error?.message ?? "알 수 없는 오류"}`);
+  if (error || !data) throw new Error(`시험 저장 실패: ${describeExamDbError(error?.message ?? "알 수 없는 오류")}`);
+  return mapExam(data as ExamRow);
+}
+
+export interface UpdateExamCohortInput {
+  level?: string | null;
+  periodMonth?: string | null;
+  cohortMode?: CohortMode;
+}
+
+/** 월말평가의 레벨·시행월·비교 집단을 바꾼다 — 성적표 생성 화면에서 담임이 고른다 */
+export async function updateExamCohort(id: string, input: UpdateExamCohortInput): Promise<OmrExam> {
+  const supabase = getSupabaseAdmin();
+  const patch: Record<string, unknown> = {};
+  if (input.level !== undefined) patch.level = input.level?.trim() || null;
+  if (input.periodMonth !== undefined) {
+    patch.period_month = input.periodMonth && /^\d{4}-\d{2}$/.test(input.periodMonth) ? input.periodMonth : null;
+  }
+  if (input.cohortMode !== undefined) patch.cohort_mode = input.cohortMode;
+  const { data, error } = await supabase.from("exams").update(patch).eq("id", id).select(SELECT).single();
+  if (error || !data) {
+    throw new Error(`비교 집단 저장 실패 — ${describeExamDbError(error?.message ?? "알 수 없는 오류")}`);
+  }
   return mapExam(data as ExamRow);
 }
 
