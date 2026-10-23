@@ -20,6 +20,7 @@ export type ReviewReasonCode =
   | "noStudentId"
   | "idLength"
   | "idUncertain"
+  | "idAmbiguous"
   | "idConflict"
   | "duplicateId"
   | "unknownId"
@@ -121,9 +122,23 @@ export function reviewVerdict(scan: OmrScan, ctx: ReviewContext): ReviewVerdict 
 
   // --- ① 수험번호 ---
   const id = (scan.studentId ?? "").trim();
+  // 마지막 자리를 명부로 풀어 보았는데 후보가 둘 이상이었다(lib/id-resolve) — 사람이 고른다.
+  // 이때는 '읽지 못한 자리'·'명부에 없음' 같은 일반 사유 대신 후보를 그대로 보여 준다.
+  const ambiguous = (scan.reviewFlags ?? []).find(
+    (flag) => flag && (flag.type === "id_options" || flag.type === "id_ambiguous") && Array.isArray(flag.options),
+  );
+  const optionList = ambiguous ? (ambiguous.options as unknown[]).map((v) => String(v)).join(", ") : "";
   if (!id) {
     add("noStudentId", "수험번호를 읽지 못했습니다.");
   } else {
+    if (ambiguous) {
+      add(
+        "idAmbiguous",
+        ambiguous.type === "id_options"
+          ? `수험번호 ${id}의 마지막 자리를 읽지 못했고, 학생 명부에 ${optionList} 학생이 모두 있습니다. 어느 학생인지 골라 주세요.`
+          : `수험번호를 ${id}로 읽었지만 마지막 칸에 흐린 자국이 있고, 학생 명부에 ${optionList} 학생이 모두 있습니다. 어느 학생인지 확인해 주세요.`,
+      );
+    }
     // 설정 자리수는 최대치라 그보다 짧은 건 정상이다. 너무 짧을 때만 붙잡는다.
     const minDigits = Math.min(MIN_ID_DIGITS, ctx.idDigits ?? MIN_ID_DIGITS);
     if (id.length < minDigits && !id.includes("?")) {
@@ -132,13 +147,16 @@ export function reviewVerdict(scan: OmrScan, ctx: ReviewContext): ReviewVerdict 
         `수험번호가 ${id.length}자리로 읽혔습니다. 최소 ${minDigits}자리여야 하므로 마킹이 흐려 자리가 빠졌을 수 있습니다.`,
       );
     }
-    if (id.includes("?")) add("idUncertain", "수험번호에 읽지 못한 자리가 있습니다.");
+    if (id.includes("?") && !ambiguous) add("idUncertain", "수험번호에 읽지 못한 자리가 있습니다.");
     if (ctx.duplicateIds?.has(normalizeId(id))) {
       add("duplicateId", `수험번호 ${id}가 다른 답안지에도 있습니다. 둘 중 하나는 잘못 읽혔습니다.`);
     }
     // 신규생(반배치고사)의 수험번호 칸은 전화번호 뒤 4자리다 — 명부의 수험번호와 맞출 수 없다.
     // 그 학생은 성적표 화면에서 전화번호로 찾는다.
-    if (ctx.knownIds && ctx.knownIds.size > 0 && !isNewStudentScan(scan) && !ctx.knownIds.has(normalizeId(id))) {
+    if (
+      ctx.knownIds && ctx.knownIds.size > 0 && !isNewStudentScan(scan) && !ambiguous &&
+      !ctx.knownIds.has(normalizeId(id))
+    ) {
       add("unknownId", `수험번호 ${id}를 학생 명부에서 찾지 못했습니다.`);
     }
   }
@@ -146,7 +164,7 @@ export function reviewVerdict(scan: OmrScan, ctx: ReviewContext): ReviewVerdict 
   if ((scan.reviewFlags ?? []).some((flag) => flag && flag.type === "enrollment" && flag.status === "multiple")) {
     add("enrollmentUnclear", "재원 구분에 재원생·신규생이 둘 다 표기되어 있습니다.");
   }
-  if (conf.idUncertain) add("idUncertain", "수험번호 마킹이 흐려 확실하지 않습니다.");
+  if (conf.idUncertain && !ambiguous) add("idUncertain", "수험번호 마킹이 흐려 확실하지 않습니다.");
   if (conf.idConflict) {
     add("idConflict", "답안지 QR의 수험번호와 학생이 마킹한 수험번호가 다릅니다.");
   }

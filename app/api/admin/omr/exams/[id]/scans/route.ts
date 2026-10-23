@@ -6,6 +6,8 @@ import { sheetSpecFor } from "@/lib/omr-exams";
 import { getVisibleExam } from "@/lib/exam-access";
 import { essayCountOf } from "@/lib/omr-scoring";
 import { enrollmentOf } from "@/lib/placement-policy";
+import { idCandidateQuery, resolveStudentId } from "@/lib/id-resolve";
+import { lookupStudents } from "@/lib/student-directory";
 import {
   downloadScanFile,
   listScans,
@@ -37,6 +39,36 @@ function contentTypeFor(name: string): string {
 /** PDF 페이지 결과("스캔.pdf#p3")를 업로드 원본 파일명("스캔.pdf")으로 되돌린다 */
 function baseFilename(name: string): string {
   return name.replace(/#p\d+$/, "");
+}
+
+/**
+ * 수험번호 마지막 자리를 학생 명부로 정한다(lib/id-resolve).
+ *
+ * '2651?'(마지막 자리를 못 읽음), 흐린 자국을 무시하고 읽은 '2651', 마지막 자리를
+ * 흐리게 읽은 '46140' 모두 — 앞자리 그대로와 뒤에 0~9를 붙인 번호 중 누가 명부에
+ * 있는지로 정한다. 한 번의 조회로 끝내고, 연동이 없거나 응답이 없으면 그대로
+ * 둔다. 그러면 지금까지처럼 검수 화면에서 사람이 본다.
+ */
+async function resolveTrailingIds(rows: UpsertScanInput[]): Promise<void> {
+  const queries = rows.map((row) => idCandidateQuery(row.studentId, row.studentIdQr, row.reviewFlags));
+  const keys = [...new Set(queries.flatMap((query) => (query ? query.candidates : [])))];
+  if (keys.length === 0) return;
+  const directory = await lookupStudents(keys);
+  if (!directory.configured || directory.error) return;
+  const known = new Set(directory.students.keys());
+  rows.forEach((row, i) => {
+    if (!queries[i]) return;
+    const resolved = resolveStudentId(
+      {
+        studentId: row.studentId ?? null,
+        studentIdQr: row.studentIdQr ?? null,
+        reviewFlags: row.reviewFlags ?? [],
+        readConfidence: row.readConfidence ?? null,
+      },
+      known,
+    );
+    if (resolved) Object.assign(row, resolved);
+  });
 }
 
 /** 표기된 문항 수 */
@@ -291,6 +323,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       });
     }
 
+    await resolveTrailingIds(rows);
     await upsertScans(rows);
     const scans = await listScans(id);
     const storageSkipped = [...paths.values()].every((path) => path === null);

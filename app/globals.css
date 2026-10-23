@@ -2709,3 +2709,7 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .cohort-foot { margin: 10px 0 0; }
 /* 성적표 — 비교 집단 설명(‘같은 레벨(M4) 2개 반 기준 — …’) */
 .cohort-note { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+/* 검수 — 수험번호를 어떻게 정리했는지(막는 사유가 아닌 참고) */
+.review-notes { margin: 8px 0 0; padding: 8px 12px 8px 26px; border-radius: 9px; background: #f4f6fa; border: 1px solid #dde3ec; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.review-notes li + li { margin-top: 2px; }
