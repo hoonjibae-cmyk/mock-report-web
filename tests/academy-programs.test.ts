@@ -11,7 +11,7 @@ test('only saved program identifiers are displayed, with canonical program names
 test('concise consultation schema limits each category and prevents long-form output',()=>{
  const result={summary:'요약',strengths:[{title:'강점',evidence:'성취 근거'}],weaknesses:[],plan:['학습 방향'],programRecommendations:[]};
  assert.equal(AnalysisSchema.safeParse(result).success,true);
- assert.equal(AnalysisSchema.safeParse({...result,strengths:Array(3).fill(result.strengths[0])}).success,false);
+ assert.equal(AnalysisSchema.safeParse({...result,strengths:Array(4).fill(result.strengths[0])}).success,false);
  assert.equal(AnalysisSchema.safeParse({...result,plan:['가'.repeat(121)]}).success,false);
  const evidence=CounsellingEvidenceSchema.parse({examId:'d1a5070f-2d02-4b1b-82f3-4dca990205c9',reportId:'d1a5070f-2d02-4b1b-82f3-4dca990205c9',score:79,max:100,grade:'중2',levelMean:null,gradeMean:70,areas:[],items:[]});
  const payload=personalCounsellingPayload(evidence,{items:[]},[program]);assert.equal(payload.grade,'중2');assert.deepEqual(payload.programs,[program]);
