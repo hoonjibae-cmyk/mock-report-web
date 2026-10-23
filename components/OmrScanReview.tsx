@@ -49,6 +49,31 @@ function hasIdFlag(scan: OmrScan): boolean {
 }
 
 /**
+ * 수험번호를 어떻게 정리했는지 — 막는 사유는 아니지만 선생님이 알아야 한다.
+ *   id_trailing   판독기가 뒤쪽 빈 칸의 흐린 자국을 마킹으로 보지 않았다
+ *   id_resolved   마지막 자리를 학생 명부에 맞춰 정했다
+ *   id_confirmed  마지막 자리가 흐렸지만 명부에 그 번호 학생만 있어 그대로 확정했다
+ */
+function idNotes(scan: OmrScan): string[] {
+  const out: string[] = [];
+  for (const flag of scan.reviewFlags ?? []) {
+    if (!flag) continue;
+    if (flag.type === "id_trailing" && typeof flag.col === "number") {
+      out.push(
+        `${flag.col + 1}번째 칸에 흐린 자국(${String(flag.candidate ?? "?")})이 있었지만 마킹으로 보지 않았습니다.`,
+      );
+    } else if (flag.type === "id_resolved") {
+      out.push(
+        `수험번호 ${String(flag.from ?? "")} → 학생 명부에 ${String(flag.to ?? "")} 학생만 있어 그 번호로 정했습니다.`,
+      );
+    } else if (flag.type === "id_confirmed") {
+      out.push(`마지막 자리 마킹이 흐렸지만 학생 명부에 ${String(flag.id ?? "")} 학생만 있어 그대로 확정했습니다.`);
+    }
+  }
+  return out;
+}
+
+/**
  * 한 번에 보낼 묶음 크기. 60장을 한 요청에 넣으면 판독에 1~2분이 걸리고, 그
  * 사이 연결이 끊기면 처음부터 다시 해야 한다. 나눠 보내면 끊겨도 그 묶음만
  * 다시 하면 되고 진행 상황도 보인다.
@@ -705,6 +730,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                   const dirty = Boolean(drafts[scan.id]);
                   const isOpen = expanded === scan.id;
                   const reasons = reasonsById.get(scan.id) ?? [];
+                  const notes = idNotes(scan);
 
                   return (
                     <tr key={scan.id}>
@@ -833,6 +859,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                                     </button>
                                   ) : null}
                                 </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {notes.length > 0 ? (
+                            <ul className="review-notes">
+                              {notes.map((note, i) => (
+                                <li key={i}>{note}</li>
                               ))}
                             </ul>
                           ) : null}
