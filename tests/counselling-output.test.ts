@@ -28,3 +28,8 @@ test('teacher-review and paper-error instructions never become counselling guida
 test('partial essay performance cannot be presented as all-correct strength',()=>{
  const result=counsellingForStudent({summary:'결과',strengths:[{title:'기초 서술형 수행',evidence:'확인된 서술형 문항 3개를 모두 맞혔습니다.'}],weaknesses:[],plan:[],programRecommendations:[]},new Set([47,48]),{essayResults:{earned:9,possible:15}});assert.deepEqual(result.strengths,[]);
 });
+
+test('essay loss remains visible when a generated diagnosis omits the essay weakness',()=>{
+ const result=counsellingForStudent({summary:'성취 요약',strengths:[],weaknesses:[] as Array<{title:string;questionNos:number[];analysis:string}>,plan:[],programRecommendations:[]},new Set([47,48]),{essayResults:{earned:9,possible:15,wrongNos:[47,48]}});
+ assert.deepEqual(result.weaknesses[0].questionNos,[47,48]);assert.match(result.weaknesses[0].analysis,/9\/15/);assert.equal(directiveDiagnosis(result.weaknesses[0].analysis),false);
+});

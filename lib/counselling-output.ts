@@ -3,9 +3,13 @@ export function internalReviewText(text:string){return /(?:교사|선생님|담�
 type Analysis={summary:string;strengths:Array<{title:string;evidence:string}>;weaknesses:Array<{title:string;questionNos:number[];analysis:string}>;plan:string[];programRecommendations:Array<{programId:string;focus:string;direction:string}>};
 export function normalizeCounsellingAreas(text:string){return text.replace(/([상중하](?:[·ㆍ/][상중하])*)\s*(?:난도|난이도|위)?\s*(독해|문법)/g,'$2-$1').replace(/(독해|문법)\s+([상중하](?:[·ㆍ/][상중하])*)(?=[에서은는이가의와과,·\s]|$)/g,'$1-$2').replace(/((?:독해|문법)-[상중])와/g,'$1과');}
 export function directiveDiagnosis(text:string){return /(?:하세요|하십시오|해\s*주세요|하도록|해\s*보세요|합시다|해야\s*합니다|할\s*필요가\s*있습니다)/u.test(text);}
-export function counsellingForStudent<T extends Analysis>(analysis:T,allowedWrong:Set<number>,evidence?:{essayResults:{earned:number;possible:number}}):T{
+export function counsellingForStudent<T extends Analysis>(analysis:T,allowedWrong:Set<number>,evidence?:{essayResults:{earned:number;possible:number;wrongNos?:number[]}}):T{
  const safe=(...parts:string[])=>parts.every(p=>!internalReviewText(p));
  const strengths=analysis.strengths.filter(s=>safe(s.title,s.evidence)&&!(evidence&&evidence.essayResults.earned<evidence.essayResults.possible&&/서술형/.test(s.title+s.evidence)&&/모두|전부|만점|안정|우수/.test(s.title+s.evidence))).map(s=>({title:normalizeCounsellingAreas(s.title),evidence:normalizeCounsellingAreas(s.evidence)})),weaknesses=analysis.weaknesses.filter(w=>safe(w.title,w.analysis)).map(w=>{const questionNos=[...new Set(w.questionNos)].filter(no=>allowedWrong.has(no));return {...w,title:normalizeCounsellingAreas(w.title),questionNos,analysis:directiveDiagnosis(w.analysis)?questionNos.map(no=>no+'번').join('·')+' 문항에서 감점이 나타났습니다.':normalizeCounsellingAreas(w.analysis)};}).filter(w=>w.questionNos.length),programRecommendations=analysis.programRecommendations.filter(p=>safe(p.focus,p.direction)).map(p=>({...p,focus:normalizeCounsellingAreas(p.focus),direction:normalizeCounsellingAreas(p.direction)}));
  const plan=analysis.plan.filter(p=>safe(p));if(!plan.length&&!programRecommendations.length)plan.push('영역별 오답 유형을 정리하고 관련 개념을 복습한 뒤 비슷한 문제로 적용 연습을 하세요.');
+ const essay=evidence?.essayResults,essayWrong=essay?.wrongNos?.filter(no=>allowedWrong.has(no))??[];
+ if(essay&&essay.earned<essay.possible&&essayWrong.length&&!weaknesses.some(w=>w.questionNos.some(no=>essayWrong.includes(no)))){
+  const questionNos=essayWrong.slice(0,4);weaknesses.splice(2,1,{title:'서술형 수행',questionNos,analysis:`서술형 ${essay.earned}/${essay.possible}점이며, ${questionNos.map(no=>no+'번').join('·')}에서 감점이 나타났습니다.`});
+ }
  return {...analysis,summary:safe(analysis.summary)&&!directiveDiagnosis(analysis.summary)?normalizeCounsellingAreas(analysis.summary):'영역별 성취와 실제 오답을 바탕으로 강점과 약점을 정리했습니다.',strengths,weaknesses,programRecommendations,plan:plan.map(normalizeCounsellingAreas)};
 }
