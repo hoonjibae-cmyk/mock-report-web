@@ -10,6 +10,7 @@ import { PDF_PAGE_LIMIT, countPdfPages, pdfSplitWarning, type PickedPdf } from "
 import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
+import { describeSkipped, idRange, planConfirm, runPool } from "@/lib/scan-bulk";
 
 interface Props {
   exam: OmrExam | null;
@@ -199,6 +200,12 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   const [summary, setSummary] = useState<ReviewSummary | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const [approving, setApproving] = useState(false);
+  // 여러 장 선택 — 체크한 답안지 ID. 보이는 목록이 바뀌면(필터·삭제) 안 보이는 것은 선택에서 뺀다.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  // Shift+클릭 범위 선택의 기준점(마지막으로 체크한 답안지)
+  const [lastPicked, setLastPicked] = useState<string | null>(null);
+  // 일괄 처리 진행 상황 — null이면 쉬는 중
+  const [bulk, setBulk] = useState<{ label: string; done: number; total: number } | null>(null);
 
   const pendingCount = useMemo(
     () => scans.filter((scan) => scan.status !== "reviewed").length,
@@ -235,6 +242,40 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     () => (onlyFlagged ? scans.filter((scan) => reasonsById.has(scan.id)) : scans),
     [scans, onlyFlagged, reasonsById],
   );
+  const visibleIds = useMemo(() => visibleScans.map((scan) => scan.id), [visibleScans]);
+
+  // 안 보이는 답안지는 선택에서 뺀다 — '확인 필요만 보기'로 좁힌 뒤 일괄 처리가
+  // 숨은 장까지 건드리면 안 된다. 삭제된 장도 여기서 빠진다.
+  useEffect(() => {
+    setSelected((prev) => {
+      const visible = new Set(visibleIds);
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visibleIds]);
+
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+  const selectedScans = useMemo(
+    () => visibleScans.filter((scan) => selected.has(scan.id)),
+    [visibleScans, selected],
+  );
+
+  function toggleSelect(scan: OmrScan, on: boolean, shiftKey: boolean) {
+    const ids = shiftKey ? idRange(visibleIds, lastPicked, scan.id) : [scan.id];
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+    setLastPicked(scan.id);
+  }
+
+  function selectAll(on: boolean) {
+    setSelected(on ? new Set(visibleIds) : new Set());
+  }
 
   /** 판독기가 확신한 답안지를 한 번에 확인 처리 */
   async function approveAuto() {
@@ -444,6 +485,100 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     } finally {
       setBusy(null);
     }
+  }
+
+  /** 일괄 처리 뒤 — 끝난 장은 선택·초안에서 빼고, 실패는 한 줄로 알린다 */
+  function finishBulk(doneIds: Iterable<string>, label: string, note: string, failures: string[]) {
+    const done = new Set(doneIds);
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const id of done) delete next[id];
+      return next;
+    });
+    // 실패한 장은 선택에 남겨 두어 바로 다시 시도할 수 있게 한다
+    setSelected((prev) => new Set([...prev].filter((id) => !done.has(id))));
+    setBulk(null);
+    setMessage(`${done.size}장 ${label}.${note ? ` ${note}` : ""}`);
+    if (failures.length > 0) {
+      setError(
+        `${failures.length}장은 처리하지 못했습니다 — ${failures[0]}${failures.length > 1 ? ` 외 ${failures.length - 1}장` : ""}`,
+      );
+    }
+  }
+
+  /**
+   * 선택한 답안지를 한 번에 검수 확인(또는 검수 대기로 되돌리기).
+   *
+   * 화면에서 고친 장은 고친 수험번호·답안을 함께 저장하고, 손대지 않은 장은 상태만
+   * 바꾼다. 세 장씩 동시에 보내고 한 장이 실패해도 나머지는 계속 간다.
+   */
+  async function bulkStatus(status: "reviewed" | "pending") {
+    if (!canEdit || selectedScans.length === 0 || bulk) return;
+    let targets = selectedScans;
+    let note = "";
+    const label = status === "reviewed" ? "검수 확인" : "검수 대기로 되돌림";
+    if (status === "reviewed") {
+      const plan = planConfirm(selectedScans, drafts);
+      targets = plan.targets;
+      note = describeSkipped(plan.skipped);
+    } else {
+      targets = selectedScans.filter((scan) => scan.status === "reviewed");
+    }
+    if (targets.length === 0) {
+      setMessage(`처리할 답안지가 없습니다.${note ? ` ${note}` : ""}`);
+      return;
+    }
+    setBulk({ label, done: 0, total: targets.length });
+    setError("");
+    setMessage("");
+    const updated = new Map<string, OmrScan>();
+    const failures: string[] = [];
+    await runPool(targets, 3, async (scan) => {
+      const draft = drafts[scan.id];
+      const body = draft ? { studentId: draft.studentId, answers: draft.answers, status } : { status };
+      try {
+        const res = await fetch(`/api/admin/omr/scans/${scan.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.scan) throw new Error(data.error || "저장하지 못했습니다.");
+        updated.set(scan.id, data.scan as OmrScan);
+      } catch (err) {
+        failures.push(`${scan.filename}: ${err instanceof Error ? err.message : "오류"}`);
+      } finally {
+        setBulk((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+      }
+    });
+    setScans((prev) => prev.map((row) => updated.get(row.id) ?? row));
+    finishBulk(updated.keys(), label, note, failures);
+  }
+
+  /** 선택한 답안지의 판독 결과를 한 번에 삭제 */
+  async function bulkDelete() {
+    if (!canEdit || selectedScans.length === 0 || bulk) return;
+    if (!window.confirm(`선택한 ${selectedScans.length}장의 판독 결과를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    const targets = selectedScans;
+    setBulk({ label: "삭제", done: 0, total: targets.length });
+    setError("");
+    setMessage("");
+    const removed = new Set<string>();
+    const failures: string[] = [];
+    await runPool(targets, 3, async (scan) => {
+      try {
+        const res = await fetch(`/api/admin/omr/scans/${scan.id}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "삭제하지 못했습니다.");
+        removed.add(scan.id);
+      } catch (err) {
+        failures.push(`${scan.filename}: ${err instanceof Error ? err.message : "오류"}`);
+      } finally {
+        setBulk((prev) => (prev ? { ...prev, done: prev.done + 1 } : prev));
+      }
+    });
+    setScans((prev) => prev.filter((row) => !removed.has(row.id)));
+    finishBulk(removed, "삭제", "", failures);
   }
 
   if (!exam) {
@@ -710,10 +845,76 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
             </button>
           </p>
         ) : (
+          <>
+          {canEdit ? (
+            /* 여러 장 선택 → 한 번에 검수 확인·대기로·삭제. 표 머리의 체크박스가 보이는 장 전부를 고른다 */
+            <div className={`bulk-bar${selected.size > 0 ? " on" : ""}`} role="toolbar" aria-label="선택한 답안지 일괄 처리">
+              <span className="bulk-count">
+                {selected.size > 0 ? (
+                  <>
+                    <strong>{selected.size}</strong>장 선택
+                    {onlyFlagged ? " · 확인 필요만 보는 중" : ""}
+                  </>
+                ) : (
+                  "각 줄의 체크박스로 여러 장을 고른 뒤 한 번에 처리합니다. Shift를 누른 채 클릭하면 범위로 골라집니다."
+                )}
+              </span>
+              {bulk ? (
+                <span className="bulk-progress">
+                  {bulk.label} 중… {bulk.done}/{bulk.total}
+                </span>
+              ) : null}
+              <div className="bulk-actions">
+                <button
+                  className="button small primary"
+                  disabled={selected.size === 0 || Boolean(bulk)}
+                  onClick={() => void bulkStatus("reviewed")}
+                  title="판독에 실패했거나 수험번호가 없는 장, 이미 검수 완료인 장은 건너뜁니다"
+                >
+                  선택 검수 확인
+                </button>
+                <button
+                  className="button small ghost"
+                  disabled={selected.size === 0 || Boolean(bulk)}
+                  onClick={() => void bulkStatus("pending")}
+                  title="검수 완료한 장을 다시 검수 대기로 되돌립니다"
+                >
+                  검수 대기로
+                </button>
+                <button
+                  className="button small danger"
+                  disabled={selected.size === 0 || Boolean(bulk)}
+                  onClick={() => void bulkDelete()}
+                >
+                  선택 삭제
+                </button>
+                {selected.size > 0 ? (
+                  <button className="button small ghost" disabled={Boolean(bulk)} onClick={() => selectAll(false)}>
+                    선택 해제
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="table-scroll">
             <table className="admin-table">
               <thead>
                 <tr>
+                  {canEdit ? (
+                    <th className="check-col">
+                      <input
+                        type="checkbox"
+                        aria-label={`보이는 답안지 ${visibleIds.length}장 전체 선택`}
+                        title={`보이는 ${visibleIds.length}장 전체 선택`}
+                        checked={allSelected}
+                        disabled={Boolean(bulk)}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !allSelected && selected.size > 0;
+                        }}
+                        onChange={(e) => selectAll(e.target.checked)}
+                      />
+                    </th>
+                  ) : null}
                   <th>파일</th>
                   <th>수험번호</th>
                   <th>표기</th>
@@ -733,8 +934,8 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                   const notes = idNotes(scan);
 
                   return (
-                    <tr key={scan.id}>
-                      <td colSpan={5} style={{ padding: 0 }}>
+                    <tr key={scan.id} className={selected.has(scan.id) ? "is-selected" : undefined}>
+                      <td colSpan={canEdit ? 6 : 5} style={{ padding: 0 }}>
                         <div style={{ padding: "12px 14px" }}>
                           <div
                             style={{
@@ -744,6 +945,18 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                               alignItems: "center",
                             }}
                           >
+                            {canEdit ? (
+                              <input
+                                type="checkbox"
+                                className="row-check"
+                                aria-label={`${scan.filename} 선택`}
+                                checked={selected.has(scan.id)}
+                                disabled={Boolean(bulk)}
+                                // Shift 여부는 click에서만 알 수 있다 — change는 비워 둔다(제어 입력 경고 방지)
+                                onClick={(e) => toggleSelect(scan, !selected.has(scan.id), e.shiftKey)}
+                                onChange={() => undefined}
+                              />
+                            ) : null}
                             <strong style={{ minWidth: 160 }}>{scan.filename}</strong>
 
                             <label style={{ margin: 0 }}>
@@ -822,14 +1035,14 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                                 <>
                                   <button
                                     className="button tiny primary"
-                                    disabled={busy === scan.id}
+                                    disabled={busy === scan.id || Boolean(bulk)}
                                     onClick={() => save(scan, "reviewed")}
                                   >
                                     검수 확인
                                   </button>
                                   <button
                                     className="button tiny danger"
-                                    disabled={busy === scan.id}
+                                    disabled={busy === scan.id || Boolean(bulk)}
                                     onClick={() => remove(scan)}
                                   >
                                     삭제
@@ -981,6 +1194,7 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
