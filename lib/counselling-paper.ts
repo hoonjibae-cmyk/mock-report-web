@@ -1,9 +1,11 @@
 import {z} from 'zod';
 export const PaperQuestionSchema=z.object({no:z.number().int(),stem:z.string(),passage:z.string(),choices:z.array(z.string()),explanation:z.string(),unclear:z.boolean()});
 export const PaperSchema=z.object({questions:z.array(PaperQuestionSchema)});
+export const PAPER_TRANSCRIPTION_RULES='발문뿐 아니라 문항의 [보기] 단어 목록, [조건], 답안의 고정 문구와 빈칸을 빠짐없이 옮기세요. 객관식 choices는 선택지이며 서술형 단어은행과 혼동하지 마세요. 서술형 [보기], [조건], [답안]은 stem 끝에 각각 독립된 줄의 해당 라벨과 원문 내용으로 덧붙이세요. 페이지의 옆 단·아래 박스까지 확인하세요. 공통 지문은 해당 문항 모두에 전체를 복사하세요. 여러 소문항 (a)(b)(c)는 OMR의 별도 답안 번호와 배점에 대응시켜 각각 추출하고 같은 지문·조건을 포함하세요. 문항에서 참조한 보기·조건을 찾지 못하면 내용을 지어내지 말고 unclear=true로 표시하세요.';
 export type PaperQuestion=z.infer<typeof PaperQuestionSchema>;
 export type CounsellingPaper={path:string;filename:string;status:'draft'|'confirmed';uploadedAt:string;confirmedAt?:string;questions:PaperQuestion[]};
-export function usablePaperQuestions(questions:PaperQuestion[]){return questions.filter(q=>!q.unclear&&!!(q.stem.trim()||q.passage.trim()||q.choices.some(c=>c.trim())));}
+export function missingPaperReferences(q:PaperQuestion){const text=q.stem+'\n'+q.passage;return ['보기','조건'].filter(label=>{if(!q.stem.includes('['+label+']'))return false;if(label==='보기'&&q.choices.some(c=>c.trim()))return false;const section=text.match(new RegExp('(?:^|\\n)\\s*\\['+label+'\\]\\s*[:：]?\\s*([^\\[]+)'));return !section?.[1]?.trim();});}
+export function usablePaperQuestions(questions:PaperQuestion[]){return questions.filter(q=>!q.unclear&&!missingPaperReferences(q).length&&!!(q.stem.trim()||q.passage.trim()||q.choices.some(c=>c.trim())));}
 export function expandPaperSubquestions(questions:PaperQuestion[],objectiveCount:number,max:number){
  const result=questions.map(q=>({...q}));
  for(const q of questions){
