@@ -11,6 +11,7 @@ import {
 } from "@/lib/report-messages";
 import { EMPTY_RANGE, rangeBounds, type DateRange } from "@/lib/date-range";
 import { compactItems, homeroomKey, mergeTeacherNames, questionsOf, type HomeroomReport } from "@/lib/homeroom";
+import type { StudentReport } from "@/lib/student-history";
 import { parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
@@ -238,30 +239,56 @@ export async function listHomeroomReports(teacherName: string, limit = 600): Pro
     // supabase-js는 select 문자열을 그대로 읽어 행 타입을 만든다. 변수로 빼면
     // 타입이 무너지므로 문자열을 여기 직접 적는다.
     .select(
-      "id,public_token,student_name,school,class_name,student_key,is_active,view_count,created_at,exam_id,report_data,exams(exam_type,title,exam_date)",
+      "id,public_token,student_name,school,class_name,student_key,homeroom_teacher,is_active,view_count,created_at,exam_id,report_data,exams(exam_type,title,exam_date)",
     )
     .eq("homeroom_key", key)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`내 반 성적표 조회 실패: ${error.message}`);
+  return mapStudentReports(data ?? []);
+}
 
-  const out: HomeroomReport[] = [];
-  for (const row of data ?? []) {
+/** 성적표 행에서 '내 반'·'학생별 이력'이 쓰는 값만 추릴 때 읽는 칸 */
+interface StudentReportRow {
+  id: string;
+  public_token: string;
+  student_name: string;
+  school: string | null;
+  class_name: string | null;
+  student_key: string | null;
+  homeroom_teacher?: string | null;
+  is_active: boolean | null;
+  view_count: number | null;
+  created_at: string;
+  exam_id: string | null;
+  report_data: unknown;
+  exams: unknown;
+}
+
+/**
+ * 성적표 본문(report_data)에서 화면에 필요한 값만 추린다 — 본문 전체를 화면으로
+ * 내려보내지 않기 위해서다. 국영수 엑셀로 만든 옛 성적표(schemaVersion 1)는
+ * 담임·문항을 모르므로 빠진다.
+ */
+function mapStudentReports(rows: readonly unknown[]): StudentReport[] {
+  const out: StudentReport[] = [];
+  for (const raw of rows) {
+    const row = raw as StudentReportRow;
     const body = row.report_data;
-    // 국영수 엑셀로 만든 옛 성적표(schemaVersion 1)는 담임을 모른다 — 여기 오지 않는다
     if (!isGenericReport(body)) continue;
     const exam = Array.isArray(row.exams) ? row.exams[0] : row.exams;
     out.push({
       reportId: row.id,
       token: row.public_token,
-      examId: (row.exam_id as string | null) ?? null,
+      examId: row.exam_id ?? null,
       examType: examTypeOf(row.exams),
       examTitle: body.examTitle || (exam as { title?: string } | null)?.title || "성적표",
       examDate: body.examDate ?? (exam as { exam_date?: string | null } | null)?.exam_date ?? null,
-      studentKey: (row.student_key as string | null) ?? body.student.key ?? null,
+      studentKey: row.student_key ?? body.student.key ?? null,
       studentName: row.student_name,
       school: row.school ?? "",
-      className: (row.class_name as string | null) ?? "",
+      className: row.class_name ?? "",
+      teacher: (row.homeroom_teacher ?? "").trim(),
       raw: body.score.raw,
       max: body.score.max,
       standardScore: body.standardScore,
@@ -282,6 +309,52 @@ export async function listHomeroomReports(teacherName: string, limit = 600): Pro
     });
   }
   return out;
+}
+
+/** 한 학생의 성적표 전부(수험번호 기준) — 학생별 시험 이력. 최근 것이 위 */
+export async function listStudentReports(studentKey: string, limit = 300): Promise<StudentReport[]> {
+  const key = studentKey.trim();
+  if (!key) return [];
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("student_reports")
+    .select(
+      "id,public_token,student_name,school,class_name,student_key,homeroom_teacher,is_active,view_count,created_at,exam_id,report_data,exams(exam_type,title,exam_date)",
+    )
+    .eq("student_key", key)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`학생 이력 조회 실패: ${error.message}`);
+  return mapStudentReports(data ?? []);
+}
+
+/**
+ * 이름(또는 수험번호)으로 성적표를 찾는다 — 학생별 이력의 검색.
+ *
+ * 이름은 글자 사이에 공백이 끼어도 찾도록 글자마다 와일드카드를 잇는다('최유민' →
+ * %최%유%민%). 넉넉히 걸리는 대신, 부르는 쪽이 lib/student-history 의 matchesQuery 로
+ * 다시 거른다. 숫자만이면 수험번호로 본다. homeroomKey 를 주면 그 담임의 학생만.
+ */
+export async function searchStudentReports(
+  query: string,
+  options: { homeroomKey?: string | null; limit?: number } = {},
+): Promise<StudentReport[]> {
+  const q = query.replace(/[%_\\,()]/g, "").replace(/\s+/g, "").trim().slice(0, 40);
+  if (!q) return [];
+  const supabase = getSupabaseAdmin();
+  let request = supabase
+    .from("student_reports")
+    .select(
+      "id,public_token,student_name,school,class_name,student_key,homeroom_teacher,is_active,view_count,created_at,exam_id,report_data,exams(exam_type,title,exam_date)",
+    )
+    .eq("is_active", true);
+  if (options.homeroomKey) request = request.eq("homeroom_key", options.homeroomKey);
+  request = /^\d+$/.test(q)
+    ? request.eq("student_key", q)
+    : request.ilike("student_name", `%${[...q].join("%")}%`);
+  const { data, error } = await request.order("created_at", { ascending: false }).limit(options.limit ?? 600);
+  if (error) throw new Error(`학생 검색 실패: ${error.message}`);
+  return mapStudentReports(data ?? []);
 }
 
 /**
