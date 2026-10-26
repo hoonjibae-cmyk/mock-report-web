@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import AcademyLogo from "@/components/AcademyLogo";
+import AnnouncementModal from "@/components/AnnouncementModal";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
 import { APP_VERSION } from "@/lib/version";
 
@@ -139,6 +140,9 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
           );
         })}
       </nav>
+
+      {/* 새 기능 안내 — 관리자 화면 어디로 들어오든 한 번 띄운다('확인'은 이번 세션, '다시 보지 않기'는 영영) */}
+      <AnnouncementModal />
     </>
   );
 }
