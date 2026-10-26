@@ -45,5 +45,21 @@ rm -rf app/shots-tmp
 
 ## 사진을 새로 늘릴 때
 
-파일 이름이 곧 자리입니다 — `public/guide/README.md` 를 보세요. 사진 아래
-한 줄 설명은 `app/guide/page.tsx` 의 `SHOT_CAPTIONS` 에 있습니다.
+가이드의 이미지 경로·설명·크기는 `app/guide/guide-data.json`에서 관리합니다.
+
+### 발송 전 성적표 미리보기 (2026-10-26)
+
+`report-preview-page.tsx.example`을 임시 `app/shots-tmp/page.tsx`로 복사하고
+개발 서버를 실행합니다. 실제 `OmrDashboard`, `ExamSummary`, `GenericReport`
+컴포넌트에 가상의 시험·학생·점수·의견을 전달하므로 공개 가이드에 실제
+학생 정보가 포함되지 않습니다.
+
+브라우저에서 아래 화면을 차례대로 열고 본문을 캡처합니다.
+
+- `/shots-tmp?screen=list` → `public/guide/10-preview-exam-list.jpg`
+- `/shots-tmp?screen=summary` → `public/guide/11-preview-student-name.jpg`
+- `/shots-tmp?screen=report` → `public/guide/12-preview-report.jpg`
+
+예시 이름 링크의 토큰은 실제 성적표가 아닙니다. 링크를 클릭하는 대신
+`screen=report`로 이동합니다. 임시 경로는 개발 모드에서만 동작하지만,
+캡처 후 임시 `app/shots-tmp/page.tsx`를 반드시 제거하고 배포합니다.
