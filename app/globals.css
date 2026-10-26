@@ -2760,3 +2760,16 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .history-table td, .history-table th { white-space: nowrap; }
 .history-table td.history-areas { white-space: normal; min-width: 220px; font-size: 12.5px; color: var(--ink); }
 .history-table td > a.row-title { white-space: normal; }
+
+/* 새 기능 안내 팝업 */
+.announce-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(16, 28, 48, .48); backdrop-filter: blur(2px); }
+.announce-card { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 22px 24px 18px; border-radius: 16px; background: #fff; box-shadow: 0 24px 60px rgba(16, 28, 48, .28); }
+.announce-card h2 { margin: 2px 0 12px; font-size: 20px; color: var(--navy-deep); }
+.announce-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.announce-items li { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #f7f9fc; }
+.announce-items strong { display: block; color: var(--navy-deep); font-size: 14.5px; margin-bottom: 4px; }
+.announce-items p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--ink); }
+.announce-link { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--navy); text-decoration: none; }
+.announce-link:hover { text-decoration: underline; }
+.announce-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+@media (max-width: 480px) { .announce-card { padding: 18px 16px 14px; } .announce-actions { flex-direction: column-reverse; } .announce-actions .button { width: 100%; } }
