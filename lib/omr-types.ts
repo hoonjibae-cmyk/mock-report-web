@@ -16,6 +16,19 @@ export const EXAM_TYPE_LABELS: Record<ExamType, string> = {
 };
 
 /**
+ * 목록·표의 유형 배지 — 좁은 자리에 한 줄로 들어가는 짧은 이름과, 그 아래 작은
+ * 글씨로 붙는 보조 설명. '반배치고사(레벨테스트)'를 배지에 통째로 넣으면 세 줄로
+ * 접힌다. 긴 이름은 EXAM_TYPE_LABELS(제목·메뉴·성적표)에 그대로 남는다.
+ */
+export const EXAM_TYPE_BADGES: Record<ExamType, { label: string; sub?: string }> = {
+  mock: { label: "국영수 모의고사" },
+  saturday: { label: "토요모의고사", sub: "영어" },
+  monthly: { label: "월말평가" },
+  placement: { label: "반배치고사", sub: "레벨테스트" },
+  inclass: { label: "인클래스 테스트" },
+};
+
+/**
  * 시험 유형별 답안지 기본값 — 화면에서 바꿀 수 있는 '처음 값'이다.
  *
  * 토요모의고사를 미리 뽑아 두고 쓰기 위한 값들

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
+import ExamTypeBadge from "@/components/ExamTypeBadge";
 import { APP_RELEASED_AT, APP_VERSION_LABEL } from "@/lib/version";
-import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
+import type { OmrExam } from "@/lib/omr-types";
 import type { AdminReportListItem } from "@/lib/reports";
 
 interface Props {
@@ -135,7 +136,7 @@ export default function AdminHome({ currentUser, exams, reports, setupError, can
                     const filled = Object.keys(exam.answerKey ?? {}).length;
                     return (
                       <tr key={exam.id}>
-                        <td><span className="status-chip active">{EXAM_TYPE_LABELS[exam.examType]}</span></td>
+                        <td><ExamTypeBadge type={exam.examType} /></td>
                         <td>
                           {/*
                             제목을 누르면 그 시험에서 **다음에 할 일**로 간다. 정답이

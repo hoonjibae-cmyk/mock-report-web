@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
+import ExamTypeBadge from "@/components/ExamTypeBadge";
 import { canDeleteOwned } from "@/lib/ownership";
 import FilterBar, { type FilterGroup } from "@/components/FilterBar";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
@@ -270,7 +271,7 @@ export default function OmrDashboard({
           </p>
         ) : (
           <div className="table-scroll">
-            <table className="admin-table">
+            <table className="admin-table exam-table">
               <thead>
                 <tr>
                   <th>유형</th>
@@ -285,10 +286,8 @@ export default function OmrDashboard({
                 {visible.map((exam) => (
                   <tr key={exam.id}>
                     <td>
-                      <span className="status-chip active">{EXAM_TYPE_LABELS[exam.examType]}</span>
-                      {mockSubjectOf(exam.subject) ? (
-                        <span>{mockSubjectOf(exam.subject)?.label}</span>
-                      ) : null}
+                      {/* 국영수 모의고사는 과목이 보조 설명 자리에 들어간다 */}
+                      <ExamTypeBadge type={exam.examType} sub={mockSubjectOf(exam.subject)?.label} />
                     </td>
                     <td>
                       <strong>{exam.title}</strong>
