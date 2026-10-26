@@ -1,9 +1,9 @@
 import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import ClassExamDetail from "@/components/ClassExamDetail";
+import ExamTypeBadge from "@/components/ExamTypeBadge";
 import TeacherPicker from "@/components/TeacherPicker";
 import { sameTeacher, type ExamGroup } from "@/lib/homeroom";
-import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
 
 interface Props {
   user: NavUser;
@@ -88,7 +88,7 @@ export default function MyClassView({ user, teacherName, teachers, groups, setup
             <summary>
               <div className="my-class-exam-head">
                 <div>
-                  <span className="status-chip active">{EXAM_TYPE_LABELS[group.examType]}</span>
+                  <ExamTypeBadge type={group.examType} sub={null} />
                   <strong>{group.examTitle}</strong>
                   <span className="subtle">{group.examDate ?? ""}</span>
                 </div>

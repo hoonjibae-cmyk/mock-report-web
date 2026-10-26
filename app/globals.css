@@ -2726,3 +2726,22 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .bulk-progress { font-weight: 700; color: #1558b0; }
 .bulk-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
 @media (max-width: 720px) { .bulk-bar { position: static; } .bulk-actions { margin-left: 0; width: 100%; } }
+
+/* 시험 유형 배지 — 유형마다 색이 달라 목록에서 한눈에 갈린다. 한 줄로만 놓인다 */
+.type-chip { white-space: nowrap; letter-spacing: -0.01em; }
+.type-chip.type-monthly { color: #1f4f9c; background: #e7effb; }
+.type-chip.type-placement { color: #6b3fa0; background: #f0e9fa; }
+.type-chip.type-saturday { color: #1a7f4b; background: #e6f4ec; }
+.type-chip.type-mock { color: #b25a00; background: #fff1e3; }
+.type-chip.type-inclass { color: #4a5568; background: #edf0f4; }
+.type-sub { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.admin-table td > .type-sub { margin-top: 3px; }
+
+/* 시험 목록 표 — 좁은 화면에서 칸이 글자 단위로 찢어지지 않게. 폭이 모자라면 가로로 스크롤한다 */
+.exam-table { min-width: 900px; }
+.exam-table th:first-child, .exam-table td:first-child { width: 1%; white-space: nowrap; }
+.exam-table td:nth-child(2) { min-width: 220px; }
+.exam-table th:nth-child(3), .exam-table td:nth-child(3),
+.exam-table th:nth-child(4), .exam-table td:nth-child(4),
+.exam-table th:nth-child(5), .exam-table td:nth-child(5) { white-space: nowrap; }
+.exam-table .link-actions { flex-wrap: wrap; }
