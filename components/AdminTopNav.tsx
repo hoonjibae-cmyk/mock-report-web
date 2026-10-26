@@ -55,6 +55,8 @@ const TABS: Tab[] = [
   },
   // 담임이 제 반 학생들의 성적표와 시험별 반 요약을 보는 곳. 관리자도 담임일 수 있어 모두에게 보인다.
   { href: "/admin/my-class", label: "내 반" },
+  // 담임이 제 학생 한 명이 OMR 리포트로 본 시험을 모두 늘어놓고 보는 곳
+  { href: "/admin/students", label: "학생별 이력" },
   { href: "/admin/users", label: "계정 관리", adminOnly: true },
   { href: "/admin/settings", label: "설정", adminOnly: true },
 ];

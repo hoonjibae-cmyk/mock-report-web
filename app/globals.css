@@ -2745,3 +2745,18 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .exam-table th:nth-child(4), .exam-table td:nth-child(4),
 .exam-table th:nth-child(5), .exam-table td:nth-child(5) { white-space: nowrap; }
 .exam-table .link-actions { flex-wrap: wrap; }
+
+/* 학생별 시험 이력 */
+.student-search { display: flex; gap: 8px; align-items: center; margin: 4px 0 16px; max-width: 520px; }
+.student-search input { flex: 1; min-width: 0; border: 1px solid #cfd8e5; border-radius: 10px; background: #fff; padding: 11px 12px; color: var(--ink); outline: none; font: inherit; }
+.student-search input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,103,177,.1); }
+.student-table td:nth-child(n+4), .student-table th:nth-child(n+4) { white-space: nowrap; }
+.student-school { font-weight: 500; color: var(--muted); font-size: 15px; }
+.history-group { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.history-group:first-of-type { border-top: 0; padding-top: 0; }
+.history-group-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.history-group-head strong { color: var(--navy-deep); font-size: 15px; }
+.history-table { min-width: 860px; }
+.history-table td, .history-table th { white-space: nowrap; }
+.history-table td.history-areas { white-space: normal; min-width: 220px; font-size: 12.5px; color: var(--ink); }
+.history-table td > a.row-title { white-space: normal; }
