@@ -497,6 +497,23 @@ export default function OmrSendPanel({
             </p>
           </div>
           <div className="toolbar">
+            {/* 보내기 버튼은 고르는 버튼들 바로 옆에 — 목록 아래까지 내려가지 않아도 된다 */}
+            {canSend ? (
+              <button
+                className="button small primary"
+                disabled={selections.length === 0 || sending || blockers.length > 0 || !reviewOk}
+                onClick={send}
+                title={
+                  !reviewOk
+                    ? "운영진 컨펌 전에는 보낼 수 없습니다."
+                    : selections.length === 0
+                      ? "보낼 학생을 먼저 골라 주세요."
+                      : `${selectionText}에게 보냅니다(총 ${selections.length}건). 보낸 메시지는 취소할 수 없습니다.`
+                }
+              >
+                {sending ? "보내는 중…" : !reviewOk ? "운영진 컨펌 후 보낼 수 있습니다" : `알림톡 보내기 (${selections.length})`}
+              </button>
+            ) : null}
             <button className="button small secondary" onClick={() => pickAll("unsent")}>
               안 보낸 학생 전체 ({unsent.length})
             </button>
@@ -575,19 +592,12 @@ export default function OmrSendPanel({
 
         {canSend ? (
           <div className="send-bar">
+            {/* 보내기 버튼은 위의 '발송 대상' 머리글에 있다 — 여기서는 무엇이 나가는지만 적는다 */}
             <p className="subtle">
               {selections.length === 0
-                ? "보낼 학생을 골라 주세요."
-                : `${selectionText}에게 보냅니다(총 ${selections.length}건). 보낸 메시지는 취소할 수 없습니다.`}
+                ? "보낼 학생을 골라 주세요. 알림톡 보내기 버튼은 위 ‘발송 대상’ 제목 옆에 있습니다."
+                : `${selectionText}에게 보냅니다(총 ${selections.length}건). 보낸 메시지는 취소할 수 없습니다. 위 ‘알림톡 보내기’ 버튼으로 보냅니다.`}
             </p>
-            <button
-              className="button primary"
-              disabled={selections.length === 0 || sending || blockers.length > 0 || !reviewOk}
-              onClick={send}
-              title={!reviewOk ? "운영진 컨펌 전에는 보낼 수 없습니다." : undefined}
-            >
-              {sending ? "보내는 중…" : !reviewOk ? "운영진 컨펌 후 보낼 수 있습니다" : `알림톡 보내기 (${selections.length})`}
-            </button>
           </div>
         ) : (
           <p className="subtle">발송 권한이 없습니다. 관리자에게 문의해 주세요.</p>
