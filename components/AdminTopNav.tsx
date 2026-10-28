@@ -23,7 +23,7 @@ interface Tab {
   adminOnly?: boolean;
   /** 이 경로에 있을 때도 상위 항목을 활성·펼침으로 본다 */
   alsoUnder?: string[];
-  children?: Array<{ href: string; label: string; type?: ExamType }>;
+  children?: Array<{ href: string; label: string; type?: ExamType; exact?: boolean }>;
 }
 
 const TABS: Tab[] = [
@@ -40,6 +40,8 @@ const TABS: Tab[] = [
         label: EXAM_TYPE_LABELS[type],
         type,
       })),
+      // 검토 올라온 월말평가를 슬랙 링크 없이 찾아 들어가는 곳
+      { href: "/admin/omr/reviews", label: "운영진 검토", exact: true },
     ],
   },
   {
@@ -121,8 +123,14 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
               {tab.children && open ? (
                 <div className="admin-subnav">
                   {tab.children.map((child) => {
-                    // '전체'는 type 파라미터가 없을 때만 활성
-                    const on = child.type ? activeType === child.type : !activeType;
+                    // 유형 항목은 type 파라미터로, 고정 주소 항목(운영진 검토)은 경로로,
+                    // '전체'는 둘 다 아닐 때 활성
+                    const exactChildOn = tab.children?.some((c) => c.exact && pathname === c.href) ?? false;
+                    const on = child.exact
+                      ? pathname === child.href
+                      : child.type
+                        ? activeType === child.type
+                        : !activeType && !exactChildOn;
                     return (
                       <Link
                         key={child.href}
