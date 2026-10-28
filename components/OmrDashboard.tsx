@@ -5,6 +5,8 @@ import Link from "next/link";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import ExamTypeBadge from "@/components/ExamTypeBadge";
 import { canDeleteOwned } from "@/lib/ownership";
+import { reviewRequired } from "@/lib/review";
+import { REVIEW_STATUS_LABELS } from "@/lib/review-queue";
 import FilterBar, { type FilterGroup } from "@/components/FilterBar";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
 import {
@@ -345,6 +347,17 @@ export default function OmrDashboard({
                         {exam.useTeacherComment ? (
                           <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/comments`}>
                             담임 의견
+                          </Link>
+                        ) : null}
+                        {/* 월말평가는 운영진 검토를 거쳐야 나간다 — 검토 화면을 목록에서 바로 연다 */}
+                        {reviewRequired(exam.examType) ? (
+                          <Link
+                            className={`button tiny ${exam.review.status === "requested" ? "primary" : "secondary"}`}
+                            href={`/admin/omr/${exam.id}/review`}
+                            title={`운영진 검토 — ${REVIEW_STATUS_LABELS[exam.review.status]}`}
+                          >
+                            운영진 검토
+                            {exam.review.status === "requested" ? " · 대기" : exam.review.status === "approved" ? " · 컨펌" : ""}
                           </Link>
                         ) : null}
                         <Link className="button tiny secondary" href={`/admin/omr/${exam.id}/send`}>

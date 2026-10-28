@@ -2773,3 +2773,21 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .announce-link:hover { text-decoration: underline; }
 .announce-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 @media (max-width: 480px) { .announce-card { padding: 18px 16px 14px; } .announce-actions { flex-direction: column-reverse; } .announce-actions .button { width: 100%; } }
+
+/* 운영진 검토 대기열 */
+.queue-heading { margin: 4px 0 10px; font-size: 15px; color: var(--navy-deep); }
+.queue-heading .subtle { font-weight: 500; font-size: 12.5px; margin-left: 6px; }
+.queue-table td:nth-child(n+2), .queue-table th:nth-child(n+2) { white-space: nowrap; }
+.queue-table td:nth-child(2) { white-space: normal; min-width: 140px; }
+.queue-wait { display: block; color: #b3261e; font-size: 13px; }
+.queue-fold { margin-top: 16px; }
+.queue-fold > summary { cursor: pointer; font-size: 15px; color: var(--navy-deep); list-style: none; display: flex; align-items: baseline; gap: 8px; }
+.queue-fold > summary::before { content: "▸"; color: var(--muted); font-size: 12px; }
+.queue-fold[open] > summary::before { content: "▾"; }
+.queue-fold > summary::-webkit-details-marker { display: none; }
+.queue-fold[open] > summary { margin-bottom: 12px; }
+.queue-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.queue-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 14px; border: 1px solid #f2d5d2; border-radius: 10px; background: #fdf6f5; }
+.queue-list li > div { display: grid; gap: 2px; min-width: 0; }
+.queue-list li strong { color: var(--navy-deep); }
+.queue-list li .subtle { font-size: 12.5px; }

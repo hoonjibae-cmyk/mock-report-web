@@ -3,6 +3,8 @@ import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
 import ExamTypeBadge from "@/components/ExamTypeBadge";
 import { APP_RELEASED_AT, APP_VERSION_LABEL } from "@/lib/version";
 import type { OmrExam } from "@/lib/omr-types";
+import { formatWhen } from "@/lib/review";
+import { waitingText } from "@/lib/review-queue";
 import type { AdminReportListItem } from "@/lib/reports";
 
 interface Props {
@@ -11,6 +13,9 @@ interface Props {
   reports: AdminReportListItem[];
   setupError: string;
   canCreate: boolean;
+  /** 운영진 검토를 기다리는 월말평가 — 오래 기다린 순. 컨펌할 수 있는 사람에게만 보인다 */
+  pendingReviews?: OmrExam[];
+  canApprove?: boolean;
 }
 
 const TYPE_CARDS: Array<{
@@ -65,12 +70,51 @@ const WORKFLOW = [
   { step: "5", title: "성적표 발송", desc: "학부모 웹링크 공유" },
 ];
 
-export default function AdminHome({ currentUser, exams, reports, setupError, canCreate }: Props) {
+export default function AdminHome({
+  currentUser,
+  exams,
+  reports,
+  setupError,
+  canCreate,
+  pendingReviews = [],
+  canApprove = false,
+}: Props) {
   return (
     <main className="admin-shell">
       <AdminTopNav user={currentUser} />
 
       {setupError ? <p className="form-error block">{setupError}</p> : null}
+
+      {/* 컨펌할 사람에게 — 검토 기다리는 월말평가가 있으면 홈 맨 위에서 바로 연다 */}
+      {canApprove && pendingReviews.length > 0 ? (
+        <section className="panel queue-home" style={{ marginBottom: 20 }}>
+          <div className="section-heading wrap">
+            <div>
+              <p className="eyebrow">ADMIN REVIEW</p>
+              <h2>운영진 검토를 기다리는 월말평가 {pendingReviews.length}건</h2>
+              <p className="subtle">담임이 의견을 쓰고 검토를 요청한 시험입니다. 컨펌해야 알림톡이 나갑니다.</p>
+            </div>
+            <Link className="button secondary" href="/admin/omr/reviews">전체 보기</Link>
+          </div>
+          <ul className="queue-list">
+            {pendingReviews.slice(0, 5).map((exam) => (
+              <li key={exam.id}>
+                <div>
+                  <strong>{exam.title}</strong>
+                  <span className="subtle">
+                    {exam.classNames.length > 0 ? `${exam.classNames.join(", ")} · ` : ""}
+                    {exam.review.requestedByName ?? "—"} 요청 · {formatWhen(exam.review.requestedAt)}
+                    {waitingText(exam.review.requestedAt) ? ` · ${waitingText(exam.review.requestedAt)}` : ""}
+                  </span>
+                </div>
+                <Link className="button small primary" href={`/admin/omr/${exam.id}/review`}>
+                  검토하기
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="panel" style={{ marginBottom: 20 }}>
         <div className="section-heading">

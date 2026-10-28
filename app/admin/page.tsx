@@ -2,6 +2,8 @@ import AdminHome from "@/components/AdminHome";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { listExams } from "@/lib/omr-exams";
 import { listAdminReports } from "@/lib/reports";
+import { canApproveReview } from "@/lib/review";
+import { reviewQueue } from "@/lib/review-queue";
 import type { OmrExam } from "@/lib/omr-types";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,8 @@ export default async function AdminPage() {
       reports={reports}
       setupError={setupError}
       canCreate={hasPermission(currentUser, "createReports")}
+      pendingReviews={reviewQueue(exams).requested}
+      canApprove={canApproveReview(currentUser)}
     />
   );
 }
