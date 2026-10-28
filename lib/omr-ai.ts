@@ -8,6 +8,7 @@ import type { OmrExam } from "@/lib/omr-types";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
 import { stripHanja } from "@/lib/review-sanitizer";
 import type { GenericReportData } from "@/lib/omr-report-types";
+import { withStudentTitle } from "@/lib/student-honorific";
 
 const DraftSchema = z.object({ draft: z.string() });
 
@@ -213,7 +214,7 @@ ${COMMON_RULES}
 - displayKeywords는 학생의 강점이므로 긍정적 맥락에서 자연스럽게 문장에 녹입니다.
 - weaveKeywords는 성적표에 노출되지 않는 참고 사항입니다. 단어를 그대로 옮기지 말고, 학부모가 듣기에 건설적인 표현으로 다듬어 반영합니다.
 - growth에 이전 회차가 있으면 표준점수 흐름(상승·유지·하락)을 언급합니다. 첫 응시면 언급하지 않습니다.
-- 학생 이름은 "OO 학생" 대신 실제 이름으로 자연스럽게 부릅니다.`,
+- 학생을 가리킬 때는 실제 이름 뒤에 '학생'을 붙여 "${report.student.name} 학생은", "${report.student.name} 학생이"처럼 씁니다. 이름만 쓰거나("${report.student.name}은") 이름을 비운 "OO 학생"은 쓰지 않습니다.`,
       },
       {
         role: "user",
@@ -223,13 +224,15 @@ ${COMMON_RULES}
     text: { format: zodTextFormat(StudentDraftSchema, "student_comment_draft") },
   });
 
-  const overall = stripHanja(response.output_parsed?.overall ?? "");
+  // 모델이 '학생'을 빼먹고 "김도영은"이라 쓰면 여기서 "김도영 학생은"으로 맞춘다
+  const polish = (text: string) => withStudentTitle(stripHanja(text), report.student.name);
+  const overall = polish(response.output_parsed?.overall ?? "");
   if (!overall) throw new Error("AI 초안 생성에 실패했습니다. 다시 시도해 주세요.");
   return {
     overall,
     areas: (response.output_parsed?.areas ?? []).map((entry) => ({
       area: stripHanja(String(entry.area)),
-      text: stripHanja(String(entry.text)),
+      text: polish(String(entry.text)),
     })),
   };
 }
