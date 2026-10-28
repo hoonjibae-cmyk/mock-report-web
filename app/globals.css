@@ -2791,3 +2791,13 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .queue-list li > div { display: grid; gap: 2px; min-width: 0; }
 .queue-list li strong { color: var(--navy-deep); }
 .queue-list li .subtle { font-size: 12.5px; }
+
+/* 시험일 고치기(정답 입력의 시험 정보 · 발송 화면의 응시일 안내) */
+.send-date-notice p { margin: 0; }
+.exam-date-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; font-size: 13px; color: var(--ink); }
+.exam-date-editor .exam-date-current strong { color: var(--navy-deep); }
+.exam-date-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.exam-date-form input { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 13px; background: #fff; }
+.exam-date-editor .form-error { flex-basis: 100%; }
+.exam-info-box .exam-date-editor { margin-top: 0; }
+.exam-date-editor .exam-date-current strong { display: inline; margin: 0; }
