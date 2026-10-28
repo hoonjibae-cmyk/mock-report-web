@@ -331,3 +331,16 @@ export function sheetSpecFor(exam: OmrExam): OmrSheetSpec {
   // 토요모의고사는 공통 양식 — 시험 제목·설정과 상관없이 늘 같은 종이가 나온다
   return applyFixedSheet(spec, exam.examType);
 }
+
+/**
+ * 시험일만 바꾼다 — 알림톡의 '응시일'과 목록·새로 만드는 성적표의 머리글에 쓰인다.
+ * 만든 뒤에 비어 있거나 틀린 것을 고칠 수 있어야 한다. null 이면 '응시일 없음'.
+ */
+export async function updateExamDate(id: string, examDate: string | null): Promise<OmrExam> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.from("exams").update({ exam_date: examDate }).eq("id", id).select(SELECT).single();
+  if (error || !data) {
+    throw new Error(`시험일 저장 실패 — ${describeExamDbError(error?.message ?? "알 수 없는 오류")}`);
+  }
+  return mapExam(data as ExamRow);
+}

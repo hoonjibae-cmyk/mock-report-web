@@ -24,6 +24,7 @@ export default async function OmrSendPage(context: { params: Promise<{ id: strin
       exam={exam}
       // 발송은 되돌릴 수 없으므로 성적표를 만들 수 있는 권한과 같은 선에 둔다.
       canSend={hasPermission(user, "createReports")}
+      canEditExam={hasPermission(user, "createReports")}
       setupError={setupError}
     />
   );

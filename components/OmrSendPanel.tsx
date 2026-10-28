@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import ExamDateEditor from "@/components/ExamDateEditor";
 import AcademyLogo from "@/components/AcademyLogo";
 import { ACADEMY_NAME, ACADEMY_PHONE, EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { RecipientType } from "@/lib/report-messages";
@@ -93,10 +94,13 @@ function ContactCell({ slot }: { slot: RecipientSlot }) {
 export default function OmrSendPanel({
   exam,
   canSend,
+  canEditExam = canSend,
   setupError,
 }: {
   exam: OmrExam | null;
   canSend: boolean;
+  /** 시험일을 고칠 수 있는가 — 성적표를 만들 수 있는 권한과 같다 */
+  canEditExam?: boolean;
   setupError: string;
 }) {
   const [targets, setTargets] = useState<SendTarget[]>([]);
@@ -352,10 +356,23 @@ export default function OmrSendPanel({
       {message ? <p className="status-message">{message}</p> : null}
 
       {setup?.examDateNotice ? (
-        <p className="send-date-notice" role="alert">
-          <strong>응시일 없이 나갑니다</strong>
-          {setup.examDateNotice}
-        </p>
+        <div className="send-date-notice" role="alert">
+          <p>
+            <strong>응시일 없이 나갑니다</strong>
+            {setup.examDateNotice}
+          </p>
+          {/* 응시일은 여기서 바로 넣는다 — 저장되면 대상·문구를 다시 불러와 안내가 사라진다 */}
+          {exam ? (
+            <ExamDateEditor
+              key={`date-${exam.id}`}
+              examId={exam.id}
+              examDate={exam.examDate}
+              canEdit={canEditExam}
+              openByDefault
+              onSaved={() => void load()}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       {blockers.length > 0 ? (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ImportedExamTitle from './ImportedExamTitle';
 import ImportedExamClasses from './ImportedExamClasses';
+import ExamDateEditor from '@/components/ExamDateEditor';
 import {importedPrintTitle} from '@/lib/imported-exam-title';
 import ImportedExamSource from "./ImportedExamSource";
 import CounsellingPaperUpload from "./CounsellingPaperUpload";
@@ -336,6 +337,19 @@ export default function OmrAnswerKey({ exam, setupError, canEdit, canRename = fa
 
       {importedPrintTitle(exam)&&<ImportedExamTitle key={exam.id} id={exam.id} title={exam.title} printTitle={typeof exam.omrConfig.sheet_title==='string'&&exam.omrConfig.sheet_title.trim()?exam.omrConfig.sheet_title:importedPrintTitle(exam)!} canEdit={canRename}/>}
       {exam.examType==='monthly'&&importedPrintTitle(exam)&&<ImportedExamClasses key={`classes-${exam.id}`} id={exam.id} classNames={exam.classNames} canEdit={canRename}/>}
+      {/* 시험일 — 알림톡 '응시일'과 성적표 머리글. 만든 뒤에도 여기서 고친다 */}
+      <section className="panel no-print exam-info-box" aria-label="시험 정보">
+        <div className="section-heading wrap">
+          <div>
+            <h2>시험 정보</h2>
+            <p className="subtle">
+              시험일은 알림톡의 ‘응시일’과 새로 만드는 성적표의 머리글에 쓰입니다. 비어 있으면 알림톡이 응시일 없이
+              나가므로 보내기 전에 넣어 주세요. 이미 만든 성적표의 날짜는 ‘성적표 갱신’으로 다시 만들어야 바뀝니다.
+            </p>
+          </div>
+        </div>
+        <ExamDateEditor key={`date-${exam.id}`} examId={exam.id} examDate={exam.examDate} canEdit={canEdit} />
+      </section>
       <ImportedExamSource exam={exam}/>{exam.examType==='placement'&&<CounsellingPaperUpload examId={exam.id} initial={exam.omrConfig.counselling_paper as CounsellingPaper|undefined} canEdit={canEdit}/>}
       {error ? <p className="form-error block">{error}</p> : null}
       {message ? (
