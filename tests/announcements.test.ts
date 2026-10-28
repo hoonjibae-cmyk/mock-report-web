@@ -45,5 +45,7 @@ test("실제 안내 목록 — id가 겹치지 않고 링크가 관리자 화면
       if (item.href) assert.match(item.href, /^\/(admin|guide)/);
     }
   }
-  assert.equal(pickAnnouncement([], [])?.id, "2026-10-26-student-history");
+  assert.equal(pickAnnouncement([], [])?.id, "2026-10-28-report-refresh");
+  // 지난 안내를 닫았던 사람에게도 새 안내는 보인다
+  assert.equal(pickAnnouncement(["2026-10-26-student-history"], [])?.id, "2026-10-28-report-refresh");
 });
