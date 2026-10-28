@@ -55,7 +55,7 @@ export default function AnnouncementModal() {
 
   useEffect(() => {
     if (!open) return;
-    okRef.current?.focus();
+    okRef.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close("seen");
     };
