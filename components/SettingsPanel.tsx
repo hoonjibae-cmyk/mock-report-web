@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import AdminTopNav, { type NavUser } from "@/components/AdminTopNav";
-import { AI_MODEL_OPTIONS, type AiModelId } from "@/lib/ai-models";
+import { AI_MODEL_OPTIONS, aiModelLabel, type AiModelId } from "@/lib/ai-models";
+import { AI_EFFORT_LABELS, FIXED_AI_USES, SETTING_DRIVEN_AI_USES, SETTING_EFFORT_LABEL } from "@/lib/ai-uses";
 import { COMMENT_STYLE_LABELS, type CommentStyle } from "@/lib/omr-comments";
 import { APP_VERSION_LABEL } from "@/lib/version";
 
@@ -176,7 +177,7 @@ export default function SettingsPanel({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "설정을 저장하지 못했습니다.");
       setMessage(
-        `AI 총평 모델을 '${AI_MODEL_OPTIONS.find((o) => o.value === next)?.label}'로 저장했습니다. 이제 모든 AI 기능이 이 모델을 씁니다.`,
+        `AI 총평 모델을 '${AI_MODEL_OPTIONS.find((o) => o.value === next)?.label}'로 저장했습니다. '이 설정을 따르는 기능'에 바로 적용됩니다.`,
       );
     } catch (err) {
       setAiModel(previous); // 저장 실패 — 화면을 되돌린다
@@ -207,9 +208,9 @@ export default function SettingsPanel({
             <p className="eyebrow">SETTINGS</p>
             <h2>AI 총평 모델</h2>
             <p className="subtle">
-              여기서 고른 모델이 <strong>모든 AI 기능</strong>에 적용됩니다 — 국영수 모의고사
-              성적표의 AI 총평, 담임 의견 초안 등. 학원 전체가 같은 값을 쓰며, 사람이나 기기마다
-              달라지지 않습니다.
+              여기서 고른 모델이 아래 <strong>'이 설정을 따르는 기능'</strong>에 적용됩니다. 학원
+              전체가 같은 값을 쓰며, 사람이나 기기마다 달라지지 않습니다. 그 밖의 기능은 코드에
+              모델이 정해져 있어 이 선택과 무관합니다 — 어떤 것인지 아래에 보입니다.
             </p>
           </div>
         </div>
@@ -240,6 +241,50 @@ export default function SettingsPanel({
             AI 모델 변경은 관리자만 할 수 있습니다.
           </p>
         ) : null}
+
+        {/* 어디에 어떤 모델이 쓰이는지 — 설정을 따르는 쪽과 코드에 고정된 쪽을 나눠 보인다 */}
+        <div className="ai-uses">
+          <section className="ai-uses-group" aria-labelledby="ai-uses-setting">
+            <h3 id="ai-uses-setting">이 설정을 따르는 기능</h3>
+            <p className="subtle">
+              추론 강도는 <strong>{SETTING_EFFORT_LABEL}</strong>으로 고정합니다. 6세대 모델은
+              답을 내기 전에 생각하는 토큰도 출력으로 과금하므로, 학생 수만큼 도는 일은 낮게 두는
+              편이 싸고 빠릅니다.
+            </p>
+            <ul className="ai-use-list">
+              {SETTING_DRIVEN_AI_USES.map((use) => (
+                <li key={use.feature}>
+                  <div className="ai-use-head">
+                    <strong>{use.feature}</strong>
+                    <span className="ai-use-model">{aiModelLabel(aiModel)} · 추론 {SETTING_EFFORT_LABEL}</span>
+                  </div>
+                  <span>{use.where}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="ai-uses-group" aria-labelledby="ai-uses-fixed">
+            <h3 id="ai-uses-fixed">설정과 무관하게 고정된 기능</h3>
+            <p className="subtle">
+              아래는 코드에 모델이 정해져 있어 위에서 무엇을 골라도 늘 같은 모델을 씁니다.
+            </p>
+            <ul className="ai-use-list">
+              {FIXED_AI_USES.map((use) => (
+                <li key={use.feature}>
+                  <div className="ai-use-head">
+                    <strong>{use.feature}</strong>
+                    <span className="ai-use-model">
+                      {aiModelLabel(use.model)} · 추론 {AI_EFFORT_LABELS[use.effort]}
+                    </span>
+                  </div>
+                  <span>{use.where}</span>
+                  <small>{use.reason}</small>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </div>
 
       <div className="panel" style={{ marginTop: 20 }}>

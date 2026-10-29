@@ -3,7 +3,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { resolveAiModel, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
+import { aiModelParams, resolveAiModel, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
 import type { OmrExam } from "@/lib/omr-types";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
 import { stripHanja } from "@/lib/review-sanitizer";
@@ -71,7 +71,7 @@ export async function draftOverviewComment(
   };
 
   const response = await client.responses.parse({
-    model,
+    ...aiModelParams(model),
     input: [
       {
         role: "system",
@@ -116,7 +116,7 @@ export async function draftAreaNotes(
   const model = resolveAiModel(requestedModel);
 
   const response = await client.responses.parse({
-    model,
+    ...aiModelParams(model),
     input: [
       {
         role: "system",
@@ -199,7 +199,7 @@ export async function draftStudentComment(
   };
 
   const response = await client.responses.parse({
-    model,
+    ...aiModelParams(model),
     input: [
       {
         role: "system",
