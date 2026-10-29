@@ -344,3 +344,51 @@ export async function updateExamDate(id: string, examDate: string | null): Promi
   }
   return mapExam(data as ExamRow);
 }
+
+// ---------------------------------------------------------------------------
+// 목록 화면용 가벼운 시험 목록
+//
+// listExams 는 mock_reference(문항분류표·전국비교 기준), question_meta, points, review_edits
+// 에 더해 omr_config 전체를 싣는다. omr_config 에는 시험지 앱 연동 원본(문항 본문까지)과
+// 상담 AI 분석 캐시가 쌓여 시험 하나가 수백 KB가 되기도 한다. 시험 목록·홈·운영진
+// 검토 대기열은 제목·유형·정답 입력 여부·검토 상태·반·서술형 수만 보므로 그것만 읽는다.
+// omr_config 는 필요한 열쇠만 JSON 경로로 뽑는다. 이 값은 서버에서 화면(클라이언트
+// 컴포넌트)으로도 그대로 내려가므로, 가벼워야 메뉴 이동이 빨라진다.
+//
+// 돌려주는 OmrExam 의 mockReference·questionMeta·points·review.edits 는 비어 있고
+// omrConfig 에는 essay_count·per_column·sheet_title·classfit_workspace_id 만 있다.
+// 채점·성적표·비교 집단처럼 정답·배점·문항 정보가 필요한 곳은 listExams/getExam 을 쓴다.
+// ---------------------------------------------------------------------------
+
+const SUMMARY_SELECT =
+  "id,exam_type,report_family,title,subject,exam_date,num_questions,num_choices,id_digits,omr_style,answer_key,grade_cuts,use_teacher_comment,created_by_name,created_by_username,created_at,review_status,review_requested_by,review_requested_by_name,review_requested_at,review_approved_by,review_approved_by_name,review_approved_at,class_names,level,period_month,cohort_mode,cfg_essay_count:omr_config->essay_count,cfg_per_column:omr_config->per_column,cfg_sheet_title:omr_config->sheet_title,cfg_classfit_workspace_id:omr_config->classfit_workspace_id";
+
+/** 목록 행 — ExamRow 에서 무거운 열을 뺀 대신 omr_config 의 열쇠 몇 개가 따로 온다 */
+export type ExamSummaryRow = Omit<ExamRow, "omr_config" | "mock_reference" | "points" | "question_meta" | "review_edits"> & {
+  cfg_essay_count?: unknown;
+  cfg_per_column?: unknown;
+  cfg_sheet_title?: unknown;
+  cfg_classfit_workspace_id?: unknown;
+};
+
+export function summaryRowToExam(row: ExamSummaryRow): OmrExam {
+  const omr_config: OmrConfig = {};
+  if (typeof row.cfg_essay_count === "number") omr_config.essay_count = row.cfg_essay_count;
+  if (typeof row.cfg_per_column === "number") omr_config.per_column = row.cfg_per_column;
+  if (typeof row.cfg_sheet_title === "string" && row.cfg_sheet_title.trim()) omr_config.sheet_title = row.cfg_sheet_title;
+  if (typeof row.cfg_classfit_workspace_id === "string" && row.cfg_classfit_workspace_id.trim()) {
+    omr_config.classfit_workspace_id = row.cfg_classfit_workspace_id;
+  }
+  const { cfg_essay_count: _a, cfg_per_column: _b, cfg_sheet_title: _c, cfg_classfit_workspace_id: _d, ...rest } = row;
+  return mapExam({ ...rest, omr_config, mock_reference: null, points: {}, question_meta: {}, review_edits: [] } as ExamRow);
+}
+
+export async function listExamSummaries(): Promise<OmrExam[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("exams")
+    .select(SUMMARY_SELECT)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`시험 목록을 불러오지 못했습니다 — ${describeExamDbError(error.message)}`);
+  return ((data ?? []) as unknown as ExamSummaryRow[]).map(summaryRowToExam);
+}

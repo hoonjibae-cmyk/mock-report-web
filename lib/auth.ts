@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import {
   ADMIN_PERMISSIONS,
   defaultPermissionsFor,
@@ -163,7 +164,12 @@ export async function clearSessionCookie(): Promise<void> {
   store.set("ys_mock_admin", "", { path: "/", maxAge: 0 });
 }
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+/**
+ * 로그인한 사용자. 한 요청 안에서는 한 번만 읽는다(React cache) — 레이아웃이 한 번,
+ * 페이지가 또 한 번 부르면서 같은 사용자를 두 번 조회하던 왕복을 없앤다.
+ * 요청이 끝나면 캐시도 끝나므로 '자리를 매번 표에서 읽는다'는 원칙은 그대로다.
+ */
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -194,7 +200,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   // 자리를 쿠키가 아니라 매번 표에서 읽는다. 부서가 바뀌어 총괄이 풀린 사람이
   // 쿠키가 살아 있는 동안 총괄로 남으면 안 된다.
   return fromRow(data);
-}
+});
 
 export function hasPermission(user: CurrentUser, permission: UserPermissionKey): boolean {
   return user.role === "admin" || user.permissions[permission];

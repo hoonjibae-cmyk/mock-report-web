@@ -1,6 +1,6 @@
 import ReviewQueueView from "@/components/ReviewQueueView";
 import { canViewExamType, getCurrentUser, hasPermission } from "@/lib/auth";
-import { listExams } from "@/lib/omr-exams";
+import { listExamSummaries } from "@/lib/omr-exams";
 import { canApproveReview } from "@/lib/review";
 import { reviewQueue, type ReviewQueue } from "@/lib/review-queue";
 
@@ -18,7 +18,7 @@ export default async function ReviewQueuePage() {
   let setupError = "";
   if (hasPermission(user, "viewReports")) {
     try {
-      const exams = (await listExams()).filter((exam) => canViewExamType(user, exam.examType));
+      const exams = (await listExamSummaries()).filter((exam) => canViewExamType(user, exam.examType));
       queue = reviewQueue(exams);
     } catch (error) {
       setupError = error instanceof Error ? error.message : "Supabase 연결 설정을 확인해 주세요.";

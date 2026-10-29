@@ -65,7 +65,10 @@ const TABS: Tab[] = [
 ];
 
 /** 관리자 화면 공용 헤더 + 좌측 메뉴 */
-export default function AdminTopNav({ user }: { user: NavUser }) {
+/** 자료를 모으는 동안 보일 뼈대(loading.tsx)용 — 계정 칸과 관리자 전용 메뉴를 비운다 */
+const SKELETON_USER: NavUser = { username: "", displayName: "", role: "user" };
+
+export default function AdminTopNav({ user = SKELETON_USER, skeleton = false }: { user?: NavUser; skeleton?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -91,17 +94,19 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
           <div>
             <strong>OMR 리포트</strong>
             <span>
-              목동유쌤영어학원 · {user.role === "admin" ? "관리자" : "일반 사용자"} · v{APP_VERSION}
+              목동유쌤영어학원{skeleton ? "" : ` · ${user.role === "admin" ? "관리자" : "일반 사용자"}`} · v{APP_VERSION}
             </span>
           </div>
         </div>
-        <div className="account-summary">
-          <div>
-            <strong>{user.displayName}</strong>
-            <span>{user.username}</span>
+        {skeleton ? null : (
+          <div className="account-summary">
+            <div>
+              <strong>{user.displayName}</strong>
+              <span>{user.username}</span>
+            </div>
+            <button className="button ghost" onClick={logout}>로그아웃</button>
           </div>
-          <button className="button ghost" onClick={logout}>로그아웃</button>
-        </div>
+        )}
       </header>
 
       {/* 좌측 세로 메뉴. 좁은 화면에서는 CSS가 다시 가로 탭으로 되돌린다. */}
@@ -150,7 +155,7 @@ export default function AdminTopNav({ user }: { user: NavUser }) {
       </nav>
 
       {/* 새 기능 안내 — 관리자 화면 어디로 들어오든 한 번 띄운다('확인'은 이번 세션, '다시 보지 않기'는 영영) */}
-      <AnnouncementModal />
+      {skeleton ? null : <AnnouncementModal />}
     </>
   );
 }
