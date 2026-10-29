@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { StudentReportData, SubjectReport } from "@/lib/types";
 import { buildRuleReview } from "@/lib/analysis";
 import { chunk } from "@/lib/utils";
-import { DEFAULT_AI_MODEL, resolveAiModel, type AiModelId } from "@/lib/ai-models";
+import { DEFAULT_AI_MODEL, aiModelParams, resolveAiModel, type AiModelId } from "@/lib/ai-models";
 import {
   sanitizeNationalReviewList,
   sanitizeNationalReviewText,
@@ -90,7 +90,7 @@ export async function addAiReviews(
 
     try {
       const response = await client.responses.parse({
-        model,
+        ...aiModelParams(model),
         input: [
           {
             role: "system",

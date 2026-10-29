@@ -10,7 +10,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
-import { resolveAiModel, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
+import { aiModelParams, resolveAiModel, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
 
 const TranscriptSchema = z.object({
   /** 학생이 쓴 그대로. 아무것도 없으면 빈 문자열 */
@@ -94,7 +94,7 @@ export async function transcribeEssay(
 
   try {
     const response = await client.responses.parse({
-      model,
+      ...aiModelParams(model),
       input: [
         { role: "system", content: SYSTEM },
         {
