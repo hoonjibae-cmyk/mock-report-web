@@ -1,6 +1,6 @@
 import AdminHome from "@/components/AdminHome";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
-import { listExams } from "@/lib/omr-exams";
+import { listExamSummaries } from "@/lib/omr-exams";
 import { listAdminReports } from "@/lib/reports";
 import { canApproveReview } from "@/lib/review";
 import { reviewQueue } from "@/lib/review-queue";
@@ -18,7 +18,7 @@ export default async function AdminPage() {
   if (hasPermission(currentUser, "viewReports")) {
     try {
       // 홈은 최근 성적표 몇 건만 보여 준다 — 전체를 끌어올 이유가 없다
-      const [examList, recent] = await Promise.all([listExams(), listAdminReports({ cap: 50 })]);
+      const [examList, recent] = await Promise.all([listExamSummaries(), listAdminReports({ cap: 50 })]);
       exams = examList;
       reports = recent.items;
     } catch (error) {

@@ -2801,3 +2801,13 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .exam-date-editor .form-error { flex-basis: 100%; }
 .exam-info-box .exam-date-editor { margin-top: 0; }
 .exam-date-editor .exam-date-current strong { display: inline; margin: 0; }
+
+/* 관리자 화면 로딩 뼈대(app/admin/loading.tsx) */
+.admin-skeleton { min-height: 320px; }
+.skeleton-line, .skeleton-block { border-radius: 8px; background: linear-gradient(90deg, #eef1f5 25%, #f7f9fc 50%, #eef1f5 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s ease-in-out infinite; }
+.skeleton-line { height: 14px; margin: 12px 0; }
+.skeleton-line.w30 { width: 30%; } .skeleton-line.w45 { width: 45%; } .skeleton-line.w60 { width: 60%; } .skeleton-line.w70 { width: 70%; } .skeleton-line.w80 { width: 80%; }
+.skeleton-block { height: 120px; margin: 18px 0; }
+.admin-skeleton .subtle { margin-top: 18px; }
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-line, .skeleton-block { animation: none; } }
