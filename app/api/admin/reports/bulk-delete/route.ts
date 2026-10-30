@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeApi } from "@/lib/api-auth";
 import { canDeleteOwned } from "@/lib/ownership";
+import { removeExamRecords } from "@/lib/student-card-exams";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -64,6 +65,8 @@ export async function POST(request: Request) {
       const { error } = await supabase.from("student_reports").delete().in("id", part);
       if (error) throw error;
     }
+    // 학생 카드의 테스트 탭에서도 거둔다 (v1.58.0)
+    await removeExamRecords(allowed);
 
     // 비게 된 묶음은 지우고, 남은 묶음은 건수를 고친다
     let deletedBatchCount = 0;

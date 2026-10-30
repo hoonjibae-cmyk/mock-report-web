@@ -264,3 +264,56 @@ Content-Type: application/json
   로 씁니다.
 - 수험번호 조회 응답에도 `reportKey` · `schoolLevel` · `regularEnrolled`(정규 반 등록 여부) 가 함께 옵니다.
 - 인증·권한·감사 기록은 수험번호 조회와 같습니다.
+
+---
+
+## 6. 시험 기록 보내기 (Student-Card v1.107.0 이상) — 학생 카드의 테스트 탭
+
+OMR 리포트가 **성적표를 만들 때마다** 그 기록을 Student-Card 로 보내고, Student-Card 는 학생 카드의 **테스트** 탭에
+최신 시험부터 보여 준다. 줄을 누르면 성적표(`/r/<token>`)가 새 창에 열린다 — 직원이 OMR 리포트에 로그인해 있으면 PIN 없이.
+OMR 쪽 구현은 `lib/student-card-exams.ts`, 환경변수는 학생 정보 연동과 같다(`STUDENT_API_URL` · `STUDENT_API_KEY`).
+
+```
+POST /api/exams
+Header: x-api-key: <API_KEY>
+Content-Type: application/json
+```
+
+### 요청
+
+```json
+{ "exams": [
+  { "studentKey": "72111",            // 성적표의 student_key — 수험번호(카드번호) 또는 sc<학생ID>
+    "reportId": "a1b2c3…",            // 성적표 id (student_reports.id) — 같은 값이 다시 오면 덮어쓴다
+    "examId": "exam-uuid",            // (선택)
+    "examTitle": "10월 월말평가",
+    "examKind": "월말평가",            // 월말평가 · 반배치고사 · 국영수 모의고사 · 토요모의고사 · 인클래스 테스트
+    "examDate": "2026-10-28",         // 응시일 — 없으면 만든 날
+    "score": 88.4, "max": 100,        // 100점 환산 원점수 · 배점 (점수가 배점을 넘으면 배점은 보내지 않는다)
+    "rank": 3, "rankTotal": 21,       // 석차 · 비교 집단 인원 (있을 때만)
+    "reportUrl": "https://…/r/<token>",
+    "isTest": false } ] }             // 시험용 시험(제목에 '테스트용' 등)이면 true — Student-Card 가 저장하지 않는다
+```
+
+- 한 번에 200건까지(`EXAM_SYNC_CHUNK`). `student_key` 가 없는 성적표(옛 모의고사 엑셀)는 보내지 않는다.
+
+### 응답
+
+```json
+{ "ok": true, "results": [ { "reportId": "a1b2c3…", "matched": true, "saved": true, "studentId": 12, "created": true } ] }
+```
+
+- `matched:false` 는 열쇠로 학생을 못 찾은 것(`reason: "no-student"`) 또는 시험용(`reason: "test-exam"`) — 오류가 아니다.
+- 모양이 틀리면 그 묶음 전체가 400 이다. 열쇠 없이는 403, 틀리면 401.
+
+### 언제 보내나
+
+| 때 | OMR 쪽 |
+|---|---|
+| 성적표 생성 · 갱신 (`POST /api/admin/omr/exams/[id]/reports`) | 새로 만든 것 + 갱신한 것을 보낸다 (응답의 `studentCard` 에 결과) |
+| 링크 중지 / 다시 켜기 / 새 링크 (`POST /api/admin/reports/[id]`) | 중지는 `DELETE /api/exams/<reportId>`, 켜기 · 새 링크는 다시 보낸다 |
+| 성적표 삭제 · 묶음 삭제 · 여러 건 삭제 | `DELETE /api/exams/<reportId>` |
+| 설정 → 학생 정보 연동 → **[시험 기록 전체 보내기]** (관리자) | 살아 있는 성적표 전부 — 처음 연동할 때 지난 성적표를 채운다 |
+| 매일 19:40 KST cron (`/api/cron/student-card-exams`) | 살아 있는 성적표 전부를 다시 보내 빠진 것을 메운다 |
+
+실패해도 예외를 던지지 않는다 — 성적표 생성은 끝난 일이고, 못 보낸 것은 cron 이 메운다.

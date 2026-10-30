@@ -48,6 +48,9 @@ export default function SettingsPanel({
   const [message, setMessage] = useState("");
   const [directoryStatus, setDirectoryStatus] = useState("");
   const [directoryChecking, setDirectoryChecking] = useState(false);
+  // 학생 카드의 테스트 탭으로 성적표 전부 보내기 (v1.58.0) — 처음 연동할 때 지난 성적표를 채운다
+  const [examSyncStatus, setExamSyncStatus] = useState("");
+  const [examSyncing, setExamSyncing] = useState(false);
   // 알림톡 시험 발송 — 학부모 60명에게 보내기 전에 한 번 받아 본다
   const [testPhone, setTestPhone] = useState(formatPhone(initialTestPhone));
   const [reviewChannel, setReviewChannel] = useState(initialReviewChannel);
@@ -118,6 +121,26 @@ export default function SettingsPanel({
       setError(err instanceof Error ? err.message : "시험 발송에 실패했습니다.");
     } finally {
       setTestSending(false);
+    }
+  }
+
+  async function syncExamsToStudentCard() {
+    if (!confirm("살아 있는 성적표 전부를 학생 카드(테스트 탭)로 보냅니다. 같은 성적표는 덮어쓰므로 여러 번 눌러도 늘지 않습니다. 계속할까요?")) return;
+    setExamSyncing(true);
+    setExamSyncStatus("보내는 중… 성적표가 많으면 몇 분 걸립니다.");
+    try {
+      const res = await fetch("/api/admin/student-card/exams", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "보내지 못했습니다.");
+      setExamSyncStatus(
+        `${data.scanned ?? 0}장 읽어 ${data.sent ?? 0}장 보냄 — 학생 카드가 ${data.saved ?? 0}장 저장` +
+          `${data.unmatched ? ` · 학생을 못 찾은 것 ${data.unmatched}장` : ""}${data.skipped ? ` · 수험번호 없는 것 ${data.skipped}장` : ""}` +
+          `${data.error ? ` · 중단: ${data.error}` : ""}`,
+      );
+    } catch (err) {
+      setExamSyncStatus(err instanceof Error ? err.message : "보내지 못했습니다.");
+    } finally {
+      setExamSyncing(false);
     }
   }
 
@@ -353,6 +376,16 @@ export default function SettingsPanel({
               성적표 화면의 <strong>학생 정보 불러오기</strong>로 가져옵니다.
               {directoryStatus ? ` — ${directoryStatus}` : ""}
             </p>
+            <p style={{ marginTop: 10 }}>
+              성적표를 만들 때마다 그 시험 기록이 <strong>학생 카드의 테스트 탭</strong>으로 갑니다(v1.58.0). 지난 성적표까지
+              채우려면 한 번 보내 두세요 — 그 뒤로는 매일 저녁 7시 40분에 빠진 것을 저절로 메웁니다.
+            </p>
+            {currentUser.role === "admin" ? (
+              <button className="button secondary" type="button" onClick={syncExamsToStudentCard} disabled={examSyncing} style={{ marginTop: 8 }}>
+                {examSyncing ? "보내는 중…" : "시험 기록 전체 보내기"}
+              </button>
+            ) : null}
+            {examSyncStatus ? <p className="subtle" style={{ marginTop: 8 }}>{examSyncStatus}</p> : null}
           </div>
         ) : (
           <div className="permission-denied">

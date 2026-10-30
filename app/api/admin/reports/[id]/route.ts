@@ -3,6 +3,7 @@ import { authorizeApi } from "@/lib/api-auth";
 import { createPublicToken } from "@/lib/crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { canDeleteOwned, NOT_OWNER_MESSAGE } from "@/lib/ownership";
+import { removeExamRecords, syncReportsById } from "@/lib/student-card-exams";
 import { siteBaseUrl } from "@/lib/utils";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -18,6 +19,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (action === "activate" || action === "deactivate") {
       const { error } = await supabase.from("student_reports").update({ is_active: action === "activate" }).eq("id", id);
       if (error) throw error;
+      // 학생 카드의 테스트 탭도 따라간다 — 중지하면 거두고, 다시 켜면 다시 보낸다 (v1.58.0)
+      if (action === "deactivate") await removeExamRecords([id]);
+      else await syncReportsById([id], siteBaseUrl(request.url));
       return NextResponse.json({ ok: true, active: action === "activate" });
     }
 
@@ -25,6 +29,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const token = createPublicToken();
       const { error } = await supabase.from("student_reports").update({ public_token: token, is_active: true }).eq("id", id);
       if (error) throw error;
+      // 새 링크로 바뀌었으니 학생 카드에 적힌 성적표 주소도 새것으로
+      await syncReportsById([id], siteBaseUrl(request.url));
       return NextResponse.json({ ok: true, token, url: `${siteBaseUrl(request.url)}/r/${token}` });
     }
 
@@ -60,6 +66,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
     const { error: deleteError } = await supabase.from("student_reports").delete().eq("id", id);
     if (deleteError) throw deleteError;
+    // 학생 카드의 테스트 탭에서도 거둔다 (v1.58.0)
+    await removeExamRecords([id]);
 
     const { count, error: countError } = await supabase
       .from("student_reports")

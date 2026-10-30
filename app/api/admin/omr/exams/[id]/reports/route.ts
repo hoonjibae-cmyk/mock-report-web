@@ -23,6 +23,7 @@ import { gradeRange } from "@/lib/school-grade";
 import { maskPhoneForGate, phoneLast4, normalizePhone, siteBaseUrl } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import {requireClassfitWorkspace} from '@/lib/classfit-workspaces';
+import { syncReportsById, type ExamSyncResult } from "@/lib/student-card-exams";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -463,16 +464,24 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const baseUrl = siteBaseUrl(request.url);
+    // 학생 카드의 '테스트' 탭으로 — 새로 만든 것과 갱신한 것 모두 (v1.58.0). 실패해도 성적표 생성은 끝난 것이다.
+    // 응답을 돌려주기 전에 보낸다 — 서버리스는 응답 뒤에 멈출 수 있다. 못 보낸 것은 하루 한 번 cron 이 메운다.
+    const studentCard: ExamSyncResult = await syncReportsById(
+      [...inserted.map((row) => row.id), ...updated.map((row) => row.id)],
+      baseUrl,
+    ).catch((error) => ({ configured: true, sent: 0, saved: 0, unmatched: 0, skipped: 0, error: error instanceof Error ? error.message : String(error) }));
+    if (studentCard.error) console.warn("Student-Card exam sync failed", studentCard.error);
     if(exam.examType==='placement'){
       // 이름이 같은 학생이 있어도 수험번호로만 연결한다.
       const {data:active,error:activeError}=await supabase.from('student_reports').select('id,student_key').eq('exam_id',id).eq('is_active',true).order('created_at',{ascending:false});
       if(activeError)throw Error('반배정 성적 기록을 확인하지 못했습니다.');
       const byKey=new Map<string,string>();for(const r of active??[])if(r.student_key&&!byKey.has(r.student_key))byKey.set(r.student_key,r.id);
       const requests=await requestPlacement(prepared.map(p=>({id:byKey.get(p.key)!,key:p.key,data:p.reportData,grade:p.input.grade,preferredSchedule:p.input.preferredSchedule??p.scan.preferredSchedule})),auth.user.username);
-      return NextResponse.json({ok:true,placementRequests:requests,placementReports:await placementStatuses(id),reports:[],updated:[],duplicates:duplicateKeys,cohort});
+      return NextResponse.json({ok:true,placementRequests:requests,placementReports:await placementStatuses(id),reports:[],updated:[],duplicates:duplicateKeys,cohort,studentCard});
     }
     return NextResponse.json({
       ok: true,
+      studentCard,
       batchId,
       reports: inserted.map((row) => ({
         id: row.id,
