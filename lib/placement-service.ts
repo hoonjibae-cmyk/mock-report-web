@@ -5,6 +5,7 @@ import {lookupStudents} from '@/lib/student-directory';
 import {reportClassMembers,applyAssignedClass,notificationDecision,placementGrade,preferredSchedule} from '@/lib/placement-policy';
 import {isGenericReport,type GenericReportData} from '@/lib/omr-report-types';
 import {deliverToClassfit} from '@/lib/classfit-delivery';
+import {classfitDestinationUrl} from '@/lib/classfit-destination';
 
 export const PLACEMENT_CHANNEL='C06PAG818TZ';
 type PlacementRequest={report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
@@ -21,7 +22,9 @@ async function notifyRequest(row:PlacementRequest,name:string){
   const client=getSupabaseAdmin(),claim=randomUUID();
   const destination=await client.from('placement_requests').select('workspace_id,grade').eq('report_id',row.report_id).single();
   if(destination.error||!destination.data.workspace_id)throw Error('Where’s My Class? 자동 반영 후 알림을 보낼 수 있습니다.');
-  const classfitUrl=`https://classfit.yussam.com/?workspace=${encodeURIComponent(destination.data.workspace_id)}&grade=${encodeURIComponent(destination.data.grade)}`;
+  const workspace=await client.from('placement_workspaces').select('id,state').eq('id',destination.data.workspace_id).single();
+  if(workspace.error||!workspace.data)throw Error('반편성 배정 학년을 확인하지 못했습니다. 알림을 재시도합니다.');
+  const classfitUrl=classfitDestinationUrl(workspace.data,row.report_id);
   const {data,error}=await client.rpc('placement_claim_notification',{p_report_id:row.report_id,p_claim:claim});
   if(error)throw Error('반배정 알림 처리에 필요한 데이터베이스 업데이트를 확인해 주세요.');
   if(!data?.length)return {state:row.notification_state};
