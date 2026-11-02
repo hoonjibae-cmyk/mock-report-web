@@ -21,18 +21,19 @@ export function placementSummarySvg(report:GenericReportData,schedule:string){
     if(!group){group={name:subject,areas:[]};groups.push(group);}
     group.areas.push(area);
   }
+  const visibleGroups=groups.filter(group=>group.areas.length>0);
   let y=252;
   const colors=['#0f766e','#2563eb','#7c3aed','#b45309'];
   const cards:string[]=[];
-  for(let start=0;start<groups.length;start+=4){
-    const row=groups.slice(start,start+4);
+  for(let start=0;start<visibleGroups.length;start+=4){
+    const row=visibleGroups.slice(start,start+4);
     const height=78+Math.max(1,...row.map(g=>g.areas.length))*56;
     row.forEach((group,index)=>{
-      const x=40+index*234,color=colors[index];
+      const subjectIndex=SUBJECTS.indexOf(group.name);
+      const x=40+index*234,color=colors[subjectIndex<0?index:subjectIndex];
       cards.push(`<rect x="${x}" y="${y}" width="218" height="${height}" rx="16" fill="white" stroke="#e2e8f0"/>`);
       cards.push(`<rect x="${x+18}" y="${y+23}" width="4" height="22" rx="2" fill="${color}"/>`);
       cards.push(text(x+32,y+41,group.name,21,'#182b42',168,700));
-      if(!group.areas.length)cards.push(text(x+18,y+96,'점수 없음',16,'#64748b'));
       group.areas.forEach((area,i)=>{
         const top=y+76+i*56,tier=areaParts(area.area).tier;
         cards.push(text(x+18,top+16,tier||'득점',16,'#64748b',50));

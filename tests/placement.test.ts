@@ -61,7 +61,17 @@ test('빈 영역·0점·평균 대체 점수·긴 이름·특수문자도 요약
   assert.ok(svg.includes('&lt;가상 &amp; 학생&gt;'));assert.ok(svg.includes('0 / 0*'));
   assert.ok(svg.includes('평균 대체 점수'));assert.ok(!svg.includes('NaN'));
   const png=placementSummaryPng({...data,areas:[]},'월수금');
-  assert.equal(png.readUInt32BE(16),1000);assert.ok(png.readUInt32BE(20)>400);
+  assert.equal(png.readUInt32BE(16),1000);assert.ok(png.readUInt32BE(20)>250);
+});
+
+test('입력되지 않은 서술형은 숨기고 영작과 실제 0점 영역은 유지한다',()=>{
+  const data=report('A',57);
+  data.areas=['독해-하','문법-하','어휘','영작'].map(area=>({...data.areas[0],area,earned:0,possible:14}));
+  const svg=placementSummarySvg(data,'월수금');
+  const labels=[...svg.matchAll(/<text[^>]*>(.*?)<\/text>/g)].map(m=>m[1]);
+  assert.ok(!labels.includes('서술형'));assert.ok(!labels.includes('점수 없음'));
+  for(const name of ['독해','문법','어휘','영작'])assert.ok(labels.includes(name));
+  assert.equal(labels.filter(label=>label==='0 / 14').length,4);
 });
 
 test('상담 성적표는 대기 학생을 해당 반에 포함하고 제외 배정과 중복 인원을 계산하지 않는다',()=>{
