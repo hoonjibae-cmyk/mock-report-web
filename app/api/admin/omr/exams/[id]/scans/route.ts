@@ -7,6 +7,7 @@ import { getVisibleExam } from "@/lib/exam-access";
 import { essayCountOf } from "@/lib/omr-scoring";
 import { enrollmentOf } from "@/lib/placement-policy";
 import { idCandidateQuery, resolveStudentId } from "@/lib/id-resolve";
+import { contentHashOf, hashTag, pageHash } from "@/lib/scan-identity";
 import { lookupStudents } from "@/lib/student-directory";
 import {
   downloadScanFile,
@@ -180,6 +181,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const files: File[] = [...direct];
+    // 파일 내용의 해시 — 답안지 행의 열쇠이자 보관함 경로의 꼬리표. 파일명은 스캐너가
+    // 사람이 달라도 같은 이름을 붙이므로 열쇠가 될 수 없다.
+    const fileHashes = new Map<string, string>();
     // 이미 Storage에 있는 파일은 서버가 내려받아 판독에 함께 넘긴다.
     const preUploaded = new Map<string, string>();
     for (const entry of storagePaths) {
@@ -194,6 +198,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         new File([new Uint8Array(buffer)], entry.filename, { type: contentTypeFor(entry.filename) }),
       );
       preUploaded.set(entry.filename, entry.path);
+      fileHashes.set(entry.filename, contentHashOf(buffer));
     }
 
     if (files.length === 0) {
@@ -220,14 +225,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     // 원본 보관 — 버킷이 없으면 경로 없이 진행(판독은 계속)
     const paths = new Map<string, string | null>(preUploaded);
     for (const file of direct) {
+      const bytes = await file.arrayBuffer();
+      const hash = contentHashOf(bytes);
+      fileHashes.set(file.name, hash);
       const path = await uploadScanFile(
         id,
         file.name,
-        await file.arrayBuffer(),
+        bytes,
         file.type || contentTypeFor(file.name),
+        hashTag(hash),
       );
       paths.set(file.name, path);
     }
+
+    /** 판독 결과 한 줄(PDF는 쪽)의 내용 해시 — 행의 열쇠 */
+    const hashFor = (resultName: string): string => {
+      const base = fileHashes.get(baseFilename(resultName)) ?? fileHashes.get(resultName);
+      // 올린 파일에서 못 찾는 일은 없어야 하지만, 혹시 그래도 이름으로라도 일관되게 정한다
+      return pageHash(base ?? contentHashOf(new TextEncoder().encode(resultName)), resultName);
+    };
 
     const essayCount = essayCountOf(exam);
     const read = await readScans(sheetSpecFor(exam), files, { essayCrops: essayCount > 0 });
@@ -242,6 +258,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           id,
           result.filename,
           Buffer.from(result.preview_jpeg_base64, "base64"),
+          hashTag(hashFor(result.filename)),
         );
         if (stored) previewPaths.set(result.filename, stored);
       }),
@@ -256,9 +273,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           const crops = result.essay_crops_base64;
           if (!crops) return;
           const stored: Record<string, string> = {};
+          const tag = hashTag(hashFor(result.filename));
           for (const [no, base64] of Object.entries(crops)) {
             const path = await uploadEssayCrop(
-              id, result.filename, Number(no), Buffer.from(base64, "base64"),
+              id, result.filename, Number(no), Buffer.from(base64, "base64"), tag,
             );
             if (path) stored[no] = path;
           }
@@ -283,6 +301,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return {
         examId: id,
         filename: result.filename,
+        contentHash: hashFor(result.filename),
+        uploadedBy: auth.user.username,
         // PDF 페이지 결과는 원본 PDF의 저장 경로를 공유한다
         scanPath: paths.get(result.filename) ?? paths.get(baseFilename(result.filename)) ?? null,
         previewPath: previewPaths.get(result.filename) ?? null,
@@ -315,6 +335,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       rows.push({
         examId: id,
         filename: problem.filename,
+        contentHash: hashFor(problem.filename),
+        uploadedBy: auth.user.username,
         scanPath: paths.get(problem.filename) ?? paths.get(baseFilename(problem.filename)) ?? null,
         answers: normalizeAnswers(undefined, undefined, exam.numQuestions),
         reviewFlags: [],

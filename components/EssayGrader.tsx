@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import EssayCrop from "@/components/EssayCrop";
+import UploaderScopeBar from "@/components/UploaderScopeBar";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
+import type { UploaderEssayProgress, UploaderScope } from "@/lib/uploaders";
 
 /**
  * 주관식 채점 화면 — 학생이 아니라 **답안**을 단위로 채점한다.
@@ -26,6 +28,8 @@ interface Member {
   /** 'auto' 자동 채점(확인 전) · 'teacher' 선생님이 확인·매김 · null 미채점 */
   source: "auto" | "teacher" | null;
   hasCrop: boolean;
+  /** 손글씨 판독이 불확실 — 사람이 봐야 한다 */
+  unclear: boolean;
 }
 
 interface Group {
@@ -33,6 +37,8 @@ interface Group {
   text: string;
   matchesKey: boolean;
   blank: boolean;
+  /** 판독이 불확실한 답안들의 묶음 */
+  unclear: boolean;
   members: Member[];
 }
 
@@ -48,6 +54,8 @@ interface Props {
   exam: OmrExam | null;
   setupError: string;
   canEdit: boolean;
+  /** 로그인한 사람의 계정 ID — '내가 올린 답안지' 범위의 기준 */
+  me: string;
 }
 
 interface AutoSummary {
@@ -55,6 +63,18 @@ interface AutoSummary {
   zeroed: number;
   kept: number;
 }
+
+/** 서버가 범위·진행과 함께 돌려주는 응답 */
+interface GradePayload {
+  scope?: UploaderScope;
+  uploaders?: UploaderEssayProgress[];
+  questions?: Question[];
+  studentCount?: number;
+  pendingReview?: number;
+}
+
+/** 화면이 '손글씨 읽기'를 이어서 부르는 최대 횟수 — 끝없이 도는 일을 막는 안전장치 */
+const MAX_TRANSCRIBE_ROUNDS = 40;
 
 /** 배점 표시 — 균등 배분이면 100/45 같은 값이 나오므로 소수점을 정리한다 */
 function fmtPoint(value: number): string {
@@ -91,7 +111,7 @@ function autoText(auto: AutoSummary | undefined): string {
   );
 }
 
-export default function EssayGrader({ exam, setupError, canEdit }: Props) {
+export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [studentCount, setStudentCount] = useState(0);
   const [pendingReview, setPendingReview] = useState(0);
@@ -103,6 +123,13 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editingKey, setEditingKey] = useState<number | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
+  // 범위 — 처음에는 서버가 정한다(내가 올린 답안지가 있으면 그것만, 없으면 전체).
+  // 'scopeReady' 전에는 "auto"를 보내 서버의 선택을 받는다.
+  const [scope, setScope] = useState<UploaderScope>(null);
+  const [scopeReady, setScopeReady] = useState(false);
+  const [uploaders, setUploaders] = useState<UploaderEssayProgress[]>([]);
+  // 이어서 부르는 전사 요청이 겹치지 않게 — 사용자가 다른 버튼을 누르면 멈춘다
+  const transcribing = useRef(false);
 
   /** 정답을 이 화면에서 바로 저장한다 — 엑셀을 다시 올리러 가지 않아도 되게 */
   async function saveAnswerKey(questionNo: number) {
@@ -110,25 +137,123 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
     setEditingKey(null);
   }
 
-  const load = useCallback(async () => {
-    if (!exam?.id) return;
-    try {
-      const res = await fetch(`/api/admin/omr/exams/${exam.id}/essay/grade`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "주관식 정보를 불러오지 못했습니다.");
-      setQuestions(data.questions ?? []);
-      setStudentCount(data.studentCount ?? 0);
-      setPendingReview(data.pendingReview ?? 0);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "불러오는 중 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
+  /** 서버 응답의 범위·진행·묶음을 화면에 옮긴다 */
+  const absorb = useCallback((data: GradePayload) => {
+    if (data.questions) setQuestions(data.questions);
+    if (Array.isArray(data.uploaders)) setUploaders(data.uploaders);
+    if (typeof data.studentCount === "number") setStudentCount(data.studentCount);
+    if (typeof data.pendingReview === "number") setPendingReview(data.pendingReview);
+    if (data.scope !== undefined) {
+      setScope(data.scope);
+      setScopeReady(true);
     }
-  }, [exam?.id]);
+  }, []);
+
+  const scopeParam = scopeReady ? (scope ?? "all") : "auto";
+
+  const load = useCallback(
+    async (which: string) => {
+      if (!exam?.id) return;
+      try {
+        const res = await fetch(
+          `/api/admin/omr/exams/${exam.id}/essay/grade?uploader=${encodeURIComponent(which)}`,
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "주관식 정보를 불러오지 못했습니다.");
+        absorb(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "불러오는 중 오류가 발생했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [exam?.id, absorb],
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load("auto");
+    // 처음 한 번만 — 범위를 바꿀 때는 changeScope 가 다시 부른다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exam?.id]);
+
+  /** 범위를 바꾸면 그 범위의 묶음을 새로 받는다. 묶음 열쇠가 달라지므로 펼친 것은 닫는다. */
+  async function changeScope(next: UploaderScope) {
+    if (busy) return;
+    setOpenGroup(null);
+    setEdits({});
+    setMessage("");
+    setLoading(true);
+    setScope(next);
+    setScopeReady(true);
+    await load(next ?? "all");
+  }
+
+  async function request(action: string, extra: Record<string, unknown> = {}) {
+    const res = await fetch(`/api/admin/omr/exams/${exam?.id}/essay/grade`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, uploader: scopeParam, ...extra }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "처리하지 못했습니다.");
+    absorb(data);
+    return data;
+  }
+
+  /**
+   * 손글씨 읽기 — 서버는 한 번에 상한만큼만 읽고 남은 수를 알려 준다. 남아 있으면
+   * 이어서 부른다. 수백 장을 한 요청에 읽다 서버 시간이 끝나는 일을 이렇게 피한다.
+   */
+  async function transcribeAll() {
+    if (!exam?.id || transcribing.current) return;
+    transcribing.current = true;
+    setBusy("transcribe");
+    setError("");
+    setMessage("");
+    const tally = { transcribed: 0, failed: 0, unclear: 0 };
+    try {
+      let rounds = 0;
+      let remaining = 0;
+      let auto: AutoSummary | undefined;
+      let note = "";
+      do {
+        rounds += 1;
+        const data = await request("transcribe");
+        tally.transcribed += Number(data.transcribed ?? 0);
+        tally.failed += Number(data.failed ?? 0);
+        tally.unclear += Number(data.unclear ?? 0);
+        remaining = Number(data.remaining ?? 0);
+        auto = (data.auto as AutoSummary | undefined) ?? auto;
+        note = typeof data.message === "string" ? data.message : "";
+        if (remaining > 0) {
+          setMessage(`손글씨를 읽는 중… ${tally.transcribed}칸 읽음 · 남은 ${remaining}칸`);
+        }
+      } while (remaining > 0 && rounds < MAX_TRANSCRIBE_ROUNDS);
+
+      const parts: string[] = [];
+      if (tally.transcribed > 0) {
+        parts.push(`${tally.transcribed}칸을 읽고 자동 채점했습니다 — ${autoText(auto)}.`);
+        if (tally.unclear > 0) {
+          parts.push(`${tally.unclear}칸은 판독이 불확실해 점수를 매기지 않았습니다. 손글씨를 보고 고치거나 점수를 정해 주세요.`);
+        }
+        parts.push("0점은 손글씨를 확인해 주세요.");
+      } else if (tally.failed === 0) {
+        parts.push(note || "새로 읽을 답안이 없습니다.");
+      }
+      if (tally.failed > 0) {
+        parts.push(
+          `${tally.failed}칸은 읽지 못했습니다(일시적인 오류). 잠시 뒤 '손글씨 읽기'를 다시 누르면 그 칸만 다시 읽습니다.`,
+        );
+      }
+      if (remaining > 0) parts.push(`아직 ${remaining}칸이 남았습니다. '손글씨 읽기'를 다시 눌러 주세요.`);
+      setMessage(parts.join(" "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "처리 중 오류가 발생했습니다.");
+    } finally {
+      transcribing.current = false;
+      setBusy(null);
+    }
+  }
 
   async function post(action: string, extra: Record<string, unknown> = {}, tag = action) {
     if (!exam?.id) return;
@@ -136,23 +261,9 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`/api/admin/omr/exams/${exam.id}/essay/grade`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...extra }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "처리하지 못했습니다.");
-      if (data.questions) setQuestions(data.questions);
-      if (typeof data.studentCount === "number") setStudentCount(data.studentCount);
+      const data = await request(action, extra);
       const auto = data.auto as AutoSummary | undefined;
-      if (action === "transcribe") {
-        setMessage(
-          data.transcribed > 0
-            ? `${data.transcribed}개 답안을 읽고 자동 채점했습니다 — ${autoText(auto)}. 0점은 손글씨를 확인해 주세요.`
-            : (data.message ?? "새로 읽을 답안이 없습니다."),
-        );
-      } else if (action === "autoGrade") {
+      if (action === "autoGrade") {
         setMessage(
           auto && auto.applied + auto.zeroed > 0
             ? `자동 채점했습니다 — ${autoText(auto)}. 0점은 손글씨를 보고 확인해 주세요.`
@@ -197,6 +308,10 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
   const totalGraded = allMembers.filter((m) => m.score !== null).length;
   const autoCount = allMembers.filter((m) => m.source === "auto").length;
   const autoZero = allMembers.filter((m) => m.source === "auto" && (m.score ?? 0) <= 0.05).length;
+  const unclearCount = allMembers.filter((m) => m.unclear && m.score === null).length;
+  // 다른 사람 범위 중 아직 채점이 안 끝난 곳 — '전체'로 합쳐 보기 전에 알아야 한다
+  const others = uploaders.filter((u) => u.key !== scope && !(scope === null));
+  const unfinishedOthers = scope === null ? [] : others.filter((u) => u.graded < u.gradable || u.reviewed < u.total);
 
   return (
     <div className="admin-shell">
@@ -242,7 +357,8 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
               <button
                 className="button secondary"
                 disabled={busy !== null}
-                onClick={() => post("transcribe")}
+                onClick={() => void transcribeAll()}
+                title="아직 읽지 않은 답안 칸만 읽습니다. 한 번에 120칸씩 읽고 남으면 이어서 읽습니다."
               >
                 {busy === "transcribe" ? "읽는 중…" : "손글씨 읽기"}
               </button>
@@ -258,6 +374,27 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
           ) : null}
         </div>
 
+        {/* 여러 사람이 나눠 올린 시험 — 내가 올린 답안지만 먼저 채점하고, 마친 뒤 '전체'로 합쳐 본다 */}
+        {uploaders.length > 0 ? (
+          <UploaderScopeBar
+            uploaders={uploaders}
+            scope={scope}
+            disabled={busy !== null || loading}
+            onChange={(next) => void changeScope(next)}
+            describe={(u) =>
+              `검수 ${u.reviewed}/${u.total} · 손글씨 ${u.transcribed}/${u.gradable} · 채점 ${u.graded}/${u.gradable}` +
+              (u.unclear > 0 ? ` · 불확실 ${u.unclear}` : "")
+            }
+            note={
+              scope === null
+                ? unfinishedOthers.length > 0
+                  ? `아직 끝나지 않은 범위가 있습니다 — ${unfinishedOthers.map((u) => u.displayName).join(", ")}. 전체에서 매긴 점수는 그 사람의 답안지에도 들어갑니다.`
+                  : "모든 범위의 답안지를 함께 봅니다. 점수는 범위와 상관없이 학생에게 저장됩니다."
+                : "이 범위의 답안지만 읽고 채점합니다. 다른 분이 올린 답안지는 그분이 마친 뒤 '전체'에서 함께 보입니다."
+            }
+          />
+        ) : null}
+
         <div className="review-summary" style={{ marginTop: 4 }}>
           <div className="review-counts">
             <span>
@@ -269,6 +406,11 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
             {autoCount > 0 ? (
               <span className={autoZero > 0 ? "need" : ""} title="자동으로 매겨 아직 사람이 확인하지 않은 답안">
                 자동 채점 <strong>{autoCount}</strong>답안{autoZero > 0 ? ` · 확인 필요(0점) ${autoZero}` : ""}
+              </span>
+            ) : null}
+            {unclearCount > 0 ? (
+              <span className="need" title="손글씨 판독이 불확실해 점수를 매기지 않은 답안 — 손글씨를 보고 정해 주세요">
+                판독 불확실 <strong>{unclearCount}</strong>답안
               </span>
             ) : null}
             {pendingReview > 0 ? (
@@ -284,6 +426,8 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
             보지 않은 점수이고, <strong>이대로 확인</strong>을 누르거나 점수를 고르면{" "}
             <span className="essay-score-chip full">✓ 점수</span>가 되어 자동 채점을 다시 돌려도 바뀌지
             않습니다. <strong>점수를 누르면 곧바로 저장됩니다</strong>(따로 저장 버튼이 없습니다).
+            손글씨를 확실히 읽지 못한 칸은 <span className="essay-score-chip unclear">판독 불확실</span>로 따로
+            묶이고 0점으로 넘기지 않습니다 — 손글씨를 보고 글을 고치거나 점수를 정해 주세요.
             {pendingReview > 0 ? (
               <>
                 {" "}
@@ -408,15 +552,26 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                               : `${fmtPoint(state.score ?? 0)}점`;
                     return (
                       <div
-                        className={`essay-group state-${state.kind}${group.matchesKey ? " match" : ""}${group.blank ? " blank" : ""}`}
+                        className={`essay-group state-${state.kind}${group.matchesKey ? " match" : ""}${group.blank ? " blank" : ""}${group.unclear ? " unclear" : ""}`}
                         key={groupId}
                       >
                         <div className="essay-group-head">
                           <span className="essay-count">{group.members.length}명</span>
                           <p className="essay-text">
-                            {group.blank ? <em>(백지)</em> : group.text}
+                            {group.blank ? (
+                              <em>(백지)</em>
+                            ) : group.unclear && !group.text ? (
+                              <em>(읽지 못함 — 백지일 수도, 글씨를 못 알아본 것일 수도 있습니다)</em>
+                            ) : (
+                              group.text
+                            )}
                           </p>
                           {group.matchesKey ? <span className="essay-badge">정답 일치</span> : null}
+                          {group.unclear ? (
+                            <span className="essay-badge unclear" title="손글씨를 확실히 읽지 못했습니다. 자동 채점이 0점으로 넘기지 않았으니 손글씨를 보고 정해 주세요.">
+                              판독 불확실
+                            </span>
+                          ) : null}
                           {/* 누르는 즉시 저장되므로, 저장됐다는 사실과 출처를 눈에 보이게 남긴다 */}
                           <span
                             className={`essay-score-chip ${state.kind}${state.auto && state.kind !== "none" ? " auto" : ""}`}
@@ -530,6 +685,7 @@ export default function EssayGrader({ exam, setupError, canEdit }: Props) {
                                 <div className="essay-crop-row" key={member.scanId}>
                                   <div className="essay-crop-head">
                                     <strong>수험번호 {member.studentId ?? "—"}</strong>
+                                    {member.unclear ? <span className="essay-badge unclear">판독 불확실</span> : null}
                                     {member.score !== null ? (
                                       <span>
                                         {fmtPoint(member.score)}점{member.source === "auto" ? " (자동)" : ""}

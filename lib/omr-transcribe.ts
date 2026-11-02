@@ -76,15 +76,16 @@ const SYSTEM = `당신은 손으로 쓴 시험 답안을 글자로 옮기는 전
 /**
  * 답안 칸 이미지 한 장을 전사한다.
  *
- * 실패하면 예외를 던지지 않고 unclear=true인 빈 결과를 돌려준다 — 한 장이
- * 실패했다고 60명 전사가 통째로 멈추면 안 되고, 실패한 것은 어차피 사람이
- * 봐야 하는 대상이기 때문이다.
+ * 실패하면 예외를 던지지 않고 null 을 돌려준다 — 한 장이 실패했다고 60명 전사가
+ * 통째로 멈추면 안 된다. 실패를 빈 답안으로 바꾸지는 않는다: 빈 문자열로 저장하면
+ * '백지'가 되어 0점으로 넘어가고 다시 읽지도 않는다. null 은 저장하지 않고 다음에
+ * 다시 읽는다. (모델이 읽긴 했지만 확실하지 않다는 unclear 와는 다르다.)
  */
 export async function transcribeEssay(
   jpeg: Buffer,
   hint: { question: number; prompt?: string; script?: ExpectedScript | null } = { question: 0 },
   requestedModel: AiModelId = DEFAULT_AI_MODEL,
-): Promise<Transcript> {
+): Promise<Transcript | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new TranscribeNotConfiguredError();
 
@@ -118,11 +119,11 @@ export async function transcribeEssay(
     });
 
     const parsed = response.output_parsed;
-    if (!parsed) return { text: "", unclear: true };
+    if (!parsed) return null;
     return { text: (parsed.text ?? "").trim(), unclear: Boolean(parsed.unclear) };
   } catch (error) {
     console.warn(`주관식 전사 실패(${hint.question}번)`, error);
-    return { text: "", unclear: true };
+    return null;
   }
 }
 
@@ -153,7 +154,11 @@ export async function transcribeMany(
         ),
       ),
     );
-    batch.forEach((item, index) => out.set(item.key, results[index]));
+    // 실패한 장은 결과에 넣지 않는다 — 부르는 쪽이 '없음'을 실패로 세고 다음에 다시 읽는다
+    batch.forEach((item, index) => {
+      const result = results[index];
+      if (result) out.set(item.key, result);
+    });
   }
   return out;
 }

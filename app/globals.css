@@ -1182,6 +1182,10 @@ body.report-layout-a4 .a4-report-root { display: block; }
 }
 .essay-group.match { border-color: #bfe3cd; background: #f6fdf9; }
 .essay-group.blank { background: #fafbfc; }
+/* 판독 불확실 — 사람이 봐야 하는 묶음. 0점으로 넘기지 않았으니 색은 경고(주황)로 */
+.essay-group.unclear { border-color: #e8c98a; background: #fffbf2; }
+.essay-group.unclear.state-none { border-left-color: #e0a93a; }
+.essay-badge.unclear, .essay-score-chip.unclear { background: #fff4e0; color: #8a5a00; }
 /* 점수 상태 — 맞은 것과 틀린 것이 한눈에 갈리게. 왼쪽 굵은 띠 + 바탕색 */
 .essay-group.state-full { border-color: #8fd0a8; border-left: 6px solid var(--success); background: #eefaf2; }
 .essay-group.state-zero { border-color: #f0b4ae; border-left: 6px solid var(--danger); background: #fff1ef; }
@@ -1633,6 +1637,24 @@ body.report-layout-a4 .a4-report-root { display: block; }
   opacity: .7;
   font-variant-numeric: tabular-nums;
 }
+
+/* --- 올린 사람 범위(검수·주관식 채점) --- */
+.uploader-scope { margin: 12px 0 14px; }
+.filter-chips button.legacy { border-style: dashed; }
+.uploader-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.uploader-progress li { display: inline-flex; gap: 6px; align-items: baseline; }
+.uploader-progress li strong { color: var(--navy-deep); font-weight: 700; }
+.uploader-progress li.active strong { color: var(--navy); text-decoration: underline; text-underline-offset: 3px; }
+.uploader-note { margin: 0; font-size: 12.5px; color: #42546d; line-height: 1.55; }
 
 /* --- 접어 두는 필터(시험처럼 항목이 계속 늘어나는 것) --- */
 .filter-dropdown { position: relative; }

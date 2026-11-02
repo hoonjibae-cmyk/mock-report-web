@@ -1,8 +1,14 @@
 // OMR 스캔 판독 결과(omr_scans) 저장소 — Supabase service-role 경유
 
-import type { EssayGradeSource } from "@/lib/essay-grading";
+import type { EssayFlag, EssayGradeSource } from "@/lib/essay-grading";
 import type { ListeningMode } from "@/lib/listening";
 import type { MarkValue } from "@/lib/omr-answers";
+import {
+  essayCropPath,
+  randomTag,
+  scanOriginalPath,
+  scanPreviewPath,
+} from "@/lib/scan-identity";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const SCAN_BUCKET = "omr-scans";
@@ -12,7 +18,9 @@ export const SCAN_BUCKET = "omr-scans";
  * 무엇을 해야 하는지 알 수 있는 문장으로 바꾼다. 데이터는 그대로 있고 조회만 막힌 상태다.
  */
 function describeDbError(message: string): string {
-  const missingColumn = message.match(/column [\w.]*?(\w+) does not exist/i);
+  // Postgres("column x does not exist")와 PostgREST("Could not find the 'x' column … in the schema cache") 둘 다
+  const missingColumn =
+    message.match(/column [\w.]*?(\w+) does not exist/i) ?? message.match(/Could not find the '(\w+)' column/i);
   if (missingColumn) {
     const column = missingColumn[1];
     const guide: Record<string, string> = {
@@ -23,6 +31,9 @@ function describeDbError(message: string): string {
       read_confidence: "supabase/migration_v8_read_confidence.sql",
       reviewed_by: "supabase/migration_v8_read_confidence.sql",
       listening_mode: "supabase/migration_v16_listening_mode.sql",
+      uploaded_by: "supabase/migration_v22_scan_uploader.sql",
+      content_hash: "supabase/migration_v22_scan_uploader.sql",
+      essay_flags: "supabase/migration_v22_scan_uploader.sql",
     };
     const file = guide[column] ?? "supabase 폴더의 최신 migration 파일";
     return `데이터베이스 업데이트가 필요합니다. Supabase → SQL Editor에서 ${file}을 실행해 주세요. (기존 판독 결과는 그대로 보관되어 있으며, 실행 후 바로 다시 보입니다. 누락된 항목: ${column})`;
@@ -77,6 +88,11 @@ export interface OmrScan {
   essayScoreSources: Record<string, EssayGradeSource>;
   /** {문항번호: 전사된 주관식 답안} — 선생님이 고치면 고친 값이 남는다 */
   essayAnswers: Record<string, string>;
+  /**
+   * {문항번호: "unclear"} — 손글씨를 읽긴 했지만 확실하지 않아 사람이 봐야 하는 칸.
+   * 자동 채점은 이 칸을 0점으로 넘기지 않는다. 선생님이 고치거나 점수를 매기면 지운다.
+   */
+  essayFlags: Record<string, EssayFlag>;
   /** {문항번호: 보관함 경로} — 주관식 칸을 펴서 잘라낸 이미지(전사 대조용) */
   essayCrops: Record<string, string>;
   reviewFlags: Array<Record<string, unknown>>;
@@ -101,6 +117,13 @@ export interface OmrScan {
   studentKey?: string | null;
   /** 'auto' = 시스템 자동 통과, 그 외에는 확인한 사용자 ID */
   reviewedBy: string | null;
+  /**
+   * 올린 사람(계정 ID). 여러 직원이 나눠 올릴 때 검수·채점 화면이 "내가 올린 답안지"
+   * 범위로 좁히는 근거다. 이 기능 전에 올린 답안지는 null.
+   */
+  uploadedBy: string | null;
+  /** 파일 내용의 해시(PDF는 쪽 번호까지). 같은 내용을 다시 올리면 이 행이 갱신된다. 옛 행은 null */
+  contentHash: string | null;
   readError: string | null;
   createdAt: string;
   updatedAt: string;
@@ -119,11 +142,14 @@ interface ScanRow {
   essay_scores: Record<string, number> | null;
   essay_score_sources?: Record<string, unknown> | null;
   essay_answers: Record<string, string> | null;
+  essay_flags?: Record<string, unknown> | null;
   essay_crops: Record<string, string> | null;
   review_flags: Array<Record<string, unknown>> | null;
   read_confidence: ReadConfidence | null;
   status: ScanStatus;
   reviewed_by: string | null;
+  uploaded_by?: string | null;
+  content_hash?: string | null;
   listening_mode?: string | null;
   preferred_schedule?: string | null;
   enrollment?: string | null;
@@ -134,7 +160,16 @@ interface ScanRow {
 }
 
 const SELECT =
-  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_score_sources,essay_answers,essay_crops,review_flags,read_confidence,status,reviewed_by,listening_mode,preferred_schedule,enrollment,student_key,read_error,created_at,updated_at";
+  "id,exam_id,filename,scan_path,preview_path,student_id,student_id_qr,student_id_bubbles,answers,essay_scores,essay_score_sources,essay_answers,essay_flags,essay_crops,review_flags,read_confidence,status,reviewed_by,uploaded_by,content_hash,listening_mode,preferred_schedule,enrollment,student_key,read_error,created_at,updated_at";
+
+/** 저장된 판독 표시 중 아는 값만 */
+function flagsOf(value: Record<string, unknown> | null | undefined): Record<string, EssayFlag> {
+  const out: Record<string, EssayFlag> = {};
+  for (const [key, flag] of Object.entries(value ?? {})) {
+    if (flag === "unclear") out[key] = flag;
+  }
+  return out;
+}
 
 /** 저장된 출처 중 아는 값만 — 엉뚱한 값이 들어 있어도 화면이 죽지 않게 */
 function sourcesOf(value: Record<string, unknown> | null | undefined): Record<string, EssayGradeSource> {
@@ -172,11 +207,14 @@ function mapScan(row: ScanRow): OmrScan {
     essayScores: row.essay_scores ?? {},
     essayScoreSources: sourcesOf(row.essay_score_sources),
     essayAnswers: row.essay_answers ?? {},
+    essayFlags: flagsOf(row.essay_flags),
     essayCrops: row.essay_crops ?? {},
     reviewFlags: row.review_flags ?? [],
     readConfidence: row.read_confidence ?? null,
     status: row.status,
     reviewedBy: row.reviewed_by ?? null,
+    uploadedBy: row.uploaded_by ?? null,
+    contentHash: row.content_hash ?? null,
     listeningMode: row.listening_mode === "absent" || row.listening_mode === "marked" ? row.listening_mode : null,
     readError: row.read_error,
     createdAt: row.created_at,
@@ -189,6 +227,10 @@ export interface UpsertScanInput {
   enrollment?: string | null;
   examId: string;
   filename: string;
+  /** 파일 내용 해시(PDF는 쪽 번호까지) — 같은 답안지를 가르는 열쇠 */
+  contentHash: string;
+  /** 올린 사람(계정 ID) */
+  uploadedBy: string | null;
   scanPath?: string | null;
   previewPath?: string | null;
   studentId?: string | null;
@@ -202,7 +244,11 @@ export interface UpsertScanInput {
   readError?: string | null;
 }
 
-/** 판독 결과 저장. 같은 (시험, 파일명)이면 기존 행을 덮어쓴다(재업로드 대응). */
+/**
+ * 판독 결과 저장. 같은 (시험, 내용 해시)이면 기존 행을 갱신한다 — 똑같은 파일을
+ * 다시 올린 경우다. 이름만 같은 다른 파일은 새 행이 된다(여러 직원의 스캐너가
+ * 같은 기본 파일명을 붙여도 서로 덮어쓰지 않는다).
+ */
 export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]> {
   if (inputs.length === 0) return [];
   const supabase = getSupabaseAdmin();
@@ -212,6 +258,8 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
       inputs.map((input) => ({
         exam_id: input.examId,
         filename: input.filename,
+        content_hash: input.contentHash,
+        uploaded_by: input.uploadedBy,
         scan_path: input.scanPath ?? null,
         preview_path: input.previewPath ?? null,
         student_id: input.studentId ?? null,
@@ -226,7 +274,7 @@ export async function upsertScans(inputs: UpsertScanInput[]): Promise<OmrScan[]>
         status: input.status ?? "pending",
         read_error: input.readError ?? null,
       })),
-      { onConflict: "exam_id,filename" },
+      { onConflict: "exam_id,content_hash" },
     )
     .select(SELECT);
   if (error) throw new Error(`판독 결과 저장 실패 — ${describeDbError(error.message)}`);
@@ -262,6 +310,7 @@ export interface UpdateScanInput {
   essayScores?: Record<string, number>;
   essayScoreSources?: Record<string, EssayGradeSource>;
   essayAnswers?: Record<string, string>;
+  essayFlags?: Record<string, EssayFlag>;
   status?: ScanStatus;
   reviewedBy?: string | null;
   listeningMode?: ListeningMode | null;
@@ -281,6 +330,7 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.essayScores !== undefined) patch.essay_scores = input.essayScores;
   if (input.essayScoreSources !== undefined) patch.essay_score_sources = input.essayScoreSources;
   if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;
+  if (input.essayFlags !== undefined) patch.essay_flags = input.essayFlags;
   if (input.status !== undefined) patch.status = input.status;
   if (input.reviewedBy !== undefined) patch.reviewed_by = input.reviewedBy;
   if (input.listeningMode !== undefined) patch.listening_mode = input.listeningMode;
@@ -298,6 +348,41 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
     throw new Error(`검수 저장 실패 — ${describeDbError(error?.message ?? "알 수 없는 오류")}`);
   }
   return mapScan(data as ScanRow);
+}
+
+/** 주관식 칸의 전사·점수·출처·표시를 한 번에 고치는 조각. 적지 않은 열은 그대로다. */
+export interface EssayPatch {
+  answers?: Record<string, string>;
+  flags?: Record<string, EssayFlag | null>;
+  scores?: Record<string, number | null>;
+  sources?: Record<string, EssayGradeSource | null>;
+}
+
+/**
+ * 주관식 열을 **방금 읽은 행 위에** 합쳐 저장한다.
+ *
+ * 전사는 몇 분씩 걸린다. 시작할 때 읽어 둔 행 위에 결과를 얹어 저장하면, 그 사이
+ * 다른 사람이 같은 학생의 전사를 고치거나 점수를 매긴 것이 지워진다. 그래서 저장
+ * 직전에 행을 다시 읽고 문항 단위로 합친다. null 은 그 문항의 값을 지운다.
+ */
+export async function patchScanEssay(id: string, patch: EssayPatch): Promise<OmrScan | null> {
+  const fresh = await getScan(id);
+  if (!fresh) return null;
+  const merge = <V,>(current: Record<string, V>, changes: Record<string, V | null> | undefined) => {
+    if (!changes) return undefined;
+    const next: Record<string, V> = { ...current };
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) delete next[key];
+      else next[key] = value;
+    }
+    return next;
+  };
+  return updateScan(id, {
+    essayAnswers: merge(fresh.essayAnswers, patch.answers),
+    essayFlags: merge(fresh.essayFlags, patch.flags),
+    essayScores: merge(fresh.essayScores, patch.scores),
+    essayScoreSources: merge(fresh.essayScoreSources, patch.sources),
+  });
 }
 
 export async function deleteScan(id: string): Promise<void> {
@@ -319,15 +404,16 @@ export async function deleteScan(id: string): Promise<void> {
 /**
  * 스캔 원본을 Storage에 저장하고 경로를 돌려준다.
  * 버킷이 없거나 업로드가 실패해도 판독은 계속되어야 하므로 null을 반환한다.
+ * tag 는 내용 해시 꼬리표 — 같은 이름의 다른 파일이 서로 덮어쓰지 않게 한다.
  */
 export async function uploadScanFile(
   examId: string,
   filename: string,
   bytes: ArrayBuffer,
   contentType: string,
+  tag: string,
 ): Promise<string | null> {
-  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
-  const path = `${examId}/${safe}`;
+  const path = scanOriginalPath(examId, filename, tag);
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.storage
@@ -352,9 +438,9 @@ export async function uploadScanPreview(
   examId: string,
   filename: string,
   bytes: Uint8Array,
+  tag: string,
 ): Promise<string | null> {
-  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
-  const path = `${examId}/previews/${safe}.jpg`;
+  const path = scanPreviewPath(examId, filename, tag);
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.storage
@@ -380,9 +466,9 @@ export async function uploadEssayCrop(
   filename: string,
   questionNo: number,
   bytes: Uint8Array,
+  tag: string,
 ): Promise<string | null> {
-  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
-  const path = `${examId}/essays/${safe}__q${questionNo}.jpg`;
+  const path = essayCropPath(examId, filename, questionNo, tag);
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.storage
@@ -429,8 +515,9 @@ export async function createSignedScanUpload(
   examId: string,
   filename: string,
 ): Promise<{ path: string; signedUrl: string; token: string } | null> {
-  const safe = filename.replace(/[^\w가-힣.-]+/g, "_");
-  const path = `${examId}/${safe}`;
+  // 내용을 아직 모르므로 무작위 꼬리표로 경로를 유일하게 한다 — 같은 이름의 파일을
+  // 다른 사람이 동시에 올려도 보관함에서 서로를 덮어쓰지 않는다.
+  const path = scanOriginalPath(examId, filename, randomTag());
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.storage

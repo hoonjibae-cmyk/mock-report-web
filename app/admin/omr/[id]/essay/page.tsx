@@ -29,6 +29,7 @@ export default async function OmrEssayPage(context: { params: Promise<{ id: stri
       exam={exam}
       setupError={setupError}
       canEdit={hasPermission(user, "createReports")}
+      me={user.username}
     />
   );
 }

@@ -17,6 +17,13 @@
 /** 채점 상태 — 점수가 어디서 왔는지 남긴다 */
 export type EssayGradeSource = "auto" | "teacher";
 
+/**
+ * 전사 표시 — 'unclear' 는 손글씨를 읽긴 했지만 확실하지 않다는 뜻이다.
+ * 백지로 읽혔어도 정말 백지인지 모르므로 자동 채점이 0점으로 넘기지 않고
+ * 사람에게 남긴다. 전사 자체가 실패한 칸은 저장하지 않는다(다음에 다시 읽는다).
+ */
+export type EssayFlag = "unclear";
+
 /** 한 학생의 한 문항 현재 점수 — 자동 채점이 덮어써도 되는지 가르는 근거 */
 export interface CurrentScore {
   score: number;
@@ -28,11 +35,13 @@ export interface EssayAnswer {
   studentId: string | null;
   /** 전사된 답안(선생님이 고쳤으면 고친 값) */
   text: string;
+  /** 손글씨 판독이 불확실한가 — 같은 글이라도 확실한 답안과 따로 묶는다 */
+  unclear?: boolean;
 }
 
 /** 같은 답안끼리 묶은 결과 */
 export interface EssayGroup {
-  /** 비교용으로 다듬은 문자열 — 묶음의 열쇠 */
+  /** 비교용으로 다듬은 문자열 — 묶음의 열쇠(불확실 묶음은 UNCLEAR_PREFIX 로 시작) */
   key: string;
   /** 화면에 보여줄 대표 원문(묶음에서 가장 흔한 표기) */
   text: string;
@@ -40,8 +49,17 @@ export interface EssayGroup {
   members: EssayAnswer[];
   /** 허용 답안과 정확히 일치하는가 — 자동 정답 처리의 근거 */
   matchesKey: boolean;
-  /** 아무것도 쓰지 않았는가 */
+  /** 아무것도 쓰지 않았는가(확실한 백지만) */
   blank: boolean;
+  /** 손글씨 판독이 불확실한 묶음 — 사람이 봐야 한다 */
+  unclear: boolean;
+}
+
+/** 불확실한 답안의 묶음 열쇠 앞에 붙는 표시 — 다듬은 답안 글에는 나올 수 없는 글자 */
+export const UNCLEAR_PREFIX = "\u0001?";
+
+export function isUnclearKey(key: string): boolean {
+  return key.startsWith(UNCLEAR_PREFIX);
 }
 
 /**
@@ -85,14 +103,17 @@ export function matchesAccepted(text: string, accepted: string[]): boolean {
 /**
  * 한 문항의 답안들을 묶는다.
  *
- * 정렬은 사람이 채점하기 좋은 순서로 한다 — 정답으로 보이는 묶음이 먼저,
- * 그다음 사람 수가 많은 순. 백지는 판단할 게 없으므로 맨 뒤로 보낸다.
+ * 정렬은 사람이 채점하기 좋은 순서로 한다 — 정답으로 보이는 묶음이 먼저, 그다음
+ * 판독이 불확실해 사람이 봐야 하는 묶음, 그다음 사람 수가 많은 순. 백지는 판단할
+ * 게 없으므로 맨 뒤로 보낸다. 불확실한 답안은 같은 글이라도 확실한 답안과 따로
+ * 묶는다 — 확실한 묶음에 섞이면 한 번에 매긴 점수가 보지도 않은 칸에 들어간다.
  */
 export function groupEssayAnswers(answers: EssayAnswer[], accepted: string[]): EssayGroup[] {
   const buckets = new Map<string, { texts: Map<string, number>; members: EssayAnswer[] }>();
 
   for (const answer of answers) {
-    const key = normalizeEssay(answer.text);
+    const norm = normalizeEssay(answer.text);
+    const key = answer.unclear ? UNCLEAR_PREFIX + norm : norm;
     const entry = buckets.get(key) ?? { texts: new Map<string, number>(), members: [] };
     const raw = (answer.text ?? "").trim();
     if (raw) entry.texts.set(raw, (entry.texts.get(raw) ?? 0) + 1);
@@ -105,18 +126,22 @@ export function groupEssayAnswers(answers: EssayAnswer[], accepted: string[]): E
     const text =
       [...entry.texts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
       "";
+    const unclear = isUnclearKey(key);
     return {
       key,
       text,
       members: entry.members,
       matchesKey: matchesAccepted(text, accepted),
+      // 불확실하게 읽힌 빈칸은 백지가 아니라 '모름'이다
       blank: key === "",
+      unclear,
     };
   });
 
   groups.sort((a, b) => {
     if (a.blank !== b.blank) return a.blank ? 1 : -1;
     if (a.matchesKey !== b.matchesKey) return a.matchesKey ? -1 : 1;
+    if (a.unclear !== b.unclear) return a.unclear ? -1 : 1;
     return b.members.length - a.members.length || a.text.localeCompare(b.text);
   });
   return groups;
@@ -138,9 +163,17 @@ export interface AutoGradeResult {
 /**
  * 한 답안의 자동 판정 — 정답과 일치하면 만점, 백지면 0점, 정답이 있는데 다르면
  * 0점(오답으로 보임). 정답을 안 넣었는데 무언가 쓰여 있으면 판단할 수 없어 null.
+ * 판독이 불확실한 답안은 일치할 때만 만점이고 나머지는 사람에게 남긴다(null) —
+ * 잘못 읽은 글로 0점을 매기는 것이 이 기능이 막아야 할 사고다.
  */
-export function autoVerdict(text: string, accepted: string[], point: number): number | null {
+export function autoVerdict(
+  text: string,
+  accepted: string[],
+  point: number,
+  unclear = false,
+): number | null {
   if (matchesAccepted(text, accepted)) return point;
+  if (unclear) return null;
   if (!normalizeEssay(text)) return 0;
   return accepted.length > 0 ? 0 : null;
 }
@@ -166,7 +199,16 @@ export function autoGrade(
   let kept = 0;
 
   for (const group of groups) {
-    const verdict = group.blank ? 0 : group.matchesKey ? point : accepted.length > 0 ? 0 : null;
+    // 불확실한 묶음은 일치할 때만 만점, 아니면 사람에게(0점으로 넘기지 않는다)
+    const verdict = group.matchesKey
+      ? point
+      : group.unclear
+        ? null
+        : group.blank
+          ? 0
+          : accepted.length > 0
+            ? 0
+            : null;
     let scored = 0;
     let unresolved = 0;
     for (const member of group.members) {

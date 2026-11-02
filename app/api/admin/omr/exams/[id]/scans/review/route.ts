@@ -4,6 +4,7 @@ import { getVisibleExam } from "@/lib/exam-access";
 import { listScans, updateScan } from "@/lib/omr-scans";
 import { summarizeReview } from "@/lib/omr-review";
 import { lookupStudents } from "@/lib/student-directory";
+import { inScope, parseScopeParam, type UploaderScope } from "@/lib/uploaders";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -38,6 +39,8 @@ async function buildSummary(examId: string) {
     }
   }
 
+  // 판정은 시험 전체로 한다 — 수험번호 중복은 다른 사람이 올린 답안지와도 겹칠 수 있다.
+  // 범위는 그 뒤에 결과를 추릴 때만 쓴다.
   const summary = summarizeReview(scans, {
     numQuestions: exam.numQuestions,
     idDigits: exam.idDigits,
@@ -47,7 +50,19 @@ async function buildSummary(examId: string) {
   return { exam, scans, summary, directoryUsed: knownIds !== null };
 }
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+/** 시험 전체 판정에서 범위 안의 것만 남긴다 */
+function scopeSummary(built: NonNullable<Awaited<ReturnType<typeof buildSummary>>>, scope: UploaderScope) {
+  const { scans, summary } = built;
+  const scoped = scans.filter((scan) => inScope(scan, scope));
+  return {
+    total: scoped.length,
+    reviewed: scoped.filter((scan) => scan.status === "reviewed").length,
+    autoReady: summary.autoReady.filter((scan) => inScope(scan, scope)),
+    needsPerson: summary.needsPerson.filter(({ scan }) => inScope(scan, scope)),
+  };
+}
+
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await authorizeApi("viewReports");
   if (auth.response) return auth.response;
   const { id } = await context.params;
@@ -55,10 +70,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   try {
     const built = await buildSummary(id);
     if (!built) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
-    const { summary, directoryUsed } = built;
+    const scope = parseScopeParam(new URL(request.url).searchParams.get("uploader"), auth.user.username, built.scans);
+    const summary = scopeSummary(built, scope);
     return NextResponse.json({
       ok: true,
-      directoryUsed,
+      scope,
+      directoryUsed: built.directoryUsed,
       total: summary.total,
       reviewed: summary.reviewed,
       autoReady: summary.autoReady.length,
@@ -77,7 +94,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   }
 }
 
-export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await authorizeApi("createReports");
   if (auth.response) return auth.response;
   const { id } = await context.params;
@@ -85,7 +102,10 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   try {
     const built = await buildSummary(id);
     if (!built) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
-    const { summary } = built;
+    // 자동 확인도 범위 안에서만 — 내가 올린 답안지를 처리하다가 남의 것까지 넘기지 않는다
+    const body = await request.json().catch(() => ({}));
+    const scope = parseScopeParam(body.uploader ?? "all", auth.user.username, built.scans);
+    const summary = scopeSummary(built, scope);
 
     if (summary.autoReady.length === 0) {
       return NextResponse.json({
