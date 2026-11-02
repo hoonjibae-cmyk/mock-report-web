@@ -5,18 +5,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import ScanPreview from "@/components/ScanPreview";
+import UploaderScopeBar from "@/components/UploaderScopeBar";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
 import { PDF_PAGE_LIMIT, countPdfPages, pdfSplitWarning, type PickedPdf } from "@/lib/pdf-pages";
 import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr-answers";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
 import { describeSkipped, idRange, planConfirm, runPool } from "@/lib/scan-bulk";
+import {
+  defaultUploaderScope,
+  inScope,
+  scopeKeyOf,
+  summarizeUploaders,
+  uploaderDisplayName,
+  type UploaderScope,
+} from "@/lib/uploaders";
 
 interface Props {
   exam: OmrExam | null;
   initialScans: OmrScan[];
   setupError: string;
   canEdit: boolean;
+  /** 로그인한 사람의 계정 ID — '내가 올린 답안지' 범위의 기준 */
+  me: string;
+  /** 계정 ID → 표시 이름 */
+  uploaderNames: Record<string, string>;
 }
 
 interface Draft {
@@ -128,11 +141,16 @@ interface ReviewSummary {
   directoryUsed: boolean;
 }
 
-export default function OmrScanReview({ exam, initialScans, setupError, canEdit }: Props) {
+export default function OmrScanReview({ exam, initialScans, setupError, canEdit, me, uploaderNames }: Props) {
   // 이 화면에서 답안지를 뽑고 스캔을 올린다. 들어온 김에 판독 서버를 깨워 둔다.
   useOmrWarmup(Boolean(exam));
 
   const [scans, setScans] = useState<OmrScan[]>(initialScans);
+  // 올린 사람 범위 — 여러 직원이 나눠 올린 시험에서는 내가 올린 답안지를 먼저 본다
+  const [scope, setScope] = useState<UploaderScope>(() => defaultUploaderScope(initialScans, me));
+  const uploaders = useMemo(() => summarizeUploaders(scans, uploaderNames, me), [scans, uploaderNames, me]);
+  // 범위가 둘 이상일 때만 누가 올렸는지 줄마다 적는다
+  const showUploader = uploaders.length > 1;
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -207,25 +225,30 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   // 일괄 처리 진행 상황 — null이면 쉬는 중
   const [bulk, setBulk] = useState<{ label: string; done: number; total: number } | null>(null);
 
+  // 범위 안의 답안지 — 검수 숫자·목록·일괄 처리는 모두 이 안에서 돈다
+  const scopedScans = useMemo(() => scans.filter((scan) => inScope(scan, scope)), [scans, scope]);
   const pendingCount = useMemo(
-    () => scans.filter((scan) => scan.status !== "reviewed").length,
-    [scans],
+    () => scopedScans.filter((scan) => scan.status !== "reviewed").length,
+    [scopedScans],
   );
 
   /**
    * 자동 통과 판정은 서버에서 받아 온다. 학생 명부 대조와 수험번호 중복 검사는
-   * 답안지 한 장만 봐서는 알 수 없어서, 화면에서 흉내 낼 수 없다.
+   * 답안지 한 장만 봐서는 알 수 없어서, 화면에서 흉내 낼 수 없다. 범위를 보내면
+   * 서버가 시험 전체로 판정한 뒤 범위 안의 것만 돌려준다.
    */
   const loadSummary = useCallback(async () => {
     if (!exam?.id) return;
     try {
-      const res = await fetch(`/api/admin/omr/exams/${exam.id}/scans/review`);
+      const res = await fetch(
+        `/api/admin/omr/exams/${exam.id}/scans/review?uploader=${encodeURIComponent(scope ?? "all")}`,
+      );
       const data = await res.json().catch(() => ({}));
       if (res.ok) setSummary(data as ReviewSummary);
     } catch {
       // 요약을 못 받아도 검수 자체는 그대로 할 수 있으므로 조용히 넘어간다
     }
-  }, [exam?.id]);
+  }, [exam?.id, scope]);
 
   useEffect(() => {
     void loadSummary();
@@ -239,8 +262,8 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
   }, [summary]);
 
   const visibleScans = useMemo(
-    () => (onlyFlagged ? scans.filter((scan) => reasonsById.has(scan.id)) : scans),
-    [scans, onlyFlagged, reasonsById],
+    () => (onlyFlagged ? scopedScans.filter((scan) => reasonsById.has(scan.id)) : scopedScans),
+    [scopedScans, onlyFlagged, reasonsById],
   );
   const visibleIds = useMemo(() => visibleScans.map((scan) => scan.id), [visibleScans]);
 
@@ -284,7 +307,12 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`/api/admin/omr/exams/${exam.id}/scans/review`, { method: "POST" });
+      // 자동 확인도 지금 보는 범위 안에서만 — 남이 올린 답안지를 대신 넘기지 않는다
+      const res = await fetch(`/api/admin/omr/exams/${exam.id}/scans/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploader: scope ?? "all" }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "자동 확인에 실패했습니다.");
       if (data.scans) setScans(data.scans);
@@ -428,6 +456,8 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
       }
 
       setScans(latest.scans ?? []);
+      // 전체를 보던 중 내 답안지가 처음 들어왔으면 그것부터 본다 — 올린 사람이 바로 검수하는 흐름
+      if (scope === null) setScope(defaultUploaderScope(latest.scans ?? [], me));
       setDrafts({});
       setPicked([]);
       if (fileRef.current) fileRef.current.value = "";
@@ -707,6 +737,11 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
             </li>
             <li>여러 장을 하나로 스캔한 PDF는 페이지마다 답안지 1장으로 자동 분리됩니다.</li>
             <li>큰 파일은 보관함으로 직접 올라가므로 용량 제한 없이 처리됩니다.</li>
+            <li>
+              올린 답안지에는 <b>올린 사람</b>이 기록됩니다. 여러 분이 나눠 올리면 아래 검수와 주관식
+              채점에서 <b>내가 올린 답안지</b>만 먼저 볼 수 있습니다. 같은 파일을 다시 올리면 그 답안지가
+              갱신되고, 이름만 같은 다른 파일은 새 답안지로 들어갑니다.
+            </li>
             <li>원본 스캔은 7일간 보관 후 자동 삭제됩니다.</li>
           </ul>
 
@@ -784,11 +819,29 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
             <p className="eyebrow">STEP 2</p>
             <h2>검수</h2>
             <p className="subtle">
-              총 {scans.length}장 · 검수 필요 {pendingCount}장. 판독기가 확신하지 못한 답안지만
-              사람이 확인하면 됩니다.
+              {scope === null
+                ? `총 ${scans.length}장 · 검수 필요 ${pendingCount}장.`
+                : `이 범위 ${scopedScans.length}장 · 검수 필요 ${pendingCount}장 (시험 전체 ${scans.length}장).`}{" "}
+              판독기가 확신하지 못한 답안지만 사람이 확인하면 됩니다.
             </p>
           </div>
         </div>
+
+        {/* 여러 사람이 나눠 올린 시험 — 내가 올린 답안지부터 검수한다 */}
+        <UploaderScopeBar
+          uploaders={uploaders}
+          scope={scope}
+          onChange={(next) => {
+            setScope(next);
+            setSelected(new Set());
+          }}
+          describe={(u) => `검수 ${u.reviewed}/${u.total}장`}
+          note={
+            scope === null
+              ? "모든 답안지를 함께 봅니다. 성적표는 범위와 상관없이 검수를 마친 모든 답안지로 만듭니다."
+              : "이 범위의 답안지만 보입니다. 일괄 처리와 자동 확인도 이 범위 안에서만 돕니다."
+          }
+        />
 
         {summary && pendingCount > 0 ? (
           <div className="review-summary">
@@ -837,6 +890,13 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
 
         {scans.length === 0 ? (
           <p className="subtle">아직 업로드한 스캔이 없습니다.</p>
+        ) : scopedScans.length === 0 ? (
+          <p className="subtle">
+            이 범위에는 답안지가 없습니다.{" "}
+            <button className="button tiny ghost" onClick={() => setScope(null)}>
+              전체 보기
+            </button>
+          </p>
         ) : visibleScans.length === 0 ? (
           <p className="subtle">
             확인이 필요한 답안지가 없습니다.{" "}
@@ -991,6 +1051,11 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit 
                             <span className="subtle">
                               표기 {marked}/{total}
                             </span>
+                            {showUploader ? (
+                              <span className="subtle" title="이 답안지를 올린 사람">
+                                올린 사람: {uploaderDisplayName(scopeKeyOf(scan), uploaderNames, me)}
+                              </span>
+                            ) : null}
                             {isListeningAbsentCandidate(exam, scan) ? (
                               <span
                                 className="status-chip inactive"

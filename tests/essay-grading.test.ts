@@ -200,3 +200,50 @@ test("정답에서 글자 종류를 알아내 전사에 힌트로 준다", async
   assert.equal(scriptOf([]), null);
   assert.equal(scriptOf(["123", "!!"]), null);
 });
+
+test("판독이 불확실한 답안은 같은 글이라도 확실한 답안과 따로 묶이고, 묶음 순서는 정답 → 불확실 → 나머지 → 백지", () => {
+  const groups = groupEssayAnswers(
+    [
+      a("s1", "He is looking forward to see you."),
+      { ...a("s2", "He is looking forward to see you."), unclear: true },
+      a("s3", ""),
+      { ...a("s4", ""), unclear: true },
+      a("s5", "He's looking forward to seeing you"),
+    ],
+    KEY,
+  );
+  // s1 과 s2 는 글이 같지만 따로, s3(백지)과 s4(못 읽음)도 따로 → 5묶음
+  assert.equal(groups.length, 5);
+  assert.ok(groups[0].matchesKey, "정답 묶음이 먼저");
+  assert.ok(groups[1].unclear && groups[2].unclear, "불확실 묶음이 그다음");
+  assert.ok(!groups[3].unclear && !groups[3].blank, "확실한 오답");
+  assert.ok(groups[4].blank && !groups[4].unclear, "확실한 백지만 맨 뒤");
+  // 불확실하게 읽힌 빈칸은 '백지'가 아니다 — 백지일 수도, 못 알아본 것일 수도 있다
+  const unclearBlank = groups.find((g) => g.unclear && g.text === "");
+  assert.ok(unclearBlank && !unclearBlank.blank);
+});
+
+test("자동 채점은 불확실한 답안을 0점으로 넘기지 않는다 — 일치하면 만점, 아니면 사람에게", () => {
+  const groups = groupEssayAnswers(
+    [
+      { ...a("s1", "he's looking forward to seeing you"), unclear: true },
+      { ...a("s2", "He is looking forward to see you."), unclear: true },
+      { ...a("s3", ""), unclear: true },
+      a("s4", ""),
+    ],
+    KEY,
+  );
+  const result = autoGrade(groups, 4, { accepted: KEY });
+  // s1 은 정답과 일치하므로 만점, s4 는 확실한 백지라 0점. s2·s3 은 점수 없이 남는다.
+  assert.deepEqual(result.scores, { s1: 4, s4: 0 });
+  assert.equal(result.pending.length, 2);
+  assert.deepEqual(result.pending.flatMap((g) => g.members.map((m) => m.scanId)).sort(), ["s2", "s3"]);
+});
+
+test("한 답안의 자동 판정도 불확실하면 일치할 때만 만점이다", () => {
+  assert.equal(autoVerdict("he's looking forward to seeing you", KEY, 4, true), 4);
+  assert.equal(autoVerdict("", KEY, 4, true), null, "못 읽은 빈칸은 0점이 아니다");
+  assert.equal(autoVerdict("He is looking forward to see you.", KEY, 4, true), null);
+  // 사람이 고쳐 쓴 글은 확실한 글이다(unclear 기본값 false)
+  assert.equal(autoVerdict("", KEY, 4), 0);
+});

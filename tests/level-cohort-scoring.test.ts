@@ -28,8 +28,8 @@ function scan(id: string, examId: string, marks: number[]): OmrScan {
   marks.forEach((m, i) => { answers[String(i + 1)] = m; });
   return {
     id, examId, filename: `${id}.jpg`, scanPath: null, previewPath: null, studentId: id, studentIdQr: null,
-    studentIdBubbles: id, answers, essayScores: {}, essayScoreSources: {}, essayAnswers: {}, essayCrops: {}, reviewFlags: [],
-    readConfidence: null, status: "reviewed", reviewedBy: "auto", listeningMode: null, readError: null, createdAt: "", updatedAt: "",
+    studentIdBubbles: id, answers, essayScores: {}, essayScoreSources: {}, essayAnswers: {}, essayFlags: {}, essayCrops: {}, reviewFlags: [],
+    readConfidence: null, status: "reviewed", reviewedBy: "auto", uploadedBy: null, contentHash: null, listeningMode: null, readError: null, createdAt: "", updatedAt: "",
   };
 }
 

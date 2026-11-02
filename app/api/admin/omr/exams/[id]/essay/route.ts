@@ -4,6 +4,7 @@ import { authorizeApi } from "@/lib/api-auth";
 import { getVisibleExam } from "@/lib/exam-access";
 import { listScans, updateScan } from "@/lib/omr-scans";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
+import { filterByUploader, parseScopeParam } from "@/lib/uploaders";
 import { makeXlsx } from "@/lib/xlsx-lite";
 
 export const runtime = "nodejs";
@@ -13,7 +14,7 @@ export const maxDuration = 120;
  * 서술형 채점표 엑셀 다운로드.
  * 행 = 학생(검수 완료 답안), 열 = 서술형 문항. 채점자가 화면을 보며 점수만 채우면 된다.
  */
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await authorizeApi("viewReports");
   if (auth.response) return auth.response;
   const { id } = await context.params;
@@ -30,7 +31,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       );
     }
 
-    const scans = (await listScans(id)).filter((scan) => scan.status === "reviewed" && scan.studentId);
+    // ?uploader= 로 올린 사람 범위를 좁힐 수 있다(없으면 전체)
+    const all = await listScans(id);
+    const scope = parseScopeParam(new URL(request.url).searchParams.get("uploader"), auth.user.username, all);
+    const scans = filterByUploader(all, scope).filter((scan) => scan.status === "reviewed" && scan.studentId);
     const essayNumbers = Array.from({ length: essayCount }, (_, k) => exam.numQuestions + k + 1);
 
     // 머리글: 수험번호 · 파일 · 문항별 "N번(배점)" · 합계

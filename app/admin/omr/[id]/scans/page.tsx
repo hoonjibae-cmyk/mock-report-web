@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { getVisibleExam } from "@/lib/exam-access";
 import { listScans, type OmrScan } from "@/lib/omr-scans";
+import { loadUploaderNames } from "@/lib/uploader-names";
 import OmrScanReview from "@/components/OmrScanReview";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,10 @@ export default async function OmrScansPage(context: { params: Promise<{ id: stri
   });
   if (!exam && !setupError) notFound();
 
+  let uploaderNames: Record<string, string> = {};
   if (exam) {
     try {
-      scans = await listScans(id);
+      [scans, uploaderNames] = await Promise.all([listScans(id), loadUploaderNames()]);
     } catch (error) {
       setupError = error instanceof Error ? error.message : "판독 목록을 불러오지 못했습니다.";
     }
@@ -35,6 +37,8 @@ export default async function OmrScansPage(context: { params: Promise<{ id: stri
       initialScans={scans}
       setupError={setupError}
       canEdit={hasPermission(user, "createReports")}
+      me={user.username}
+      uploaderNames={uploaderNames}
     />
   );
 }
