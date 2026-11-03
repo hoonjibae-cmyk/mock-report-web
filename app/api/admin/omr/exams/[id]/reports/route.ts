@@ -11,6 +11,7 @@ import { cohortLabelFor, cohortNoteFor, levelSiblings } from "@/lib/monthly-coho
 import { fetchClassTeacherMap } from "@/lib/student-directory";
 import type { CohortMode } from "@/lib/omr-types";
 import { scoreExam, maxScore, essayCountOf } from "@/lib/omr-scoring";
+import { essayCellGraded } from "@/lib/essay-grading";
 import {
   attachClassification,
   classificationStats,
@@ -192,21 +193,28 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     // 주관식은 채점하지 않으면 **조용히 0점**으로 들어간다. 그대로 성적표를
     // 만들면 학생이 쓴 답이 통째로 사라진 점수가 학부모에게 나간다. 되돌리기
     // 어려운 실수라, 정답 미입력과 같은 선에서 막는다.
+    // 손글씨를 읽지 못한 답안에 자동 점수만 있는 칸(예전 버전이 백지로 보고 매긴 0점)도
+    // 채점되지 않은 것으로 센다 — 그 0점이 반배정 요청에 그대로 들어간 일이 있었다.
     const essayCount = essayCountOf(exam);
     if (essayCount > 0) {
       const objectiveCount = exam.numQuestions;
       let ungraded = 0;
+      let unread = 0;
       for (const scan of reviewed) {
         for (let q = objectiveCount + 1; q <= objectiveCount + essayCount; q += 1) {
-          if (typeof scan.essayScores?.[String(q)] !== "number") ungraded += 1;
+          const key = String(q);
+          if (essayCellGraded(scan, key)) continue;
+          ungraded += 1;
+          if (typeof scan.essayScores?.[key] === "number") unread += 1;
         }
       }
       if (ungraded > 0) {
         return NextResponse.json(
           {
             error:
-              `주관식 채점이 ${ungraded}칸 남아 있습니다. 지금 성적표를 만들면 그 칸이 0점으로 들어갑니다. ` +
-              "'주관식 채점'에서 마친 뒤 다시 시도해 주세요.",
+              `주관식 채점이 ${ungraded}칸 남아 있습니다` +
+              (unread > 0 ? `(그중 ${unread}칸은 손글씨를 읽지 못했는데 자동 0점만 들어가 있습니다)` : "") +
+              ". 지금 성적표를 만들면 그 칸이 0점으로 들어갑니다. '주관식 채점'에서 마친 뒤 다시 시도해 주세요.",
           },
           { status: 400 },
         );

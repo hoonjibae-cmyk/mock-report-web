@@ -345,6 +345,24 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       });
     }
 
+    // 판독은 됐는데 손글씨 칸 이미지를 다 저장하지 못한 답안지 — 이대로 두면 손글씨를
+    // 읽을 수 없고, 채점 화면에서 '이미지 없음'으로 따로 남는다. 조용히 넘기지 않고 알린다.
+    const essayImageMissing =
+      essayCount > 0
+        ? read.results
+            .filter((result) => Object.keys(essayCropPaths.get(result.filename) ?? {}).length < essayCount)
+            .map((result) => result.filename)
+        : [];
+    const previewMissing = read.results.filter(
+      (result) => result.preview_jpeg_base64 && !previewPaths.has(result.filename),
+    ).length;
+    if (essayImageMissing.length > 0 || previewMissing > 0) {
+      console.error(
+        `보관함 저장 실패 — 손글씨 칸 이미지 ${essayImageMissing.length}장, 미리보기 ${previewMissing}장`,
+        essayImageMissing.slice(0, 5),
+      );
+    }
+
     await resolveTrailingIds(rows);
     await upsertScans(rows);
     const scans = await listScans(id);
@@ -357,6 +375,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       failed: read.problems?.length ?? 0,
       lowConfidence: failedReadCount,
       storageSkipped,
+      essayImageMissing: essayImageMissing.length,
+      essayImageMissingFiles: essayImageMissing.slice(0, 5),
+      previewMissing,
     });
   } catch (error) {
     console.error(error);

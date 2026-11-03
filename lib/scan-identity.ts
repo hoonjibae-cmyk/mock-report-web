@@ -35,9 +35,32 @@ export function randomTag(): string {
   return randomBytes(5).toString("hex");
 }
 
-/** 보관함이 받아 주는 글자만 남긴 파일명 */
+/**
+ * 보관함 경로에 쓰는 파일명 — 영문·숫자·`._-`만 남긴다.
+ *
+ * Supabase 보관함은 경로에 한글 같은 비ASCII 글자가 있으면 "Invalid key"로 거부한다.
+ * 예전에는 한글을 그대로 남겨, 한글 이름의 스캔(신규생을 한 장씩 학생 이름으로 저장한
+ * 것 등)은 원본·미리보기·손글씨 칸 이미지가 하나도 저장되지 않았다. 판독은 파일을
+ * 직접 받으므로 되었고, 그래서 이미지만 조용히 빠졌다. 경로가 겹치지 않는 것은 앞에
+ * 붙는 내용 해시 꼬리표가 보장하므로, 이름은 알아볼 수 있는 만큼만 남으면 된다.
+ */
 export function safeFilename(name: string): string {
-  return String(name ?? "").replace(/[^\w가-힣.-]+/g, "_");
+  const ascii = String(name ?? "")
+    .normalize("NFKD") // 'é' → 'e' + 결합 부호
+    .replace(/[̀-ͯ]/g, "") // 결합 부호를 지워 'e'만 남긴다
+    .replace(/[^A-Za-z0-9._-]+/g, "_")
+    .replace(/_+/g, "_");
+  // 너무 길면 확장자가 있는 뒤쪽을 남긴다
+  return (ascii.length > 80 ? ascii.slice(-80) : ascii) || "scan";
+}
+
+/**
+ * Supabase 보관함이 받아 주는 경로인가 — 보관함 서버의 규칙(isValidKey)을 그대로 옮겼다.
+ * 정규식의 \w 는 u 플래그가 없어 ASCII 영숫자만 뜻한다. 경로를 만드는 함수가 모두 이
+ * 규칙을 지키는지 테스트가 확인한다.
+ */
+export function isStorageKeySafe(key: string): boolean {
+  return key.length > 0 && /^(\w|\/|!|-|\.|\*|'|\(|\)| |&|\$|@|=|;|:|\+|,|\?)*$/.test(key);
 }
 
 /** 원본 스캔 */

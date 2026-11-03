@@ -1186,6 +1186,18 @@ body.report-layout-a4 .a4-report-root { display: block; }
 .essay-group.unclear { border-color: #e8c98a; background: #fffbf2; }
 .essay-group.unclear.state-none { border-left-color: #e0a93a; }
 .essay-badge.unclear, .essay-score-chip.unclear { background: #fff4e0; color: #8a5a00; }
+/* 못 읽은 답안 — 백지가 아니다. 이미지 없음은 빨강 점선, 읽기 전은 회색 점선 */
+.essay-group.missing { border-style: dashed; border-left-style: solid; border-left-width: 6px; }
+.essay-group.missing.noImage { border-color: #f0b4ae; border-left-color: var(--danger); background: #fff8f7; }
+.essay-group.missing.unread { border-color: #cfd6df; border-left-color: #9aa7b8; background: #fafbfc; }
+.essay-badge.noimage { background: var(--danger-soft); color: var(--danger); }
+.essay-badge.unread { background: #eef1f5; color: #4b5a6e; }
+.essay-missing-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.6; color: #42546d; }
+.essay-actions.member { margin-top: 8px; }
+.essay-actions.member > .button:last-of-type { margin-left: 0; }
+.essay-actions.member > .essay-score-chip { margin-left: auto; }
+.essay-sheet-preview { display: grid; gap: 8px; justify-items: start; }
+.essay-sheet-preview .scan-preview { width: 100%; max-width: 720px; }
 /* 점수 상태 — 맞은 것과 틀린 것이 한눈에 갈리게. 왼쪽 굵은 띠 + 바탕색 */
 .essay-group.state-full { border-color: #8fd0a8; border-left: 6px solid var(--success); background: #eefaf2; }
 .essay-group.state-zero { border-color: #f0b4ae; border-left: 6px solid var(--danger); background: #fff1ef; }

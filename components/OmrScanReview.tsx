@@ -365,6 +365,11 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
     failed?: number;
     lowConfidence?: number;
     storageSkipped?: boolean;
+    /** 손글씨 칸 이미지를 다 저장하지 못한 답안지 수 */
+    essayImageMissing?: number;
+    essayImageMissingFiles?: string[];
+    /** 미리보기를 저장하지 못한 답안지 수 */
+    previewMissing?: number;
   }
 
   /** 묶음 하나를 올리고 판독한다. 큰 파일은 보관함을 거쳐 본문 제한을 피한다. */
@@ -437,7 +442,15 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
       const totalFiles = picked.length;
       let done = 0;
       let latest: { scans?: OmrScan[] } = {};
-      const tally = { read: 0, failed: 0, lowConfidence: 0, storageSkipped: true };
+      const tally = {
+        read: 0,
+        failed: 0,
+        lowConfidence: 0,
+        storageSkipped: true,
+        essayImageMissing: 0,
+        essayImageMissingFiles: [] as string[],
+        previewMissing: 0,
+      };
 
       for (const [index, batch] of batches.entries()) {
         const where = batches.length > 1 ? ` (${index + 1}/${batches.length}묶음)` : "";
@@ -452,6 +465,9 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
         tally.failed += data.failed ?? 0;
         tally.lowConfidence += data.lowConfidence ?? 0;
         if (!data.storageSkipped) tally.storageSkipped = false;
+        tally.essayImageMissing += data.essayImageMissing ?? 0;
+        tally.essayImageMissingFiles.push(...(data.essayImageMissingFiles ?? []));
+        tally.previewMissing += data.previewMissing ?? 0;
         done += batch.length;
       }
 
@@ -464,8 +480,18 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
       const parts = [`${tally.read}장 판독 완료`];
       if (tally.failed) parts.push(`${tally.failed}장 실패`);
       if (tally.lowConfidence) parts.push(`${tally.lowConfidence}장 판독 확인 필요`);
-      if (tally.storageSkipped) parts.push("원본 미보관(omr-scans 버킷 없음)");
+      if (tally.storageSkipped) parts.push("원본을 보관하지 못했습니다(보관함 확인 필요)");
+      if (tally.previewMissing && !tally.essayImageMissing) parts.push(`${tally.previewMissing}장 미리보기 저장 실패`);
       setMessage(parts.join(" · "));
+      // 손글씨 칸 이미지가 없으면 서술형을 읽을 수 없다 — 지나치기 쉬운 회색 글 대신 오류로 알린다
+      if (tally.essayImageMissing > 0) {
+        const files = tally.essayImageMissingFiles.slice(0, 3).join(", ");
+        setError(
+          `${tally.essayImageMissing}장은 손글씨 칸 이미지를 저장하지 못해 서술형을 읽을 수 없습니다` +
+            (files ? ` (${files}${tally.essayImageMissing > 3 ? " 외" : ""})` : "") +
+            ". 같은 파일을 한 번 더 올리면 그 답안지가 갱신되며 다시 저장합니다. 계속되면 알려 주세요.",
+        );
+      }
       await loadSummary();
     } catch (err) {
       setError(err instanceof Error ? err.message : "판독 중 오류가 발생했습니다.");
@@ -1054,6 +1080,19 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
                             {showUploader ? (
                               <span className="subtle" title="이 답안지를 올린 사람">
                                 올린 사람: {uploaderDisplayName(scopeKeyOf(scan), uploaderNames, me)}
+                              </span>
+                            ) : null}
+                            {/* 서술형 손글씨 칸 이미지가 저장되지 않은 답안지 — 이대로면 손글씨를 읽을 수 없다 */}
+                            {essayCount > 0 && !scan.readError && Object.keys(scan.essayCrops ?? {}).length < essayCount ? (
+                              <span
+                                className="status-chip danger"
+                                title={
+                                  scan.contentHash
+                                    ? "서술형 손글씨 칸 이미지가 저장되지 않아 손글씨를 읽을 수 없습니다. 같은 스캔 파일을 다시 올리면 이 답안지가 갱신되며 이미지가 저장됩니다(검수 확인을 다시 해야 합니다)."
+                                    : "서술형 손글씨 칸 이미지가 저장되지 않아 손글씨를 읽을 수 없습니다. 예전에 올린 답안지라 다시 올리면 새 줄로 들어가니, 이 줄을 삭제한 뒤 같은 파일을 다시 올려 주세요."
+                                }
+                              >
+                                손글씨 이미지 없음
                               </span>
                             ) : null}
                             {isListeningAbsentCandidate(exam, scan) ? (
