@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import EssayCrop from "@/components/EssayCrop";
+import ScanPreview from "@/components/ScanPreview";
 import UploaderScopeBar from "@/components/UploaderScopeBar";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { UploaderEssayProgress, UploaderScope } from "@/lib/uploaders";
@@ -28,6 +29,8 @@ interface Member {
   /** 'auto' 자동 채점(확인 전) · 'teacher' 선생님이 확인·매김 · null 미채점 */
   source: "auto" | "teacher" | null;
   hasCrop: boolean;
+  /** 답안지 전체 미리보기가 있는가 — 칸 이미지가 없을 때 대신 보여 준다 */
+  hasPreview: boolean;
   /** 손글씨 판독이 불확실 — 사람이 봐야 한다 */
   unclear: boolean;
 }
@@ -39,6 +42,11 @@ interface Group {
   blank: boolean;
   /** 판독이 불확실한 답안들의 묶음 */
   unclear: boolean;
+  /**
+   * 아직 글로 옮기지 못한 답안들 — 'unread' 칸 이미지는 있는데 안 읽음, 'noImage' 칸 이미지가
+   * 없어 읽을 수 없음. 학생마다 답이 다르므로 학생별로 매긴다.
+   */
+  missing: "unread" | "noImage" | null;
   members: Member[];
 }
 
@@ -62,6 +70,8 @@ interface AutoSummary {
   applied: number;
   zeroed: number;
   kept: number;
+  /** 못 읽은 답안에 남아 있어 지운 예전 자동 점수 */
+  cleared?: number;
 }
 
 /** 서버가 범위·진행과 함께 돌려주는 응답 */
@@ -103,6 +113,74 @@ function groupState(group: Group, point: number): GroupState {
   return { kind, score: first, auto };
 }
 
+/**
+ * 학생 한 명의 한 칸 점수 — 못 읽은 답안을 종이나 답안지 이미지를 보고 매길 때.
+ * 누르는 즉시 선생님 점수로 저장되고, 자동 채점이 바꾸지 않는다.
+ */
+function MemberScore({
+  member,
+  point,
+  disabled,
+  onScore,
+}: {
+  member: Member;
+  point: number;
+  disabled: boolean;
+  onScore: (score: number) => void;
+}) {
+  const teacher = member.source === "teacher" && member.score !== null;
+  const score = member.score ?? 0;
+  const kind = score >= point - 0.05 ? "full" : score <= 0.05 ? "zero" : "partial";
+  return (
+    <div className="essay-actions member">
+      <span className="subtle">점수</span>
+      {[point, point / 2, 0].map((value) => {
+        const on = teacher && Math.abs(score - value) < 0.05;
+        return (
+          <button
+            key={fmtPoint(value)}
+            className={`button tiny${on ? " primary" : " ghost"}`}
+            disabled={disabled}
+            onClick={() => onScore(value)}
+          >
+            {fmtPoint(value)}
+          </button>
+        );
+      })}
+      <input
+        type="number"
+        className="essay-score-input"
+        min={0}
+        max={point}
+        step={0.5}
+        placeholder="직접"
+        title="부분점수를 직접 입력합니다. Enter를 누르거나 칸을 벗어나면 저장됩니다."
+        disabled={disabled}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        onBlur={(e) => {
+          const raw = e.target.value.trim();
+          if (!raw) return;
+          const value = Number(raw);
+          if (!Number.isFinite(value)) return;
+          e.target.value = "";
+          onScore(value);
+        }}
+      />
+      {teacher ? (
+        <span className={`essay-score-chip ${kind}`}>✓ {fmtPoint(score)}점</span>
+      ) : member.source === "auto" ? (
+        <span className="essay-score-chip zero auto" title="못 읽은 답안에 남은 예전 자동 점수 — 다음 자동 채점 때 지워집니다">
+          자동 {fmtPoint(score)}점 — 근거 없음
+        </span>
+      ) : (
+        <span className="essay-score-chip none">미채점</span>
+      )}
+    </div>
+  );
+}
+
 function autoText(auto: AutoSummary | undefined): string {
   if (!auto) return "";
   return (
@@ -123,6 +201,8 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [editingKey, setEditingKey] = useState<number | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
+  // 손글씨 칸 이미지가 없는 답안 — 답안지 전체 미리보기를 한 장씩만 연다(열 때 불러온다)
+  const [sheetPreview, setSheetPreview] = useState<string | null>(null);
   // 범위 — 처음에는 서버가 정한다(내가 올린 답안지가 있으면 그것만, 없으면 전체).
   // 'scopeReady' 전에는 "auto"를 보내 서버의 선택을 받는다.
   const [scope, setScope] = useState<UploaderScope>(null);
@@ -210,10 +290,11 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
     setBusy("transcribe");
     setError("");
     setMessage("");
-    const tally = { transcribed: 0, failed: 0, unclear: 0 };
+    const tally = { transcribed: 0, failed: 0, unclear: 0, cleared: 0 };
     try {
       let rounds = 0;
       let remaining = 0;
+      let noImage = 0;
       let auto: AutoSummary | undefined;
       let note = "";
       do {
@@ -223,7 +304,9 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
         tally.failed += Number(data.failed ?? 0);
         tally.unclear += Number(data.unclear ?? 0);
         remaining = Number(data.remaining ?? 0);
+        noImage = Number(data.noImage ?? 0);
         auto = (data.auto as AutoSummary | undefined) ?? auto;
+        tally.cleared += Number((data.auto as AutoSummary | undefined)?.cleared ?? 0);
         note = typeof data.message === "string" ? data.message : "";
         if (remaining > 0) {
           setMessage(`손글씨를 읽는 중… ${tally.transcribed}칸 읽음 · 남은 ${remaining}칸`);
@@ -237,8 +320,16 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
           parts.push(`${tally.unclear}칸은 판독이 불확실해 점수를 매기지 않았습니다. 손글씨를 보고 고치거나 점수를 정해 주세요.`);
         }
         parts.push("0점은 손글씨를 확인해 주세요.");
+        if (noImage > 0) {
+          parts.push(
+            `손글씨 칸 이미지가 없는 ${noImage}칸은 읽을 수 없어 맨 위 '이미지 없음' 묶음에 남았습니다 — 같은 스캔 파일을 다시 올리거나 종이를 보고 학생별로 매겨 주세요.`,
+          );
+        }
       } else if (tally.failed === 0) {
         parts.push(note || "새로 읽을 답안이 없습니다.");
+      }
+      if (tally.cleared > 0) {
+        parts.push(`못 읽은 답안에 근거 없이 남아 있던 자동 점수 ${tally.cleared}개를 지웠습니다.`);
       }
       if (tally.failed > 0) {
         parts.push(
@@ -271,6 +362,8 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
         );
       } else if (action === "gradeGroup") {
         setMessage(`${data.graded}명에게 점수를 매겼습니다. 자동 채점이 다시 돌아도 바뀌지 않습니다.`);
+      } else if (action === "gradeOne") {
+        setMessage("점수를 저장했습니다. 선생님이 매긴 점수라 자동 채점이 바꾸지 않습니다.");
       } else if (action === "setAnswer") {
         setMessage(`정답을 저장하고 자동 채점을 다시 했습니다 — ${autoText(auto)}.`);
       } else if (action === "fixText") {
@@ -309,9 +402,14 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
   const autoCount = allMembers.filter((m) => m.source === "auto").length;
   const autoZero = allMembers.filter((m) => m.source === "auto" && (m.score ?? 0) <= 0.05).length;
   const unclearCount = allMembers.filter((m) => m.unclear && m.score === null).length;
-  // 다른 사람 범위 중 아직 채점이 안 끝난 곳 — '전체'로 합쳐 보기 전에 알아야 한다
-  const others = uploaders.filter((u) => u.key !== scope && !(scope === null));
-  const unfinishedOthers = scope === null ? [] : others.filter((u) => u.graded < u.gradable || u.reviewed < u.total);
+  // 못 읽은 답안 중 선생님이 아직 매기지 않은 것 — 이것이 남아 있으면 성적표를 만들 수 없다
+  const missingMembers = questions.flatMap((q) =>
+    q.groups.filter((g) => g.missing).flatMap((g) => g.members.map((m) => ({ ...m, why: g.missing }))),
+  );
+  const missingOpen = missingMembers.filter((m) => m.source !== "teacher");
+  const noImageOpen = missingOpen.filter((m) => m.why === "noImage").length;
+  // 아직 끝나지 않은 범위 — '전체'로 볼 때 누구 몫이 남았는지 알려 준다
+  const unfinished = uploaders.filter((u) => u.graded < u.gradable || u.reviewed < u.total);
 
   return (
     <div className="admin-shell">
@@ -387,8 +485,8 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
             }
             note={
               scope === null
-                ? unfinishedOthers.length > 0
-                  ? `아직 끝나지 않은 범위가 있습니다 — ${unfinishedOthers.map((u) => u.displayName).join(", ")}. 전체에서 매긴 점수는 그 사람의 답안지에도 들어갑니다.`
+                ? unfinished.length > 0
+                  ? `아직 끝나지 않은 범위가 있습니다 — ${unfinished.map((u) => u.displayName).join(", ")}. 전체에서 매긴 점수는 그 사람의 답안지에도 들어갑니다.`
                   : "모든 범위의 답안지를 함께 봅니다. 점수는 범위와 상관없이 학생에게 저장됩니다."
                 : "이 범위의 답안지만 읽고 채점합니다. 다른 분이 올린 답안지는 그분이 마친 뒤 '전체'에서 함께 보입니다."
             }
@@ -411,6 +509,15 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
             {unclearCount > 0 ? (
               <span className="need" title="손글씨 판독이 불확실해 점수를 매기지 않은 답안 — 손글씨를 보고 정해 주세요">
                 판독 불확실 <strong>{unclearCount}</strong>답안
+              </span>
+            ) : null}
+            {missingOpen.length > 0 ? (
+              <span
+                className="need"
+                title="손글씨를 아직 읽지 않았거나 칸 이미지가 없어 읽을 수 없는 답안 — 매기기 전에는 성적표를 만들 수 없습니다"
+              >
+                못 읽은 답안 <strong>{missingOpen.length}</strong>
+                {noImageOpen > 0 ? ` · 이미지 없음 ${noImageOpen}` : ""}
               </span>
             ) : null}
             {pendingReview > 0 ? (
@@ -530,7 +637,9 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                 )}
               </div>
 
-              {q.transcribed === 0 ? (
+              {/* 읽을 수 있는데 아직 안 읽은 답안뿐이면 안내만. 이미지가 없는 답안이 있으면
+                  손글씨 읽기로는 해결되지 않으므로 묶음을 보여 주어 학생별로 매기게 한다. */}
+              {q.transcribed === 0 && q.groups.every((g) => g.missing === "unread") ? (
                 <p className="subtle">
                   아직 손글씨를 읽지 않았습니다. 위의 <strong>손글씨 읽기</strong>를 눌러 주세요.
                 </p>
@@ -538,6 +647,90 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                 <div className="essay-groups">
                   {q.groups.map((group) => {
                     const groupId = `${q.no}:${group.key}`;
+                    if (group.missing) {
+                      // 못 읽은 답안 — 학생마다 답이 다르므로 묶음 점수 없이 학생별로 보여 주고 매긴다
+                      const done = group.members.filter((m) => m.source === "teacher" && m.score !== null).length;
+                      const noImage = group.missing === "noImage";
+                      return (
+                        <div className={`essay-group missing ${group.missing}`} key={groupId}>
+                          <div className="essay-group-head">
+                            <span className="essay-count">{group.members.length}명</span>
+                            <p className="essay-text">
+                              <em>{noImage ? "손글씨 칸 이미지가 없어 읽을 수 없는 답안" : "아직 손글씨를 읽지 않은 답안"}</em>
+                            </p>
+                            <span className={`essay-badge ${noImage ? "noimage" : "unread"}`}>
+                              {noImage ? "이미지 없음" : "읽기 전"}
+                            </span>
+                            <span className={`essay-score-chip ${done === group.members.length ? "full" : "none"}`}>
+                              학생별 채점 {done}/{group.members.length}
+                            </span>
+                          </div>
+                          <p className="essay-missing-note">
+                            {noImage
+                              ? "백지가 아닙니다 — 이미지가 저장되지 않아 읽지 못했을 뿐입니다. 같은 스캔 파일을 다시 올리면 이미지가 저장되어 손글씨를 읽을 수 있습니다. 급하면 아래 답안지 이미지나 종이를 보고 학생별로 점수를 매기거나, 답을 옮겨 적어 '고침'을 누르면 정답과 대조해 자동 채점합니다."
+                              : "위의 '손글씨 읽기'를 누르면 읽고 자동 채점합니다. 급하면 아래에서 학생별로 점수를 매길 수 있습니다."}
+                          </p>
+                          <div className="essay-crops">
+                            {group.members.map((member) => {
+                              const editKey = `${member.scanId}:${q.no}`;
+                              const sheetOpen = sheetPreview === editKey;
+                              return (
+                                <div className="essay-crop-row" key={member.scanId}>
+                                  <div className="essay-crop-head">
+                                    <strong>수험번호 {member.studentId ?? "—"}</strong>
+                                  </div>
+                                  {member.hasCrop ? (
+                                    <EssayCrop scanId={member.scanId} questionNo={q.no} />
+                                  ) : member.hasPreview ? (
+                                    <div className="essay-sheet-preview">
+                                      <button
+                                        type="button"
+                                        className="button tiny ghost"
+                                        onClick={() => setSheetPreview(sheetOpen ? null : editKey)}
+                                      >
+                                        {sheetOpen ? "답안지 닫기" : `답안지 전체 보기 — ${q.no}번 칸을 찾아 확인`}
+                                      </button>
+                                      {sheetOpen ? <ScanPreview scanId={member.scanId} /> : null}
+                                    </div>
+                                  ) : (
+                                    <p className="essay-crop-empty">
+                                      답안지 이미지도 저장되지 않았습니다. 종이 답안지를 보고 매기거나, 같은 스캔 파일을 다시 올려 주세요.
+                                    </p>
+                                  )}
+                                  {canEdit ? (
+                                    <>
+                                      <MemberScore
+                                        member={member}
+                                        point={q.point}
+                                        disabled={busy !== null}
+                                        onScore={(score) =>
+                                          void post("gradeOne", { questionNo: q.no, scanId: member.scanId, score }, editKey)
+                                        }
+                                      />
+                                      <div className="essay-fix">
+                                        <input
+                                          placeholder="학생 답을 옮겨 적으면 정답과 대조해 자동 채점합니다"
+                                          onChange={(e) => setEdits((prev) => ({ ...prev, [editKey]: e.target.value }))}
+                                        />
+                                        <button
+                                          className="button tiny secondary"
+                                          disabled={busy !== null || edits[editKey] === undefined}
+                                          onClick={() =>
+                                            post("fixText", { questionNo: q.no, scanId: member.scanId, text: edits[editKey] ?? "" }, editKey)
+                                          }
+                                        >
+                                          고침
+                                        </button>
+                                      </div>
+                                    </>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
                     const state = groupState(group, q.point);
                     const isOpen = openGroup === groupId;
                     const chipLabel =
@@ -696,7 +889,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                                     <EssayCrop scanId={member.scanId} questionNo={q.no} />
                                   ) : (
                                     <p className="essay-crop-empty">
-                                      이미지가 없습니다(전사 기능 이전 업로드).
+                                      손글씨 칸 이미지가 없습니다. 같은 스캔 파일을 다시 올리면 저장됩니다.
                                     </p>
                                   )}
                                   {canEdit ? (

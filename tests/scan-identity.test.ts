@@ -14,6 +14,7 @@ import {
   contentHashOf,
   essayCropPath,
   hashTag,
+  isStorageKeySafe,
   pageHash,
   randomTag,
   safeFilename,
@@ -55,7 +56,39 @@ test("보관함 경로 — 같은 파일명이라도 꼬리표가 다르면 다�
   assert.equal(essayCropPath("e1", "scan.pdf#p3", 26, "aaaaaaaaaa"), "e1/essays/aaaaaaaaaa_scan.pdf_p3__q26.jpg");
 });
 
-test("파일명은 보관함이 받는 글자만 남긴다", () => {
-  assert.equal(safeFilename("답안지 (1).jpg"), "답안지_1_.jpg");
+test("파일명은 보관함이 받는 글자(영문·숫자·._-)만 남긴다 — 한글은 보관함이 거부한다", () => {
+  assert.equal(safeFilename("답안지 (1).jpg"), "_1_.jpg");
   assert.equal(safeFilename("a/b\\c.png"), "a_b_c.png");
+  assert.equal(safeFilename("권세빈.pdf#p1"), "_.pdf_p1");
+  assert.equal(safeFilename("Café résumé.jpg"), "Cafe_resume.jpg");
+  assert.equal(safeFilename(""), "scan");
+  // 너무 긴 이름은 확장자 쪽을 남긴다
+  const long = safeFilename(`${"a".repeat(200)}.pdf`);
+  assert.equal(long.length, 80);
+  assert.ok(long.endsWith(".pdf"));
+});
+
+test("보관함 규칙 — 한글이 든 경로는 거부되고, 만드는 경로는 모두 통과한다", () => {
+  // 이 규칙 때문에 한글 이름의 스캔은 원본·미리보기·손글씨 칸 이미지가 저장되지 않았다
+  assert.ok(!isStorageKeySafe("e1/abc_권세빈.pdf"));
+  assert.ok(isStorageKeySafe("e1/abc_scan.pdf"));
+  const names = [
+    "권세빈.pdf",
+    "권세빈.pdf#p1",
+    "스캔 2026. 11. 3. 오후 5:40.pdf#p12",
+    "예비중3_반배치고사(신규).jpg",
+    "Café résumé.jpg",
+    "😀.png",
+    "",
+  ];
+  const tag = "0123456789";
+  for (const name of names) {
+    for (const path of [
+      scanOriginalPath("3f2a9c1e-0000-4000-8000-000000000001", name, tag),
+      scanPreviewPath("3f2a9c1e-0000-4000-8000-000000000001", name, tag),
+      essayCropPath("3f2a9c1e-0000-4000-8000-000000000001", name, 26, tag),
+    ]) {
+      assert.ok(isStorageKeySafe(path), `보관함이 거부할 경로: ${path}`);
+    }
+  }
 });

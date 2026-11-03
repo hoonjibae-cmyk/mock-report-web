@@ -5,6 +5,7 @@ import {
   applyGroupScore,
   autoGrade,
   autoVerdict,
+  clampEssayScore,
   groupEssayAnswers,
   parseAcceptedAnswers,
   type CurrentScore,
@@ -44,6 +45,7 @@ export const maxDuration = 300;
  *                                      남으면 remaining 으로 알려 화면이 이어서 부른다)
  *       { action: "autoGrade" }          자동 채점(선생님 점수는 그대로)
  *       { action: "gradeGroup", ... }    한 묶음 전체에 같은 점수 — 선생님 점수가 된다
+ *       { action: "gradeOne", ... }      학생 한 명의 한 칸에 점수 — 못 읽은 답안(학생마다 답이 다르다)용
  *       { action: "fixText", ... }       전사를 고친다(그 학생의 자동 점수는 다시 매긴다)
  *       { action: "setAnswer", ... }     정답을 넣거나 고치고 자동 채점을 다시 돈다
  */
@@ -72,12 +74,17 @@ function buildGroups(exam: Exam | null, scans: OmrScan[]) {
   return essayNumbers(exam, count).map((no) => {
     const key = String(no);
     const accepted = parseAcceptedAnswers(exam.answerKey?.[key]);
-    const answers: EssayAnswer[] = gradable.map((scan) => ({
-      scanId: scan.id,
-      studentId: scan.studentId,
-      text: scan.essayAnswers?.[key] ?? "",
-      unclear: scan.essayFlags?.[key] === "unclear",
-    }));
+    const answers: EssayAnswer[] = gradable.map((scan) => {
+      // 전사가 없으면 백지가 아니다 — 칸 이미지가 있으면 '아직 안 읽음', 없으면 '읽을 수 없음'
+      const read = key in (scan.essayAnswers ?? {});
+      return {
+        scanId: scan.id,
+        studentId: scan.studentId,
+        text: read ? (scan.essayAnswers?.[key] ?? "") : "",
+        unclear: read && scan.essayFlags?.[key] === "unclear",
+        missing: read ? undefined : scan.essayCrops?.[key] ? "unread" : "noImage",
+      };
+    });
     return {
       no,
       point: pointFor(exam, no),
@@ -108,29 +115,47 @@ export interface AutoSummary {
   zeroed: number;
   /** 선생님 점수라 건드리지 않은 답안 */
   kept: number;
+  /** 지금은 판정할 수 없어 지운 예전 자동 점수(못 읽은 답안에 남아 있던 0점 등) */
+  cleared: number;
 }
 
-/** 자동 채점을 돌리고 저장한다 — 일치는 만점, 오답으로 보이거나 백지는 0점, 선생님 점수는 그대로 */
+/**
+ * 자동 채점을 돌리고 저장한다 — 일치는 만점, 오답으로 보이거나 백지는 0점, 선생님 점수는 그대로.
+ * 못 읽은 답안에 남은 자동 점수는 지운다. 값이 그대로인 칸은 다시 쓰지 않는다 — 손글씨를
+ * 나눠 읽는 동안 몇 번이고 돌기 때문이다.
+ */
 async function runAutoGrade(exam: Exam, scans: OmrScan[]): Promise<AutoSummary> {
-  const summary: AutoSummary = { applied: 0, zeroed: 0, kept: 0 };
-  const scoreUpdates = new Map<string, Record<string, number>>();
-  const sourceUpdates = new Map<string, Record<string, EssayGradeSource>>();
+  const summary: AutoSummary = { applied: 0, zeroed: 0, kept: 0, cleared: 0 };
+  const byId = new Map(scans.map((scan) => [scan.id, scan]));
+  const updates = new Map<string, { scores: Record<string, number | null>; sources: Record<string, EssayGradeSource | null> }>();
+  const entry = (scanId: string) => {
+    const found = updates.get(scanId) ?? { scores: {}, sources: {} };
+    updates.set(scanId, found);
+    return found;
+  };
   for (const q of buildGroups(exam, scans)) {
+    const qk = String(q.no);
     const result = autoGrade(q.groups, q.point, { accepted: q.accepted, current: currentScores(scans, q.no) });
     summary.kept += result.kept;
     for (const [scanId, score] of Object.entries(result.scores)) {
-      const scores = scoreUpdates.get(scanId) ?? {};
-      scores[String(q.no)] = score;
-      scoreUpdates.set(scanId, scores);
-      const sources = sourceUpdates.get(scanId) ?? {};
-      sources[String(q.no)] = "auto";
-      sourceUpdates.set(scanId, sources);
       if (score >= q.point - 1e-9) summary.applied += 1;
       else summary.zeroed += 1;
+      const scan = byId.get(scanId);
+      const unchanged = scan?.essayScores?.[qk] === score && scan?.essayScoreSources?.[qk] === "auto";
+      if (unchanged) continue;
+      const e = entry(scanId);
+      e.scores[qk] = score;
+      e.sources[qk] = "auto";
+    }
+    for (const scanId of result.cleared) {
+      summary.cleared += 1;
+      const e = entry(scanId);
+      e.scores[qk] = null;
+      e.sources[qk] = null;
     }
   }
-  for (const [scanId, scores] of scoreUpdates) {
-    await patchScanEssay(scanId, { scores, sources: sourceUpdates.get(scanId) ?? {} });
+  for (const [scanId, patch] of updates) {
+    await patchScanEssay(scanId, patch);
   }
   return summary;
 }
@@ -149,6 +174,7 @@ function serialize(questions: ReturnType<typeof buildGroups>, scans: OmrScan[]) 
       matchesKey: group.matchesKey,
       blank: group.blank,
       unclear: group.unclear,
+      missing: group.missing,
       members: group.members.map((member) => {
         const scan = byId.get(member.scanId);
         const score = scan?.essayScores?.[String(q.no)];
@@ -159,6 +185,8 @@ function serialize(questions: ReturnType<typeof buildGroups>, scans: OmrScan[]) 
           // 출처를 모르는 옛 점수는 선생님 것으로 본다
           source: typeof score === "number" ? (scan?.essayScoreSources?.[String(q.no)] ?? "teacher") : null,
           hasCrop: Boolean(scan?.essayCrops?.[String(q.no)]),
+          // 칸 이미지가 없을 때 답안지 전체 미리보기로라도 보게 한다
+          hasPreview: Boolean(scan?.previewPath),
           unclear: scan?.essayFlags?.[String(q.no)] === "unclear",
         };
       }),
@@ -259,14 +287,28 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         }
       }
 
+      // 손글씨 칸 이미지가 없어 읽을 수 없는 칸 — 다시 올리거나 종이를 보고 매겨야 한다
+      const noImage = gradable.reduce(
+        (sum, scan) =>
+          sum +
+          numbers.filter((no) => !(String(no) in (scan.essayAnswers ?? {})) && !scan.essayCrops?.[String(no)]).length,
+        0,
+      );
+
       if (candidates.length === 0) {
+        // 읽을 것은 없어도 자동 채점은 돈다 — 못 읽은 답안에 남아 있던 예전 자동 0점을 지운다
+        const auto = await runAutoGrade(exam, scans);
         return respond({
           transcribed: 0,
           failed: 0,
           unclear: 0,
           remaining: 0,
+          noImage,
+          auto,
           message:
-            "새로 읽을 답안이 없습니다. 이 기능이 생기기 전에 올린 답안지라면 스캔을 다시 올려 주세요.",
+            noImage > 0
+              ? `손글씨 칸 이미지가 없는 답안 ${noImage}칸은 읽을 수 없습니다. 같은 스캔 파일을 다시 올리면 이미지가 저장되고, 급하면 맨 위 '이미지 없음' 묶음에서 종이를 보고 학생별로 점수를 매겨 주세요.`
+              : "새로 읽을 답안이 없습니다.",
         });
       }
 
@@ -312,10 +354,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         }
       }
 
-      // 다 읽었을 때만 자동 채점 — 중간 묶음마다 돌리면 같은 답안지를 여러 번 고쳐 쓴다
-      const auto =
-        remaining === 0 ? await runAutoGrade(exam, filterByUploader(await listScans(id), scope)) : undefined;
-      return respond({ transcribed, failed, unclear, remaining, auto });
+      // 읽은 만큼 바로 자동 채점 — 바뀐 칸만 다시 쓰므로 나눠 읽는 동안 여러 번 돌아도 가볍다.
+      // 중간에 끊겨도 읽은 답안의 점수가 예전 판정(못 읽은 칸의 0점 등)으로 남지 않는다.
+      const auto = await runAutoGrade(exam, filterByUploader(await listScans(id), scope));
+      return respond({ transcribed, failed, unclear, remaining, noImage, auto });
     }
 
     // --- 자동 채점: 선생님 점수는 그대로, 나머지는 일치=만점 · 오답·백지=0점 ---
@@ -339,6 +381,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!question || !group) {
         return NextResponse.json({ error: "채점할 답안 묶음을 찾지 못했습니다." }, { status: 404 });
       }
+      // 못 읽은 답안 묶음은 학생마다 답이 다르다 — 한 점수를 모두에게 줄 수 없다
+      if (group.missing) {
+        return NextResponse.json(
+          { error: "아직 읽지 못한 답안은 학생마다 답이 달라 한 번에 매길 수 없습니다. 학생별로 매겨 주세요." },
+          { status: 400 },
+        );
+      }
 
       const qk = String(no);
       const scores = applyGroupScore(group, score, question.point);
@@ -347,6 +396,26 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         await patchScanEssay(scanId, { scores: { [qk]: value }, sources: { [qk]: "teacher" }, flags: { [qk]: null } });
       }
       return respond({ graded: Object.keys(scores).length });
+    }
+
+    // --- 학생별 채점: 못 읽은 답안(손글씨 칸 이미지가 없거나 아직 안 읽음)을 종이·미리보기를 보고 매긴다 ---
+    if (body.action === "gradeOne") {
+      const no = Number(body.questionNo);
+      const scanId = String(body.scanId ?? "");
+      if (!numbers.includes(no) || !scanId) {
+        return NextResponse.json({ error: "문항 또는 답안지를 찾지 못했습니다." }, { status: 400 });
+      }
+      const score = Number(body.score);
+      if (!Number.isFinite(score)) {
+        return NextResponse.json({ error: "점수를 숫자로 입력해 주세요." }, { status: 400 });
+      }
+      if (!gradable.some((scan) => scan.id === scanId)) {
+        return NextResponse.json({ error: "검수를 마친 답안지에만 점수를 매길 수 있습니다." }, { status: 404 });
+      }
+      const qk = String(no);
+      const value = clampEssayScore(score, pointFor(exam, no));
+      await patchScanEssay(scanId, { scores: { [qk]: value }, sources: { [qk]: "teacher" }, flags: { [qk]: null } });
+      return respond({ graded: 1 });
     }
 
     // --- 전사 정정: 잘못 읽은 답안을 사람이 고친다 ---
@@ -400,7 +469,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     return NextResponse.json(
-      { error: "action은 transcribe · autoGrade · gradeGroup · fixText · setAnswer 중 하나여야 합니다." },
+      { error: "action은 transcribe · autoGrade · gradeGroup · gradeOne · fixText · setAnswer 중 하나여야 합니다." },
       { status: 400 },
     );
   } catch (error) {

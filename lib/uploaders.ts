@@ -8,6 +8,7 @@
  *
  * 이 파일은 화면(클라이언트)에서도 쓰므로 서버 전용 모듈을 들이지 않는다.
  */
+import { essayCellGraded } from "@/lib/essay-grading";
 
 /** 올린 사람 기록이 없는 답안지(이 기능 전에 올린 것)의 범위 열쇠 */
 export const NO_UPLOADER = "__none__";
@@ -128,6 +129,7 @@ export function summarizeEssayProgress(
       studentId: string | null;
       essayAnswers: Record<string, string>;
       essayScores: Record<string, number>;
+      essayScoreSources?: Record<string, string>;
       essayFlags?: Record<string, string>;
     }
   >,
@@ -140,9 +142,8 @@ export function summarizeEssayProgress(
     const own = scans.filter((scan) => scopeKeyOf(scan) === entry.key);
     const gradable = own.filter((scan) => scan.status === "reviewed" && scan.studentId);
     const transcribed = gradable.filter((scan) => essayKeys.every((key) => key in (scan.essayAnswers ?? {})));
-    const graded = gradable.filter((scan) =>
-      essayKeys.every((key) => typeof scan.essayScores?.[key] === "number"),
-    );
+    // 못 읽은 답안에 자동 점수만 있는 칸은 채점된 것으로 세지 않는다(성적표 생성 확인과 같은 기준)
+    const graded = gradable.filter((scan) => essayKeys.every((key) => essayCellGraded(scan, key)));
     const unclear = gradable.reduce(
       (sum, scan) => sum + essayKeys.filter((key) => scan.essayFlags?.[key] === "unclear").length,
       0,

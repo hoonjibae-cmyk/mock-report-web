@@ -14,6 +14,8 @@ import {
   applyGroupScore,
   autoGrade,
   autoVerdict,
+  clampEssayScore,
+  essayCellGraded,
   essayProgress,
   groupEssayAnswers,
   matchesAccepted,
@@ -246,4 +248,81 @@ test("한 답안의 자동 판정도 불확실하면 일치할 때만 만점이�
   assert.equal(autoVerdict("He is looking forward to see you.", KEY, 4, true), null);
   // 사람이 고쳐 쓴 글은 확실한 글이다(unclear 기본값 false)
   assert.equal(autoVerdict("", KEY, 4), 0);
+});
+
+test("아직 글로 옮기지 못한 답안은 백지가 아니다 — 이유별로 따로, 맨 위에 묶인다", () => {
+  const groups = groupEssayAnswers(
+    [
+      a("s1", ""), // 확실한 백지
+      { ...a("s2", ""), missing: "noImage" }, // 손글씨 칸 이미지 없음
+      { ...a("s3", "ignored"), missing: "unread" }, // 아직 안 읽음 — 글은 무시한다
+      { ...a("s4", ""), missing: "noImage" },
+      a("s5", "He's looking forward to seeing you"),
+    ],
+    KEY,
+  );
+  assert.equal(groups.length, 4);
+  assert.deepEqual(groups.slice(0, 2).map((g) => g.missing).sort(), ["noImage", "unread"], "못 읽은 묶음이 맨 위");
+  const noImage = groups.find((g) => g.missing === "noImage");
+  assert.deepEqual(noImage?.members.map((m) => m.scanId), ["s2", "s4"]);
+  assert.ok(noImage && !noImage.blank && !noImage.matchesKey && noImage.text === "");
+  assert.equal(groups.find((g) => g.missing === "unread")?.text, "", "못 읽은 답안의 글은 보여 주지 않는다");
+  assert.ok(groups[2].matchesKey);
+  assert.ok(groups[3].blank && groups[3].members[0].scanId === "s1", "확실한 백지만 맨 뒤 백지 묶음");
+});
+
+test("자동 채점은 못 읽은 답안에 점수를 주지 않고 예전 자동 0점은 지운다 — 선생님 점수는 그대로", () => {
+  // 손글씨 칸 이미지가 저장되지 않아 못 읽었는데, 예전 버전이 백지로 보고 자동 0점을 매긴 사례
+  const groups = groupEssayAnswers(
+    [
+      { ...a("s1", ""), missing: "noImage" },
+      { ...a("s2", ""), missing: "noImage" },
+      { ...a("s3", ""), missing: "unread" },
+      a("s4", ""),
+    ],
+    KEY,
+  );
+  const result = autoGrade(groups, 4, {
+    accepted: KEY,
+    current: {
+      s1: { score: 0, source: "auto" },
+      s2: { score: 3, source: "teacher" },
+      s4: { score: 0, source: "auto" },
+    },
+  });
+  assert.deepEqual(result.scores, { s4: 0 }, "확실한 백지만 0점");
+  assert.deepEqual(result.cleared, ["s1"], "못 읽은 답안의 자동 0점은 지운다");
+  assert.equal(result.kept, 1, "선생님이 종이를 보고 매긴 점수는 그대로");
+});
+
+test("판정할 수 없게 된 답안의 예전 자동 점수도 지운다 — 정답을 지운 경우", () => {
+  const groups = groupEssayAnswers([a("s1", "He is looking forward to see you.")], []);
+  const result = autoGrade(groups, 4, { accepted: [], current: { s1: { score: 0, source: "auto" } } });
+  assert.deepEqual(result.scores, {});
+  assert.deepEqual(result.cleared, ["s1"]);
+});
+
+test("성적표 전 확인 — 못 읽은 답안에 자동 점수만 있으면 채점 안 된 칸이다", () => {
+  const scan = {
+    essayScores: { "26": 0, "27": 0, "28": 4, "29": 2 },
+    essayScoreSources: { "26": "auto", "27": "auto", "28": "auto" } as Record<string, string>,
+    essayAnswers: { "27": "", "28": "He is looking forward to seeing you." },
+  };
+  assert.equal(essayCellGraded(scan, "26"), false, "못 읽은 칸의 자동 0점");
+  assert.equal(essayCellGraded(scan, "27"), true, "읽어 보니 백지 — 자동 0점이 맞다");
+  assert.equal(essayCellGraded(scan, "28"), true);
+  assert.equal(essayCellGraded(scan, "29"), true, "출처 없는 옛 점수(엑셀)는 선생님 것");
+  assert.equal(essayCellGraded(scan, "30"), false, "점수 없음");
+  assert.equal(
+    essayCellGraded({ essayScores: { "26": 3 }, essayScoreSources: { "26": "teacher" } }, "26"),
+    true,
+    "종이를 보고 매긴 점수",
+  );
+});
+
+test("점수 저장값 — 범위 안으로, 만점은 배점 그대로, 부분점수는 소수 첫째 자리", () => {
+  assert.equal(clampEssayScore(99, 4), 4);
+  assert.equal(clampEssayScore(-1, 4), 0);
+  assert.equal(clampEssayScore(1.55, 4), 1.6);
+  assert.equal(clampEssayScore(100 / 45, 100 / 45), 100 / 45);
 });

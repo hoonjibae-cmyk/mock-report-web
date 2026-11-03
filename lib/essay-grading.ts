@@ -30,6 +30,15 @@ export interface CurrentScore {
   source: EssayGradeSource;
 }
 
+/**
+ * 아직 글로 옮기지 못한 답안 — **백지가 아니다.**
+ *   unread   손글씨 칸 이미지는 있는데 아직 읽지 않았다('손글씨 읽기'로 읽힌다)
+ *   noImage  손글씨 칸 이미지가 없어 읽을 수 없다(다시 올리거나 종이를 보고 매긴다)
+ * 예전에는 이 둘을 빈 글로 보아 백지 묶음에 넣고 자동 0점을 매겼다. 학생이 쓴 답이
+ * 통째로 0점이 되어 반배정 요청까지 나간 일이 있었다.
+ */
+export type EssayMissing = "unread" | "noImage";
+
 export interface EssayAnswer {
   scanId: string;
   studentId: string | null;
@@ -37,11 +46,13 @@ export interface EssayAnswer {
   text: string;
   /** 손글씨 판독이 불확실한가 — 같은 글이라도 확실한 답안과 따로 묶는다 */
   unclear?: boolean;
+  /** 전사가 없다 — 있으면 text 는 무시하고 따로 묶으며 자동 채점하지 않는다 */
+  missing?: EssayMissing;
 }
 
 /** 같은 답안끼리 묶은 결과 */
 export interface EssayGroup {
-  /** 비교용으로 다듬은 문자열 — 묶음의 열쇠(불확실 묶음은 UNCLEAR_PREFIX 로 시작) */
+  /** 비교용으로 다듬은 문자열 — 묶음의 열쇠(불확실 묶음은 UNCLEAR_PREFIX, 미판독 묶음은 MISSING_PREFIX 로 시작) */
   key: string;
   /** 화면에 보여줄 대표 원문(묶음에서 가장 흔한 표기) */
   text: string;
@@ -53,13 +64,26 @@ export interface EssayGroup {
   blank: boolean;
   /** 손글씨 판독이 불확실한 묶음 — 사람이 봐야 한다 */
   unclear: boolean;
+  /**
+   * 아직 글로 옮기지 못한 답안들 — 학생마다 답이 다르므로 묶음 한 번에 점수를 줄 수
+   * 없고, 자동 채점도 하지 않는다. null 이면 보통 묶음.
+   */
+  missing: EssayMissing | null;
 }
 
 /** 불확실한 답안의 묶음 열쇠 앞에 붙는 표시 — 다듬은 답안 글에는 나올 수 없는 글자 */
 export const UNCLEAR_PREFIX = "\u0001?";
+/** 미판독 답안의 묶음 열쇠 앞에 붙는 표시 — 뒤에 이유(unread · noImage)가 붙는다 */
+export const MISSING_PREFIX = "\u0001!";
 
 export function isUnclearKey(key: string): boolean {
   return key.startsWith(UNCLEAR_PREFIX);
+}
+
+function missingOfKey(key: string): EssayMissing | null {
+  if (!key.startsWith(MISSING_PREFIX)) return null;
+  const reason = key.slice(MISSING_PREFIX.length);
+  return reason === "unread" || reason === "noImage" ? reason : null;
 }
 
 /**
@@ -112,10 +136,15 @@ export function groupEssayAnswers(answers: EssayAnswer[], accepted: string[]): E
   const buckets = new Map<string, { texts: Map<string, number>; members: EssayAnswer[] }>();
 
   for (const answer of answers) {
-    const norm = normalizeEssay(answer.text);
-    const key = answer.unclear ? UNCLEAR_PREFIX + norm : norm;
+    // 글로 옮기지 못한 답안은 글이 없으니 이유별로만 묶는다 — 빈 글과 섞이면 백지가 된다
+    const norm = answer.missing ? "" : normalizeEssay(answer.text);
+    const key = answer.missing
+      ? MISSING_PREFIX + answer.missing
+      : answer.unclear
+        ? UNCLEAR_PREFIX + norm
+        : norm;
     const entry = buckets.get(key) ?? { texts: new Map<string, number>(), members: [] };
-    const raw = (answer.text ?? "").trim();
+    const raw = answer.missing ? "" : (answer.text ?? "").trim();
     if (raw) entry.texts.set(raw, (entry.texts.get(raw) ?? 0) + 1);
     entry.members.push(answer);
     buckets.set(key, entry);
@@ -126,19 +155,23 @@ export function groupEssayAnswers(answers: EssayAnswer[], accepted: string[]): E
     const text =
       [...entry.texts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
       "";
+    const missing = missingOfKey(key);
     const unclear = isUnclearKey(key);
     return {
       key,
       text,
       members: entry.members,
-      matchesKey: matchesAccepted(text, accepted),
-      // 불확실하게 읽힌 빈칸은 백지가 아니라 '모름'이다
+      matchesKey: missing ? false : matchesAccepted(text, accepted),
+      // 불확실하게 읽힌 빈칸·아직 못 읽은 칸은 백지가 아니라 '모름'이다
       blank: key === "",
       unclear,
+      missing,
     };
   });
 
   groups.sort((a, b) => {
+    // 못 읽은 답안이 맨 위 — 사람이 손대기 전에는 채점이 끝날 수 없다
+    if (Boolean(a.missing) !== Boolean(b.missing)) return a.missing ? -1 : 1;
     if (a.blank !== b.blank) return a.blank ? 1 : -1;
     if (a.matchesKey !== b.matchesKey) return a.matchesKey ? -1 : 1;
     if (a.unclear !== b.unclear) return a.unclear ? -1 : 1;
@@ -158,6 +191,11 @@ export interface AutoGradeResult {
   pending: EssayGroup[];
   /** 선생님이 매긴 점수가 있어 건드리지 않은 학생 수 */
   kept: number;
+  /**
+   * 자동 점수를 지울 학생 — 지금은 판정할 수 없는데(못 읽음·불확실·정답 없음) 예전
+   * 판정의 자동 점수가 남아 있다. 남겨 두면 근거 없는 점수가 성적표에 들어간다.
+   */
+  cleared: string[];
 }
 
 /**
@@ -184,6 +222,8 @@ export function autoVerdict(
  * 선생님이 매긴 점수(source 'teacher')는 절대 덮어쓰지 않는다. 자동으로 매겼던
  * 점수는 다시 매긴다 — 정답을 고치거나 전사를 바로잡은 뒤 다시 돌리면 그에
  * 맞게 바뀌어야 한다. 정답이 없는 문항은 백지만 0점이고 나머지는 사람에게 남긴다.
+ * 아직 글로 옮기지 못한 답안은 판정하지 않는다 — 글이 없다고 백지는 아니다.
+ * 판정할 수 없는 학생에게 예전 자동 점수가 남아 있으면 지운다(cleared).
  */
 export function autoGrade(
   groups: EssayGroup[],
@@ -196,19 +236,22 @@ export function autoGrade(
   const autoKeys: string[] = [];
   const zeroKeys: string[] = [];
   const pending: EssayGroup[] = [];
+  const cleared: string[] = [];
   let kept = 0;
 
   for (const group of groups) {
-    // 불확실한 묶음은 일치할 때만 만점, 아니면 사람에게(0점으로 넘기지 않는다)
-    const verdict = group.matchesKey
-      ? point
-      : group.unclear
-        ? null
-        : group.blank
-          ? 0
-          : accepted.length > 0
+    // 못 읽은 답안은 판정하지 않는다. 불확실한 묶음은 일치할 때만 만점, 아니면 사람에게.
+    const verdict = group.missing
+      ? null
+      : group.matchesKey
+        ? point
+        : group.unclear
+          ? null
+          : group.blank
             ? 0
-            : null;
+            : accepted.length > 0
+              ? 0
+              : null;
     let scored = 0;
     let unresolved = 0;
     for (const member of group.members) {
@@ -218,6 +261,7 @@ export function autoGrade(
       }
       if (verdict === null) {
         unresolved += 1;
+        if (current[member.scanId]?.source === "auto") cleared.push(member.scanId);
         continue;
       }
       scores[member.scanId] = verdict;
@@ -226,7 +270,17 @@ export function autoGrade(
     if (scored > 0) (verdict === 0 ? zeroKeys : autoKeys).push(group.key);
     if (unresolved > 0) pending.push(group);
   }
-  return { scores, autoKeys, zeroKeys, pending, kept };
+  return { scores, autoKeys, zeroKeys, pending, kept, cleared };
+}
+
+/**
+ * 매긴 점수를 저장할 값으로 맞춘다 — 0~배점 사이로 자르고, 만점은 배점을 그대로,
+ * 부분점수는 소수점 첫째 자리로. 배점은 100점을 문항 수로 나눈 값이라(예: 100/45 =
+ * 2.222…) 만점을 반올림해 저장하면 다 맞혀도 총점이 100점에 못 미친다.
+ */
+export function clampEssayScore(score: number, point: number): number {
+  const bounded = Math.max(0, Math.min(point, score));
+  return bounded >= point - 1e-9 ? point : Math.round(bounded * 10) / 10;
 }
 
 /** 한 묶음 전체에 같은 점수를 매긴다 */
@@ -235,14 +289,31 @@ export function applyGroupScore(
   score: number,
   point: number,
 ): Record<string, number> {
-  const bounded = Math.max(0, Math.min(point, score));
-  // 만점은 배점을 그대로 둔다. 배점은 100점을 문항 수로 나눈 값이라
-  // (예: 100/45 = 2.222…) 반올림해 저장하면 만점을 받고도 총점이 100점에
-  // 못 미친다. 부분점수만 소수점 첫째 자리로 정리한다.
-  const clamped = bounded >= point - 1e-9 ? point : Math.round(bounded * 10) / 10;
+  const clamped = clampEssayScore(score, point);
   const out: Record<string, number> = {};
   for (const member of group.members) out[member.scanId] = clamped;
   return out;
+}
+
+/**
+ * 이 칸의 점수를 믿을 수 있는가 — 성적표·반배정 요청 전 확인과 진행 표시에 쓴다.
+ *
+ * 점수가 없으면 아니다. 글로 옮기지 못한 답안에 **자동** 점수만 있는 것도 아니다 —
+ * 예전 버전이 못 읽은 답안을 백지로 보고 0점을 매긴 흔적이고, 그대로 성적표를 만들면
+ * 학생이 쓴 답이 0점으로 나간다. 선생님이 매긴 점수는 글이 없어도 믿는다(종이를 보고
+ * 매겼거나 엑셀로 넣은 점수). 출처가 적혀 있지 않은 옛 점수는 선생님 것으로 본다.
+ */
+export function essayCellGraded(
+  scan: {
+    essayScores?: Record<string, number>;
+    essayScoreSources?: Record<string, string>;
+    essayAnswers?: Record<string, string>;
+  },
+  key: string,
+): boolean {
+  if (typeof scan.essayScores?.[key] !== "number") return false;
+  const source = scan.essayScoreSources?.[key] ?? "teacher";
+  return !(source === "auto" && !(key in (scan.essayAnswers ?? {})));
 }
 
 export interface EssayProgress {

@@ -108,3 +108,21 @@ test("주관식 진행 — 검수 마친 답안지 중 다 읽은 것·다 매�
   const lee = out.find((u) => u.key === "lee");
   assert.deepEqual([lee?.gradable, lee?.transcribed, lee?.graded, lee?.unclear], [1, 0, 0, 0]);
 });
+
+test("주관식 진행 — 못 읽은 답안에 자동 점수만 있으면 채점된 장으로 세지 않는다", () => {
+  const scans = [
+    s("a", "kim", "reviewed", {
+      essayAnswers: {},
+      essayScores: { "26": 0 },
+      essayScoreSources: { "26": "auto" },
+    }),
+    s("b", "kim", "reviewed", {
+      essayAnswers: {},
+      essayScores: { "26": 3 },
+      essayScoreSources: { "26": "teacher" },
+    }),
+  ];
+  const kim = summarizeEssayProgress(scans, ["26"], NAMES, "kim").find((u) => u.key === "kim");
+  assert.equal(kim?.graded, 1, "종이를 보고 선생님이 매긴 장만");
+  assert.equal(kim?.transcribed, 0);
+});
