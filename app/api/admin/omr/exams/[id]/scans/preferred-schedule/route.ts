@@ -7,9 +7,12 @@ import { downloadScanFile, listScans, updateScan } from "@/lib/omr-scans";
 import { enrollmentOf, preferredSchedule } from "@/lib/placement-policy";
 import {
   EMPTY_REREAD_SUMMARY,
+  batchUploadName,
   mergeScheduleFlags,
   rereadGroups,
   scheduleRead,
+  splitBatchName,
+  type RereadGroup,
   type RereadSummary,
 } from "@/lib/schedule-read";
 
@@ -60,6 +63,8 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     const { groups, missing } = rereadGroups(scans);
 
     const files: File[] = [];
+    // 엔진에 보낸 순서 → 원본 묶음. 이름에 묶음 번호를 붙여 같은 이름의 원본이 겹치지 않게 한다.
+    const sent: RereadGroup[] = [];
     const unavailable = [...missing];
     for (const group of groups) {
       const buffer = await downloadScanFile(group.path);
@@ -67,9 +72,9 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
         unavailable.push(...group.filenames);
         continue;
       }
-      files.push(
-        new File([new Uint8Array(buffer)], group.uploadName, { type: contentTypeFor(group.uploadName) }),
-      );
+      const name = batchUploadName(sent.length, group.uploadName);
+      sent.push(group);
+      files.push(new File([new Uint8Array(buffer)], name, { type: contentTypeFor(group.uploadName) }));
     }
 
     const spec = sheetSpecFor(exam);
@@ -79,13 +84,20 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
       // 미리보기·주관식 칸 이미지는 받지 않는다 — 선호 요일 칸만 보면 된다
       const read = await readScans(spec, files.slice(i, i + READ_BATCH), { preview: false });
       results.push(...read.results);
-      problems.push(...(read.problems ?? []).map((problem) => problem.filename));
+      problems.push(
+        ...(read.problems ?? []).map((problem) => splitBatchName(problem.filename)?.filename ?? problem.filename),
+      );
     }
 
-    const byFilename = new Map(scans.map((scan) => [scan.filename, scan]));
     const summary: RereadSummary = { ...EMPTY_REREAD_SUMMARY };
     for (const result of results) {
-      const scan = byFilename.get(result.filename);
+      // 파일명만으로 찾으면 같은 이름의 다른 답안지(다른 사람이 올린 것)에 들어갈 수 있다 —
+      // 그 결과를 낸 원본(보관 경로)과 쪽 이름이 모두 맞는 행만 고친다
+      const split = splitBatchName(result.filename);
+      const group = split ? sent[split.index] : undefined;
+      const scan = group && split
+        ? scans.find((row) => row.scanPath === group.path && row.filename === split.filename)
+        : undefined;
       if (!scan) continue;
       if (layoutMismatch(result)) {
         summary.mismatched += 1;

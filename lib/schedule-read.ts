@@ -138,6 +138,24 @@ export function baseFilename(name: string): string {
   return name.replace(/#p\d+$/, "");
 }
 
+/**
+ * 한 번의 판독 요청에 원본 여러 개를 넣을 때 붙이는 이름.
+ *
+ * 여러 사람의 스캐너는 같은 이름(Scan0001.pdf)을 붙인다. 같은 이름의 파일을 한 요청에
+ * 넣으면 판독 엔진의 임시 폴더에서 뒤 파일이 앞 파일을 덮어써 두 결과가 같은 종이에서
+ * 나오고, 결과를 파일명으로 행에 맞추면 다른 학생의 값이 들어간다. 묶음 번호를 앞에
+ * 붙여 이름을 겹치지 않게 하고, 돌아온 결과는 splitBatchName 으로 되돌린다.
+ */
+export function batchUploadName(index: number, uploadName: string): string {
+  return `g${index}__${uploadName}`;
+}
+
+/** 판독 결과 파일명("g3__Scan0001.pdf#p2")에서 묶음 번호와 원래 파일명을 되찾는다 */
+export function splitBatchName(filename: string): { index: number; filename: string } | null {
+  const match = /^g(\d+)__([\s\S]*)$/.exec(filename);
+  return match ? { index: Number(match[1]), filename: match[2] } : null;
+}
+
 export interface RereadGroup {
   /** Storage 경로 — PDF의 여러 쪽은 한 경로를 나눠 쓴다 */
   path: string;

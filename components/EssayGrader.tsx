@@ -31,6 +31,8 @@ interface Member {
   hasCrop: boolean;
   /** 답안지 전체 미리보기가 있는가 — 칸 이미지가 없을 때 대신 보여 준다 */
   hasPreview: boolean;
+  /** 원본 스캔이 보관되어 있는가 — 있으면 '손글씨 읽기'가 칸 이미지를 다시 만든다 */
+  hasOriginal: boolean;
   /** 손글씨 판독이 불확실 — 사람이 봐야 한다 */
   unclear: boolean;
 }
@@ -81,6 +83,16 @@ interface GradePayload {
   questions?: Question[];
   studentCount?: number;
   pendingReview?: number;
+}
+
+/** 보관된 원본으로 손글씨 칸 이미지를 다시 만든 결과(손글씨 읽기 응답) */
+interface RestoreReport {
+  restored: number;
+  noOriginal: number;
+  noOriginalFiles?: string[];
+  failed?: Array<{ filename: string; reason: string }>;
+  failedCount: number;
+  pending: number;
 }
 
 /** 화면이 '손글씨 읽기'를 이어서 부르는 최대 횟수 — 끝없이 도는 일을 막는 안전장치 */
@@ -290,10 +302,13 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
     setBusy("transcribe");
     setError("");
     setMessage("");
-    const tally = { transcribed: 0, failed: 0, unclear: 0, cleared: 0 };
+    const tally = { transcribed: 0, failed: 0, unclear: 0, cleared: 0, restored: 0, restoreFailed: 0 };
+    const restoreReasons: string[] = [];
     try {
       let rounds = 0;
       let remaining = 0;
+      let restorePending = 0;
+      let noOriginal = 0;
       let noImage = 0;
       let auto: AutoSummary | undefined;
       let note = "";
@@ -305,15 +320,31 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
         tally.unclear += Number(data.unclear ?? 0);
         remaining = Number(data.remaining ?? 0);
         noImage = Number(data.noImage ?? 0);
+        const restore = data.restore as RestoreReport | undefined;
+        if (restore) {
+          tally.restored += Number(restore.restored ?? 0);
+          tally.restoreFailed += Number(restore.failedCount ?? 0);
+          for (const item of restore.failed ?? []) restoreReasons.push(`${item.filename}: ${item.reason}`);
+          restorePending = Number(restore.pending ?? 0);
+          noOriginal = Number(restore.noOriginal ?? 0);
+        }
         auto = (data.auto as AutoSummary | undefined) ?? auto;
         tally.cleared += Number((data.auto as AutoSummary | undefined)?.cleared ?? 0);
         note = typeof data.message === "string" ? data.message : "";
-        if (remaining > 0) {
-          setMessage(`손글씨를 읽는 중… ${tally.transcribed}칸 읽음 · 남은 ${remaining}칸`);
+        if (remaining > 0 || restorePending > 0) {
+          setMessage(
+            `손글씨를 읽는 중… ${tally.transcribed}칸 읽음 · 남은 ${remaining}칸` +
+              (tally.restored > 0 || restorePending > 0
+                ? ` · 원본에서 다시 만든 답안지 ${tally.restored}장${restorePending > 0 ? `(남은 ${restorePending}장)` : ""}`
+                : ""),
+          );
         }
-      } while (remaining > 0 && rounds < MAX_TRANSCRIBE_ROUNDS);
+      } while ((remaining > 0 || restorePending > 0) && rounds < MAX_TRANSCRIBE_ROUNDS);
 
       const parts: string[] = [];
+      if (tally.restored > 0) {
+        parts.push(`보관된 원본으로 답안지 ${tally.restored}장의 손글씨 칸 이미지를 다시 만들어 읽었습니다.`);
+      }
       if (tally.transcribed > 0) {
         parts.push(`${tally.transcribed}칸을 읽고 자동 채점했습니다 — ${autoText(auto)}.`);
         if (tally.unclear > 0) {
@@ -328,6 +359,14 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
       } else if (tally.failed === 0) {
         parts.push(note || "새로 읽을 답안이 없습니다.");
       }
+      if (noOriginal > 0 && tally.transcribed > 0) {
+        parts.push(`답안지 ${noOriginal}장은 원본도 보관되어 있지 않아 이미지를 다시 만들 수 없습니다.`);
+      }
+      if (tally.restoreFailed > 0) {
+        parts.push(
+          `답안지 ${tally.restoreFailed}장은 보관된 원본을 쓰지 못했습니다 — ${restoreReasons.slice(0, 2).join(" / ")}${tally.restoreFailed > 2 ? " 외" : ""}.`,
+        );
+      }
       if (tally.cleared > 0) {
         parts.push(`못 읽은 답안에 근거 없이 남아 있던 자동 점수 ${tally.cleared}개를 지웠습니다.`);
       }
@@ -336,7 +375,9 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
           `${tally.failed}칸은 읽지 못했습니다(일시적인 오류). 잠시 뒤 '손글씨 읽기'를 다시 누르면 그 칸만 다시 읽습니다.`,
         );
       }
-      if (remaining > 0) parts.push(`아직 ${remaining}칸이 남았습니다. '손글씨 읽기'를 다시 눌러 주세요.`);
+      if (remaining > 0 || restorePending > 0) {
+        parts.push(`아직 남은 답안이 있습니다. '손글씨 읽기'를 다시 눌러 주세요.`);
+      }
       setMessage(parts.join(" "));
     } catch (err) {
       setError(err instanceof Error ? err.message : "처리 중 오류가 발생했습니다.");
@@ -456,7 +497,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                 className="button secondary"
                 disabled={busy !== null}
                 onClick={() => void transcribeAll()}
-                title="아직 읽지 않은 답안 칸만 읽습니다. 한 번에 120칸씩 읽고 남으면 이어서 읽습니다."
+                title="아직 읽지 않은 답안 칸만 읽습니다. 한 번에 120칸씩 읽고 남으면 이어서 읽습니다. 손글씨 칸 이미지가 빠진 답안지는 보관된 원본에서 먼저 다시 만듭니다."
               >
                 {busy === "transcribe" ? "읽는 중…" : "손글씨 읽기"}
               </button>
@@ -667,7 +708,9 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                           </div>
                           <p className="essay-missing-note">
                             {noImage
-                              ? "백지가 아닙니다 — 이미지가 저장되지 않아 읽지 못했을 뿐입니다. 같은 스캔 파일을 다시 올리면 이미지가 저장되어 손글씨를 읽을 수 있습니다. 급하면 아래 답안지 이미지나 종이를 보고 학생별로 점수를 매기거나, 답을 옮겨 적어 '고침'을 누르면 정답과 대조해 자동 채점합니다."
+                              ? group.members.some((m) => m.hasOriginal)
+                                ? "백지가 아닙니다 — 이미지가 저장되지 않아 읽지 못했을 뿐입니다. 원본 스캔이 보관된 답안지는 위의 '손글씨 읽기'를 누르면 원본에서 칸 이미지를 다시 만들어 읽습니다. 원본도 없는 답안지는 같은 스캔 파일을 다시 올리거나 종이를 보고 학생별로 매겨 주세요."
+                                : "백지가 아닙니다 — 이미지가 저장되지 않아 읽지 못했을 뿐입니다. 원본 스캔도 보관되어 있지 않아 다시 만들 수 없습니다. 같은 스캔 파일을 다시 올리면 이미지가 저장되어 읽을 수 있고, 급하면 종이를 보고 학생별로 점수를 매기거나 답을 옮겨 적어 '고침'을 눌러 주세요."
                               : "위의 '손글씨 읽기'를 누르면 읽고 자동 채점합니다. 급하면 아래에서 학생별로 점수를 매길 수 있습니다."}
                           </p>
                           <div className="essay-crops">
@@ -678,6 +721,11 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                                 <div className="essay-crop-row" key={member.scanId}>
                                   <div className="essay-crop-head">
                                     <strong>수험번호 {member.studentId ?? "—"}</strong>
+                                    {noImage ? (
+                                      <span className={`essay-badge ${member.hasOriginal ? "unread" : "noimage"}`}>
+                                        {member.hasOriginal ? "원본 있음 · 손글씨 읽기로 다시 만듦" : "원본 없음 · 다시 올려 주세요"}
+                                      </span>
+                                    ) : null}
                                   </div>
                                   {member.hasCrop ? (
                                     <EssayCrop scanId={member.scanId} questionNo={q.no} />

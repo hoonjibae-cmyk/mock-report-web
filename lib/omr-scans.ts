@@ -311,6 +311,10 @@ export interface UpdateScanInput {
   essayScoreSources?: Record<string, EssayGradeSource>;
   essayAnswers?: Record<string, string>;
   essayFlags?: Record<string, EssayFlag>;
+  /** 손글씨 칸 이미지 경로 — 보관된 원본에서 다시 만들었을 때만 바꾼다 */
+  essayCrops?: Record<string, string>;
+  /** 검수 미리보기 경로 — 보관된 원본에서 다시 만들었을 때만 바꾼다 */
+  previewPath?: string | null;
   status?: ScanStatus;
   reviewedBy?: string | null;
   listeningMode?: ListeningMode | null;
@@ -331,6 +335,8 @@ export async function updateScan(id: string, input: UpdateScanInput): Promise<Om
   if (input.essayScoreSources !== undefined) patch.essay_score_sources = input.essayScoreSources;
   if (input.essayAnswers !== undefined) patch.essay_answers = input.essayAnswers;
   if (input.essayFlags !== undefined) patch.essay_flags = input.essayFlags;
+  if (input.essayCrops !== undefined) patch.essay_crops = input.essayCrops;
+  if (input.previewPath !== undefined) patch.preview_path = input.previewPath;
   if (input.status !== undefined) patch.status = input.status;
   if (input.reviewedBy !== undefined) patch.reviewed_by = input.reviewedBy;
   if (input.listeningMode !== undefined) patch.listening_mode = input.listeningMode;

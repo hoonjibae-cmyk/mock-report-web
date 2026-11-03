@@ -18,6 +18,7 @@ import { getVisibleExam } from "@/lib/exam-access";
 import { downloadEssayCrop, listScans, patchScanEssay, type OmrScan } from "@/lib/omr-scans";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
 import { scriptOf, transcribeMany, TranscribeNotConfiguredError } from "@/lib/omr-transcribe";
+import { restoreEssayImages, type RestoreResult } from "@/lib/essay-restore";
 import { loadUploaderNames } from "@/lib/uploader-names";
 import { filterByUploader, parseScopeParam, summarizeEssayProgress, type UploaderScope } from "@/lib/uploaders";
 
@@ -42,7 +43,8 @@ export const maxDuration = 300;
  *
  * GET   현재 전사·채점 상태(묶음 목록) + 올린 사람별 진행
  * POST  { action: "transcribe" }        아직 읽지 않은 답안 칸을 읽는다(한 번에 상한만큼,
- *                                      남으면 remaining 으로 알려 화면이 이어서 부른다)
+ *                                      남으면 remaining 으로 알려 화면이 이어서 부른다).
+ *                                      칸 이미지가 빠진 답안지는 먼저 보관된 원본에서 다시 만든다.
  *       { action: "autoGrade" }          자동 채점(선생님 점수는 그대로)
  *       { action: "gradeGroup", ... }    한 묶음 전체에 같은 점수 — 선생님 점수가 된다
  *       { action: "gradeOne", ... }      학생 한 명의 한 칸에 점수 — 못 읽은 답안(학생마다 답이 다르다)용
@@ -54,6 +56,8 @@ export const maxDuration = 300;
 const TRANSCRIBE_BATCH = 120;
 /** 이만큼 읽을 때마다 저장한다 — 중간에 끊겨도 읽은 것은 남는다 */
 const SAVE_EVERY = 30;
+/** 손글씨 칸 이미지를 원본에서 다시 만드는 데 한 요청이 쓸 시간 — 나머지는 다음 요청으로 넘긴다 */
+const RESTORE_BUDGET_MS = 90_000;
 
 /** 이 시험의 주관식 문항 번호 */
 function essayNumbers(exam: { numQuestions: number }, count: number): number[] {
@@ -187,6 +191,8 @@ function serialize(questions: ReturnType<typeof buildGroups>, scans: OmrScan[]) 
           hasCrop: Boolean(scan?.essayCrops?.[String(q.no)]),
           // 칸 이미지가 없을 때 답안지 전체 미리보기로라도 보게 한다
           hasPreview: Boolean(scan?.previewPath),
+          // 원본 스캔이 보관되어 있으면 '손글씨 읽기'가 칸 이미지를 다시 만든다
+          hasOriginal: Boolean(scan?.scanPath),
           unclear: scan?.essayFlags?.[String(q.no)] === "unclear",
         };
       }),
@@ -275,9 +281,28 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         scriptByQuestion.set(no, scriptOf(parseAcceptedAnswers(exam.answerKey?.[String(no)])));
       }
 
+      // 손글씨 칸 이미지가 빠진 답안지는 보관된 원본으로 다시 만든다(원본이 있을 때만).
+      // 수험번호·답안·검수 상태는 그대로 두고 이미지만 채운 뒤, 아래에서 함께 읽는다.
+      const startedAt = Date.now();
+      const restore: RestoreResult = await restoreEssayImages(
+        exam,
+        gradable,
+        numbers.map(String),
+        startedAt + RESTORE_BUDGET_MS,
+      );
+      const readable = restore.restored > 0 ? gradableScans(filterByUploader(await listScans(id), scope)) : gradable;
+      const restoreReport = {
+        restored: restore.restored,
+        noOriginal: restore.noOriginal.length,
+        noOriginalFiles: restore.noOriginal.slice(0, 5),
+        failed: restore.failed.slice(0, 5),
+        failedCount: restore.failed.length,
+        pending: restore.pending,
+      };
+
       // 읽을 칸 — 전사가 없는 칸. 실패해 저장하지 못한 칸도 전사가 없으므로 여기 다시 들어온다.
       const candidates: Array<{ scan: OmrScan; question: number; path: string }> = [];
-      for (const scan of gradable) {
+      for (const scan of readable) {
         for (const no of numbers) {
           const qk = String(no);
           // 선생님이 이미 고쳐 둔 전사를 덮어쓰지 않는다
@@ -287,8 +312,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         }
       }
 
-      // 손글씨 칸 이미지가 없어 읽을 수 없는 칸 — 다시 올리거나 종이를 보고 매겨야 한다
-      const noImage = gradable.reduce(
+      // 손글씨 칸 이미지가 없어 읽을 수 없는 칸 — 원본도 없으면 다시 올리거나 종이를 보고 매겨야 한다
+      const noImage = readable.reduce(
         (sum, scan) =>
           sum +
           numbers.filter((no) => !(String(no) in (scan.essayAnswers ?? {})) && !scan.essayCrops?.[String(no)]).length,
@@ -297,23 +322,27 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       if (candidates.length === 0) {
         // 읽을 것은 없어도 자동 채점은 돈다 — 못 읽은 답안에 남아 있던 예전 자동 0점을 지운다
-        const auto = await runAutoGrade(exam, scans);
+        const auto = await runAutoGrade(exam, filterByUploader(await listScans(id), scope));
         return respond({
           transcribed: 0,
           failed: 0,
           unclear: 0,
           remaining: 0,
           noImage,
+          restore: restoreReport,
           auto,
           message:
             noImage > 0
-              ? `손글씨 칸 이미지가 없는 답안 ${noImage}칸은 읽을 수 없습니다. 같은 스캔 파일을 다시 올리면 이미지가 저장되고, 급하면 맨 위 '이미지 없음' 묶음에서 종이를 보고 학생별로 점수를 매겨 주세요.`
+              ? `손글씨 칸 이미지가 없는 답안 ${noImage}칸은 읽을 수 없습니다. 원본도 보관되어 있지 않아 다시 만들 수 없습니다 — 같은 스캔 파일을 다시 올리거나, 맨 위 '이미지 없음' 묶음에서 종이를 보고 학생별로 점수를 매겨 주세요.`
               : "새로 읽을 답안이 없습니다.",
         });
       }
 
       // 한 요청에 상한만큼만 — 수백 장을 한 번에 읽다 서버 시간이 끝나면 읽은 것까지 날아간다.
-      const batch = candidates.slice(0, TRANSCRIBE_BATCH);
+      // 원본에서 이미지를 다시 만드느라 시간을 썼으면 이번에는 덜 읽고 다음 요청에 넘긴다.
+      const spent = Date.now() - startedAt;
+      const batchSize = spent < 30_000 ? TRANSCRIBE_BATCH : spent < 100_000 ? Math.floor(TRANSCRIBE_BATCH / 2) : 0;
+      const batch = candidates.slice(0, batchSize);
       const remaining = candidates.length - batch.length;
       const model = await getAiModel();
       let transcribed = 0;
@@ -357,7 +386,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       // 읽은 만큼 바로 자동 채점 — 바뀐 칸만 다시 쓰므로 나눠 읽는 동안 여러 번 돌아도 가볍다.
       // 중간에 끊겨도 읽은 답안의 점수가 예전 판정(못 읽은 칸의 0점 등)으로 남지 않는다.
       const auto = await runAutoGrade(exam, filterByUploader(await listScans(id), scope));
-      return respond({ transcribed, failed, unclear, remaining, noImage, auto });
+      return respond({ transcribed, failed, unclear, remaining, noImage, restore: restoreReport, auto });
     }
 
     // --- 자동 채점: 선생님 점수는 그대로, 나머지는 일치=만점 · 오답·백지=0점 ---
