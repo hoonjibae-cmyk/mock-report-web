@@ -324,6 +324,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         examTypeLabel: EXAM_TYPE_LABELS[exam.examType],
         examTitle: exam.title,
         examDate: exam.examDate,
+        sourceScan: { id: scan.id, uploadedAt: scan.createdAt },
         academy: ACADEMY_NAME,
         student: {
           ...(exam.examType==='placement'?{enrollment:enrollmentOf(scan.enrollment)}:{}),

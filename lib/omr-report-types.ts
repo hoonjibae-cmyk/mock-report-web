@@ -138,6 +138,8 @@ export interface GenericReportData {
   examTypeLabel: string;
   examTitle: string;
   examDate: string | null;
+  /** 성적 산출에 사용한 답안지의 업로드 기록. 재산출일·시험 예정일과 구분한다. */
+  sourceScan?: { id: string; uploadedAt: string };
   academy: string;
   student: {
     /** 시험 응시 당시 재원 구분. 등록 이후에도 신입생 성적표 설명을 유지한다. */
