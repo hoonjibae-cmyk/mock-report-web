@@ -6,9 +6,12 @@ import { draftAreaNotes, draftOverviewComment, draftStudentComment } from "@/lib
 import { isGenericReport } from "@/lib/omr-report-types";
 import { pointFor } from "@/lib/omr-scoring";
 import { getAiModel } from "@/lib/app-settings";
+import { classifyAiError, describeAiError } from "@/lib/ai-errors";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+// 학생 한 명의 초안은 종합 평가·영역별 평가 두 호출(동시)에 각각 최대 두 번 시도가 들어간다.
+// 120초로는 영역이 많은 학생이 끊겼다 — 반에서 서너 명이 "안 된다"던 원인.
+export const maxDuration = 300;
 
 function asKeywords(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -74,6 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!data || data.exam_id !== id || !isGenericReport(data.report_data)) {
         return NextResponse.json({ error: "이 시험의 성적표가 아닙니다." }, { status: 404 });
       }
+      const started = Date.now();
       const result = await draftStudentComment(
         exam,
         data.report_data,
@@ -81,7 +85,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         model,
       );
       // 화면은 종합 평가와 영역별 서술을 따로 다룬다(등급은 성취율에서 이미 제안됨)
-      return NextResponse.json({ ok: true, draft: result.overall, areaDrafts: result.areas });
+      return NextResponse.json({ ok: true, draft: result.overall, areaDrafts: result.areas, elapsedMs: Date.now() - started });
     }
 
     if (body.target === "areaNotes") {
@@ -123,10 +127,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       { status: 400 },
     );
   } catch (error) {
-    console.error(error);
+    console.error("[ai-draft] 실패", error);
+    // 왜 실패했는지에 따라 선생님이 할 일이 다르다 — 종류를 함께 보내 화면이 다시 시도할지 정한다
+    const kind = classifyAiError(error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "AI 초안 생성 오류" },
-      { status: 500 },
+      { error: describeAiError(error), kind },
+      { status: kind === "rate_limit" ? 429 : kind === "config" ? 400 : 500 },
     );
   }
 }

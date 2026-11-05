@@ -1,13 +1,14 @@
 "use client";
 
 import TrendChart from "@/components/TrendChart";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import {
   AREA_RATINGS,
   COMMENT_STYLE_LABELS,
+  needsDraft,
   suggestRating,
   type CommentStyle,
   type AreaFeedback,
@@ -340,42 +341,125 @@ export default function OmrCommentsEditor({
     }
   }
 
-  async function draftStudent(row: StudentRow) {
+  /** 모두 생성 진행 상황 — null 이면 쉬는 중 */
+  const [batch, setBatch] = useState<{ done: number; total: number; current: string } | null>(null);
+  const stopBatch = useRef(false);
+
+  /**
+   * 학생 한 명의 초안을 받아 화면에 넣는다. 실패하면 이유를 던진다.
+   *
+   * 다시 눌러 볼 만한 실패(요청 몰림·시간 초과·빈 답)는 한 번 더 자동으로 시도한다 —
+   * 반에서 서너 명이 "안 된다"던 것의 대부분이 이 부류였다. 두 번째도 실패하면 이유를 보인다.
+   */
+  async function requestDraft(row: StudentRow): Promise<void> {
     const comment = commentFor(row);
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const res = await fetch(`/api/admin/omr/exams/${exam?.id}/comments/draft`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            target: "student",
+            reportId: row.reportId,
+            displayKeywords: comment.displayKeywords,
+            weaveKeywords: comment.weaveKeywords,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const kind = String(data.kind ?? "");
+          const error = new Error(data.error || (res.status === 504 ? "AI 응답이 너무 오래 걸려 중단했습니다." : "초안을 만들지 못했습니다."));
+          // 설정 문제는 다시 눌러도 같다 — 바로 알린다
+          if (kind === "config") throw error;
+          lastError = error;
+          if (attempt === 1) {
+            setMessage(`${row.studentName} 학생 초안을 다시 시도합니다 — ${error.message}`);
+            await new Promise((resolve) => setTimeout(resolve, res.status === 429 ? 8000 : 2000));
+            continue;
+          }
+          throw error;
+        }
+        // 영역별 서술은 AI가 준 것과 성취율에서 제안한 등급을 합쳐 채운다
+        const areaDrafts: Array<{ area: string; text: string }> = data.areaDrafts ?? [];
+        const stats = row.summary?.areas ?? [];
+        const areaFeedback = stats.map((stat) => {
+          const draft = areaDrafts.find((entry) => entry.area === stat.area);
+          const existing = comment.areaFeedback.find((entry) => entry.area === stat.area);
+          return {
+            area: stat.area,
+            rating: existing?.rating ?? suggestRating(stat.rate),
+            text: draft?.text ?? existing?.text ?? "",
+          };
+        });
+        setComment(row, { aiDraft: data.draft, personalFinal: data.draft, areaFeedback });
+        return;
+      } catch (err) {
+        // 네트워크가 끊긴 경우(fetch 자체 실패)도 한 번 더
+        const error = err instanceof Error ? err : new Error("초안 생성 중 오류가 발생했습니다.");
+        if (attempt === 2 || lastError === error) throw error;
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+    throw lastError ?? new Error("초안 생성 중 오류가 발생했습니다.");
+  }
+
+  async function draftStudent(row: StudentRow) {
     setBusy(`draft-${row.reportId}`);
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`/api/admin/omr/exams/${exam?.id}/comments/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target: "student",
-          reportId: row.reportId,
-          displayKeywords: comment.displayKeywords,
-          weaveKeywords: comment.weaveKeywords,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "초안을 만들지 못했습니다.");
-      // 영역별 서술은 AI가 준 것과 성취율에서 제안한 등급을 합쳐 채운다
-      const areaDrafts: Array<{ area: string; text: string }> = data.areaDrafts ?? [];
-      const stats = row.summary?.areas ?? [];
-      const areaFeedback = stats.map((stat) => {
-        const draft = areaDrafts.find((entry) => entry.area === stat.area);
-        const existing = comment.areaFeedback.find((entry) => entry.area === stat.area);
-        return {
-          area: stat.area,
-          rating: existing?.rating ?? suggestRating(stat.rate),
-          text: draft?.text ?? existing?.text ?? "",
-        };
-      });
-      setComment(row, { aiDraft: data.draft, personalFinal: data.draft, areaFeedback });
+      await requestDraft(row);
       setMessage(`${row.studentName} 학생의 초안이 생성되었습니다. 다듬은 뒤 저장하세요.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "초안 생성 중 오류가 발생했습니다.");
+      setError(
+        `${row.studentName} 학생: ${err instanceof Error ? err.message : "초안 생성 중 오류가 발생했습니다."}`,
+      );
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** 아직 초안도 최종 글도 없는 학생 — 모두 생성의 대상 */
+  const pendingRows = students.filter((row) => needsDraft(commentFor(row)));
+
+  /**
+   * 초안 없는 학생을 한 명씩 차례로 만든다.
+   *
+   * 열두 명을 한꺼번에 보내면 AI 요청이 몰려 거절되거나 느려져 몇 명이 빠진다.
+   * 한 명씩, 실패하면 한 번 더, 그래도 안 되면 이름과 이유를 남기고 다음으로 넘어간다.
+   */
+  async function draftAllPending() {
+    const targets = pendingRows;
+    if (targets.length === 0 || batch) return;
+    stopBatch.current = false;
+    setBusy("batch");
+    setError("");
+    setMessage("");
+    const failures: string[] = [];
+    let done = 0;
+    setBatch({ done, total: targets.length, current: targets[0].studentName });
+    for (const row of targets) {
+      if (stopBatch.current) break;
+      setBatch({ done, total: targets.length, current: row.studentName });
+      try {
+        await requestDraft(row);
+      } catch (err) {
+        failures.push(`${row.studentName}(${err instanceof Error ? err.message : "오류"})`);
+      }
+      done += 1;
+      setBatch({ done, total: targets.length, current: row.studentName });
+    }
+    setBatch(null);
+    setBusy(null);
+    const made = done - failures.length;
+    const stopped = stopBatch.current && done < targets.length;
+    setMessage(
+      `${made}명의 초안을 만들었습니다${stopped ? ` (${targets.length - done}명은 중단으로 남음)` : ""}. 각 학생의 글을 다듬은 뒤 저장하세요.`,
+    );
+    if (failures.length > 0) {
+      setError(`${failures.length}명은 만들지 못했습니다 — ${failures.join(", ")}. 해당 학생의 'AI 초안'을 다시 눌러 주세요.`);
     }
   }
 
@@ -590,7 +674,7 @@ export default function OmrCommentsEditor({
       </section>
 
       <section className="panel">
-        <div className="section-heading">
+        <div className="section-heading wrap">
           <div>
             <p className="eyebrow">개별</p>
             <h2>학생별 코멘트</h2>
@@ -600,7 +684,35 @@ export default function OmrCommentsEditor({
               적어 주세요.
             </p>
           </div>
+          {canEdit && aiEnabled && students.length > 0 ? (
+            <div className="toolbar">
+              {batch ? (
+                <button className="button secondary" type="button" onClick={() => { stopBatch.current = true; }}>
+                  중단
+                </button>
+              ) : (
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={busy !== null || pendingRows.length === 0}
+                  title="초안도 최종 글도 없는 학생만 한 명씩 차례로 만듭니다. 이미 쓴 글은 건드리지 않습니다."
+                  onClick={() => void draftAllPending()}
+                >
+                  초안 없는 학생 모두 생성{pendingRows.length > 0 ? ` (${pendingRows.length}명)` : ""}
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
+        {batch ? (
+          <div className="bulk-bar on" role="status" aria-live="polite">
+            <span>
+              초안 생성 중… <strong>{batch.done}</strong>/{batch.total}명
+              {batch.done < batch.total ? ` · 지금 ${batch.current} 학생` : ""}
+            </span>
+            <span className="subtle">한 명씩 차례로 만듭니다. 실패한 학생은 한 번 더 시도한 뒤 이름을 남깁니다.</span>
+          </div>
+        ) : null}
 
         {students.length === 0 ? (
           <p className="subtle">
@@ -639,10 +751,12 @@ export default function OmrCommentsEditor({
                       <div className="link-actions" style={{ marginLeft: "auto" }}>
                         <button
                           className="button tiny secondary"
-                          disabled={busy === `draft-${row.reportId}` || !aiEnabled}
+                          disabled={busy === `draft-${row.reportId}` || busy === "batch" || !aiEnabled}
                           onClick={() => draftStudent(row)}
                         >
-                          {busy === `draft-${row.reportId}` ? "초안 생성 중…" : "AI 초안"}
+                          {busy === `draft-${row.reportId}` || (batch && batch.current === row.studentName && batch.done < batch.total)
+                            ? "초안 생성 중…"
+                            : "AI 초안"}
                         </button>
                         <button
                           className="button tiny primary"

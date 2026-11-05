@@ -142,6 +142,14 @@ export function emptyTeacherComment(): TeacherComment {
   };
 }
 
+/**
+ * 아직 초안도 최종 문장도 없는 학생인가 — '초안 없는 학생 모두 생성'이 고르는 기준.
+ * 선생님이 이미 쓴 글(최종)이나 받아 둔 초안은 덮어쓰지 않는다.
+ */
+export function needsDraft(comment: Pick<TeacherComment, "aiDraft" | "personalFinal">): boolean {
+  return !(comment.personalFinal ?? "").trim() && !(comment.aiDraft ?? "").trim();
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => String(entry).trim()).filter(Boolean).slice(0, 12);
