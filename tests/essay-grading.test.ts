@@ -17,6 +17,9 @@ import {
   clampEssayScore,
   essayCellGraded,
   essayProgress,
+  essaySegments,
+  verifyDecision,
+  verifyPlan,
   groupEssayAnswers,
   matchesAccepted,
   normalizeEssay,
@@ -325,4 +328,95 @@ test("점수 저장값 — 범위 안으로, 만점은 배점 그대로, 부분�
   assert.equal(clampEssayScore(-1, 4), 0);
   assert.equal(clampEssayScore(1.55, 4), 1.6);
   assert.equal(clampEssayScore(100 / 45, 100 / 45), 100 / 45);
+});
+
+test("문장부호와 대소문자는 채점하지 않는다 — 어디에 찍었든 빠뜨렸든 같은 답", () => {
+  const key = normalizeEssay("He is looking forward to seeing you.");
+  assert.equal(normalizeEssay("he is, looking forward to seeing you?"), key, "쉼표·물음표가 엉뚱한 자리에 있어도");
+  assert.equal(normalizeEssay("HE IS LOOKING FORWARD TO SEEING YOU"), key, "대문자로만 써도");
+  assert.equal(normalizeEssay("He is looking forward. To seeing you!"), key, "문장 중간에 마침표를 찍어도");
+  assert.equal(normalizeEssay("Hes looking forward"), normalizeEssay("He’s looking forward."), "아포스트로피를 빠뜨려도");
+  assert.equal(normalizeEssay("It is well-known."), normalizeEssay("it is well known"), "줄표는 띄어쓰기로");
+  assert.equal(normalizeEssay("“Yes,” she said..."), "yes she said");
+  assert.ok(matchesAccepted("yes i do", ["Yes, I do."]));
+  // 철자·낱말은 여전히 채점한다
+  assert.ok(!matchesAccepted("He is looking foward to seeing you", KEY));
+});
+
+test("문장부호만 다른 답은 한 묶음으로 모인다", () => {
+  const groups = groupEssayAnswers([a("s1", "Yes, I do."), a("s2", "yes i do"), a("s3", "Yes I do!")], ["Yes, I do."]);
+  assert.equal(groups.length, 1);
+  assert.ok(groups[0].matchesKey);
+});
+
+test("낱말 단위 차이 — 다른 부분만 뽑고, 이어진 차이는 한 부분으로", () => {
+  assert.deepEqual(essaySegments("He is looking forward to seeing you.", "he is looking foward to see you"), [
+    { expected: "forward", read: "foward" },
+    { expected: "seeing", read: "see" },
+  ]);
+  assert.deepEqual(essaySegments("I want to go.", "I want go"), [{ expected: "to", read: "" }], "빠뜨린 낱말");
+  assert.deepEqual(essaySegments("I like it.", "I like the it"), [{ expected: "", read: "the" }], "더 쓴 낱말");
+  assert.deepEqual(essaySegments("a b c d", "a x y d"), [{ expected: "b c", read: "x y" }], "붙어 있는 차이");
+  assert.deepEqual(essaySegments("Yes, I do.", "yes i do"), [], "문장부호·대소문자는 차이가 아니다");
+});
+
+test("손글씨 대조 계획 — 대조할 답과 하지 않을 답", () => {
+  const opts = { hasCrop: true };
+  assert.equal(verifyPlan("He is looking forward to seeing you", KEY, opts), null, "정답과 같다");
+  assert.equal(verifyPlan("", KEY, opts), null, "확실한 백지 — 0점");
+  assert.equal(verifyPlan("He is looking foward", [], opts), null, "정답이 없으면 비교할 수 없다");
+  assert.equal(verifyPlan("He is looking foward to seeing you", KEY, { hasCrop: false }), null, "칸 이미지가 없다");
+  assert.equal(verifyPlan("He is looking foward to seeing you", KEY, { ...opts, teacherScored: true }), null, "선생님이 매겼다");
+  for (const flag of ["typed", "match", "mismatch", "review"] as const) {
+    assert.equal(verifyPlan("He is looking foward to seeing you", KEY, { ...opts, flag }), null, `이미 정함: ${flag}`);
+  }
+
+  const near = verifyPlan("He is looking foward to seeing you", KEY, opts);
+  assert.ok(near?.near, "한 낱말이 비슷하게 다르다 — 잘못 읽었을 수 있다");
+  assert.deepEqual(near?.segments, [{ expected: "forward", read: "foward" }]);
+  assert.equal(near?.expected, "He is looking forward to seeing you.");
+
+  const far = verifyPlan("I like apples very much", KEY, opts);
+  assert.equal(far?.near, false, "문장이 많이 다르다");
+  // 많이 다르면 문장 전체를 한 부분으로 대조한다(허용 답안 중 가까운 쪽)
+  assert.equal(far?.segments.length, 1);
+  assert.equal(far?.segments[0].read, "i like apples very much");
+  assert.ok(KEY.map((k) => normalizeEssay(k)).includes(far?.segments[0].expected ?? ""));
+
+  // 불확실하게 읽은 빈칸 — 정말 비었는지 대조한다
+  const blank = verifyPlan("", KEY, { ...opts, flag: "unclear" });
+  assert.equal(blank?.segments[0].read, "");
+  // 허용 답안이 여럿이면 가장 가까운 것과 대조한다
+  assert.equal(verifyPlan("Hes looking foward to seeing you", KEY, opts)?.expected, "He's looking forward to seeing you.");
+});
+
+test("손글씨 대조 결과로 정한다 — 정답대로 썼으면 만점, 다르게 썼으면 0점, 모르면 사람에게", () => {
+  const near = verifyPlan("He is looking foward to see you", KEY, { hasCrop: true })!;
+  assert.equal(near.segments.length, 2);
+  assert.equal(verifyDecision(near, ["expected", "expected"]), "match", "둘 다 잘못 읽었던 것");
+  assert.equal(verifyDecision(near, ["expected", "read"]), "mismatch", "하나는 학생이 정말 틀렸다");
+  assert.equal(verifyDecision(near, ["other", "expected"]), "mismatch");
+  assert.equal(verifyDecision(near, ["expected", "unclear"]), "review");
+  assert.equal(verifyDecision(near, ["expected"]), "review", "대답 수가 맞지 않으면 믿지 않는다");
+
+  const far = verifyPlan("I like apples very much", KEY, { hasCrop: true })!;
+  assert.equal(verifyDecision(far, ["read"]), "mismatch");
+  assert.equal(verifyDecision(far, ["other"]), "mismatch");
+  // 많이 다르게 읽힌 답을 '정답대로 썼다'고 하면 정답 쪽으로 끌려간 대답일 수 있다
+  assert.equal(verifyDecision(far, ["expected"]), "review");
+});
+
+test("손글씨 대조를 기다리는 답은 자동 채점이 점수를 바꾸지 않는다", () => {
+  const groups = groupEssayAnswers(
+    [
+      { ...a("s1", "He is looking foward to seeing you"), pending: true },
+      { ...a("s2", "He is looking foward to seeing you"), pending: true },
+      a("s3", "I like apples"),
+    ],
+    KEY,
+  );
+  const result = autoGrade(groups, 4, { accepted: KEY, current: { s2: { score: 0, source: "auto" } } });
+  assert.deepEqual(result.scores, { s3: 0 }, "대조가 필요 없는 답만 정한다");
+  assert.equal(result.waiting, 2);
+  assert.deepEqual(result.cleared, [], "대조 전에는 예전 자동 점수도 그대로 둔다");
 });

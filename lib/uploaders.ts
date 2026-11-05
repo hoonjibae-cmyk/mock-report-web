@@ -144,8 +144,14 @@ export function summarizeEssayProgress(
     const transcribed = gradable.filter((scan) => essayKeys.every((key) => key in (scan.essayAnswers ?? {})));
     // 못 읽은 답안에 자동 점수만 있는 칸은 채점된 것으로 세지 않는다(성적표 생성 확인과 같은 기준)
     const graded = gradable.filter((scan) => essayKeys.every((key) => essayCellGraded(scan, key)));
+    // 사람이 정해야 하는 칸 — 불확실하게 읽었거나 손글씨 대조로도 정하지 못했고, 아직 점수가 없다
     const unclear = gradable.reduce(
-      (sum, scan) => sum + essayKeys.filter((key) => scan.essayFlags?.[key] === "unclear").length,
+      (sum, scan) =>
+        sum +
+        essayKeys.filter((key) => {
+          const flag = scan.essayFlags?.[key];
+          return (flag === "unclear" || flag === "review") && typeof scan.essayScores?.[key] !== "number";
+        }).length,
       0,
     );
     return {

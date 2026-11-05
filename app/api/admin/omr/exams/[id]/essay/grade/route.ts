@@ -7,7 +7,11 @@ import {
   autoVerdict,
   clampEssayScore,
   groupEssayAnswers,
+  needsPerson,
   parseAcceptedAnswers,
+  verifyDecision,
+  verifyPlan,
+  type VerifyPlan,
   type CurrentScore,
   type EssayAnswer,
   type EssayFlag,
@@ -17,7 +21,7 @@ import { updateExamAnswerKey } from "@/lib/omr-exams";
 import { getVisibleExam } from "@/lib/exam-access";
 import { downloadEssayCrop, listScans, patchScanEssay, type OmrScan } from "@/lib/omr-scans";
 import { essayCountOf, pointFor } from "@/lib/omr-scoring";
-import { scriptOf, transcribeMany, TranscribeNotConfiguredError } from "@/lib/omr-transcribe";
+import { scriptOf, transcribeMany, TranscribeNotConfiguredError, verifyEssay } from "@/lib/omr-transcribe";
 import { restoreEssayImages, type RestoreResult } from "@/lib/essay-restore";
 import { loadUploaderNames } from "@/lib/uploader-names";
 import { filterByUploader, parseScopeParam, summarizeEssayProgress, type UploaderScope } from "@/lib/uploaders";
@@ -58,6 +62,10 @@ const TRANSCRIBE_BATCH = 120;
 const SAVE_EVERY = 30;
 /** 손글씨 칸 이미지를 원본에서 다시 만드는 데 한 요청이 쓸 시간 — 나머지는 다음 요청으로 넘긴다 */
 const RESTORE_BUDGET_MS = 90_000;
+/** 한 요청이 손글씨 대조까지 쓸 수 있는 시간 — 서버 함수 제한(300초) 안에서 자동 채점·저장할 몫을 남긴다 */
+const REQUEST_BUDGET_MS = 230_000;
+/** 손글씨 대조를 동시에 보내는 답안지 수 */
+const CHECK_CONCURRENCY = 6;
 
 /** 이 시험의 주관식 문항 번호 */
 function essayNumbers(exam: { numQuestions: number }, count: number): number[] {
@@ -81,12 +89,17 @@ function buildGroups(exam: Exam | null, scans: OmrScan[]) {
     const answers: EssayAnswer[] = gradable.map((scan) => {
       // 전사가 없으면 백지가 아니다 — 칸 이미지가 있으면 '아직 안 읽음', 없으면 '읽을 수 없음'
       const read = key in (scan.essayAnswers ?? {});
+      const text = read ? (scan.essayAnswers?.[key] ?? "") : "";
+      const flag = scan.essayFlags?.[key] ?? null;
       return {
         scanId: scan.id,
         studentId: scan.studentId,
-        text: read ? (scan.essayAnswers?.[key] ?? "") : "",
-        unclear: read && scan.essayFlags?.[key] === "unclear",
+        text,
+        // 불확실하게 읽었거나 대조로도 정하지 못한 답 — 사람이 정한다
+        unclear: read && needsPerson(flag),
         missing: read ? undefined : scan.essayCrops?.[key] ? "unread" : "noImage",
+        // 정답과 다르게 읽혔는데 아직 손글씨와 대조하지 않았다 — 대조 전에는 점수를 바꾸지 않는다
+        pending: read && checkPlanFor(scan, key, accepted) !== null,
       };
     });
     return {
@@ -97,6 +110,98 @@ function buildGroups(exam: Exam | null, scans: OmrScan[]) {
       groups: groupEssayAnswers(answers, accepted),
     };
   });
+}
+
+/** 이 칸을 손글씨와 대조해야 하는가(대조 계획) — 선생님이 매긴 점수가 있으면 대조하지 않는다 */
+function checkPlanFor(scan: OmrScan, key: string, accepted: string[]): VerifyPlan | null {
+  if (!(key in (scan.essayAnswers ?? {}))) return null;
+  const score = scan.essayScores?.[key];
+  const teacherScored = typeof score === "number" && (scan.essayScoreSources?.[key] ?? "teacher") === "teacher";
+  return verifyPlan(scan.essayAnswers?.[key] ?? "", accepted, {
+    flag: scan.essayFlags?.[key] ?? null,
+    teacherScored,
+    hasCrop: Boolean(scan.essayCrops?.[key]),
+  });
+}
+
+export interface CheckSummary {
+  /** 대조를 마친 칸 */
+  checked: number;
+  /** 학생이 정답대로 썼다(손글씨를 잘못 읽었던 것) — 만점이 된다 */
+  matched: number;
+  /** 학생이 정답과 다르게 썼다 — 0점이 된다 */
+  mismatched: number;
+  /** 대조로도 판단이 서지 않아 사람에게 넘긴 칸 */
+  review: number;
+  /** 대조 요청이 실패한 칸 — 다음에 다시 한다 */
+  failed: number;
+  /** 시간이 모자라 다음 요청으로 넘긴 칸 */
+  pending: number;
+}
+
+/**
+ * 정답과 다르게 읽힌 답을 손글씨 이미지와 대조해 정한다(lib/essay-grading 의 verifyPlan·verifyDecision).
+ *
+ * 답안지 하나의 여러 칸은 한 작업에서 차례로 대조하고 한 번에 저장한다 — 같은 답안지를
+ * 동시에 고치면 한쪽 결과가 지워진다. deadline 을 넘기면 남은 칸은 pending 으로 돌려준다.
+ */
+async function runChecks(exam: Exam, scans: OmrScan[], deadline: number): Promise<CheckSummary> {
+  const summary: CheckSummary = { checked: 0, matched: 0, mismatched: 0, review: 0, failed: 0, pending: 0 };
+  const numbers = essayNumbers(exam, essayCountOf(exam));
+  const acceptedOf = new Map(numbers.map((no) => [no, parseAcceptedAnswers(exam.answerKey?.[String(no)])]));
+  const work: Array<{ scan: OmrScan; cells: Array<{ no: number; key: string; plan: VerifyPlan }> }> = [];
+  for (const scan of gradableScans(scans)) {
+    const cells = numbers.flatMap((no) => {
+      const key = String(no);
+      const plan = checkPlanFor(scan, key, acceptedOf.get(no) ?? []);
+      return plan ? [{ no, key, plan }] : [];
+    });
+    if (cells.length > 0) work.push({ scan, cells });
+  }
+  if (work.length === 0) return summary;
+
+  const model = await getAiModel();
+  for (let i = 0; i < work.length; i += CHECK_CONCURRENCY) {
+    if (Date.now() > deadline) {
+      summary.pending += work.slice(i).reduce((sum, item) => sum + item.cells.length, 0);
+      break;
+    }
+    await Promise.all(
+      work.slice(i, i + CHECK_CONCURRENCY).map(async ({ scan, cells }) => {
+        const answers: Record<string, string> = {};
+        const flags: Record<string, EssayFlag | null> = {};
+        for (const cell of cells) {
+          const jpeg = await downloadEssayCrop(scan.essayCrops[cell.key]);
+          // 대조가 안 되면(이미지·판독 서버 문제) 그 칸만 다음으로 미룬다 — 자동 채점 전체를 멈추지 않는다
+          const choices = jpeg
+            ? await verifyEssay(
+                jpeg,
+                { question: cell.no, read: scan.essayAnswers?.[cell.key] ?? "", segments: cell.plan.segments },
+                model,
+              ).catch(() => null)
+            : null;
+          if (!choices) {
+            summary.failed += 1;
+            continue;
+          }
+          summary.checked += 1;
+          const decision = verifyDecision(cell.plan, choices);
+          flags[cell.key] = decision;
+          if (decision === "match") {
+            // 학생은 정답대로 썼고 처음에 잘못 읽었다 — 전사를 바로잡아 정답 묶음에 들어가게 한다
+            answers[cell.key] = cell.plan.expected;
+            summary.matched += 1;
+          } else if (decision === "mismatch") {
+            summary.mismatched += 1;
+          } else {
+            summary.review += 1;
+          }
+        }
+        if (Object.keys(flags).length > 0) await patchScanEssay(scan.id, { answers, flags });
+      }),
+    );
+  }
+  return summary;
 }
 
 /** 한 문항의 학생별 현재 점수와 출처 — 자동 채점이 덮어써도 되는지 가른다 */
@@ -193,7 +298,10 @@ function serialize(questions: ReturnType<typeof buildGroups>, scans: OmrScan[]) 
           hasPreview: Boolean(scan?.previewPath),
           // 원본 스캔이 보관되어 있으면 '손글씨 읽기'가 칸 이미지를 다시 만든다
           hasOriginal: Boolean(scan?.scanPath),
-          unclear: scan?.essayFlags?.[String(q.no)] === "unclear",
+          unclear: needsPerson(scan?.essayFlags?.[String(q.no)]),
+          // 손글씨 대조 결과(이미지 대조로 정답·오답을 정했는지, 사람이 옮겨 적었는지)
+          flag: scan?.essayFlags?.[String(q.no)] ?? null,
+          pending: Boolean(member.pending),
         };
       }),
     })),
@@ -321,7 +429,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       );
 
       if (candidates.length === 0) {
-        // 읽을 것은 없어도 자동 채점은 돈다 — 못 읽은 답안에 남아 있던 예전 자동 0점을 지운다
+        // 읽을 것은 없어도 손글씨 대조와 자동 채점은 돈다 — 대조를 기다리던 답을 정하고,
+        // 못 읽은 답안에 남아 있던 예전 자동 0점을 지운다
+        const checks = await runChecks(exam, filterByUploader(await listScans(id), scope), startedAt + REQUEST_BUDGET_MS);
         const auto = await runAutoGrade(exam, filterByUploader(await listScans(id), scope));
         return respond({
           transcribed: 0,
@@ -330,6 +440,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           remaining: 0,
           noImage,
           restore: restoreReport,
+          checks,
           auto,
           message:
             noImage > 0
@@ -385,14 +496,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       // 읽은 만큼 바로 자동 채점 — 바뀐 칸만 다시 쓰므로 나눠 읽는 동안 여러 번 돌아도 가볍다.
       // 중간에 끊겨도 읽은 답안의 점수가 예전 판정(못 읽은 칸의 0점 등)으로 남지 않는다.
+      // 정답과 다르게 읽힌 답은 손글씨와 다시 대조해 프로그램이 정한다(남은 시간만큼, 나머지는 다음 요청)
+      const checks = await runChecks(exam, filterByUploader(await listScans(id), scope), startedAt + REQUEST_BUDGET_MS);
       const auto = await runAutoGrade(exam, filterByUploader(await listScans(id), scope));
-      return respond({ transcribed, failed, unclear, remaining, noImage, restore: restoreReport, auto });
+      return respond({ transcribed, failed, unclear, remaining, noImage, restore: restoreReport, checks, auto });
     }
 
     // --- 자동 채점: 선생님 점수는 그대로, 나머지는 일치=만점 · 오답·백지=0점 ---
     if (body.action === "autoGrade") {
-      const auto = await runAutoGrade(exam, scans);
-      return respond({ applied: auto.applied, zeroed: auto.zeroed, kept: auto.kept, auto });
+      // 대조를 기다리는 답이 있으면 먼저 손글씨와 대조한다(남은 것은 pending 으로 — 화면이 이어서 부른다)
+      const checks = await runChecks(exam, scans, Date.now() + REQUEST_BUDGET_MS);
+      const auto = await runAutoGrade(exam, filterByUploader(await listScans(id), scope));
+      return respond({ applied: auto.applied, zeroed: auto.zeroed, kept: auto.kept, auto, checks });
     }
 
     // --- 묶음 채점: 같은 답을 쓴 학생 전원에게 같은 점수 — 선생님 점수가 된다 ---
@@ -468,12 +583,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         const verdict = autoVerdict(text, parseAcceptedAnswers(exam.answerKey?.[qk]), pointFor(exam, no));
         await patchScanEssay(scanId, {
           answers: { [qk]: text },
-          flags: { [qk]: null },
+          // 사람이 옮겨 적은 글은 손글씨와 다시 대조하지 않는다
+          flags: { [qk]: "typed" },
           scores: { [qk]: verdict },
           sources: { [qk]: verdict === null ? null : "auto" },
         });
       } else {
-        await patchScanEssay(scanId, { answers: { [qk]: text }, flags: { [qk]: null } });
+        await patchScanEssay(scanId, { answers: { [qk]: text }, flags: { [qk]: "typed" } });
       }
       return respond({});
     }
@@ -492,9 +608,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
       const freshExam = await getVisibleExam(id);
       if (!freshExam) return NextResponse.json({ error: "시험을 찾을 수 없습니다." }, { status: 404 });
+      // 손글씨 대조 결과(정답대로 썼다·다르게 썼다·모르겠다)는 그때의 정답에 대한 판단이다 —
+      // 정답이 바뀌었으니 지우고 새 정답으로 다시 대조한다. 불확실하게 읽음·사람이 옮겨 적음은 그대로.
+      const qk = String(no);
+      for (const scan of all) {
+        const flag = scan.essayFlags?.[qk];
+        if (flag === "match" || flag === "mismatch" || flag === "review") {
+          await patchScanEssay(scan.id, { flags: { [qk]: null } });
+        }
+      }
+      const checks = await runChecks(
+        freshExam,
+        filterByUploader(await listScans(id), scope),
+        Date.now() + REQUEST_BUDGET_MS - 30_000,
+      );
       // 정답은 시험 전체의 것이라 자동 채점도 전체에 돈다 — 다른 사람 범위의 자동 점수도 새 정답을 따라야 한다
-      const auto = await runAutoGrade(freshExam, all);
-      return NextResponse.json({ ok: true, auto, ...(await payload(freshExam, await listScans(id), scope, me)) });
+      const auto = await runAutoGrade(freshExam, await listScans(id));
+      return NextResponse.json({ ok: true, auto, checks, ...(await payload(freshExam, await listScans(id), scope, me)) });
     }
 
     return NextResponse.json(
