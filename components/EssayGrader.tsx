@@ -33,8 +33,12 @@ interface Member {
   hasPreview: boolean;
   /** 원본 스캔이 보관되어 있는가 — 있으면 '손글씨 읽기'가 칸 이미지를 다시 만든다 */
   hasOriginal: boolean;
-  /** 손글씨 판독이 불확실 — 사람이 봐야 한다 */
+  /** 사람이 정해야 하는 답 — 불확실하게 읽었거나 손글씨 대조로도 정하지 못했다 */
   unclear: boolean;
+  /** 손글씨 대조 결과 — match 정답대로 씀 · mismatch 다르게 씀 · review 판단 보류 · typed 사람이 옮겨 적음 */
+  flag?: "unclear" | "typed" | "match" | "mismatch" | "review" | null;
+  /** 정답과 다르게 읽혀 손글씨 대조를 기다리는 답 */
+  pending?: boolean;
 }
 
 interface Group {
@@ -74,6 +78,58 @@ interface AutoSummary {
   kept: number;
   /** 못 읽은 답안에 남아 있어 지운 예전 자동 점수 */
   cleared?: number;
+}
+
+/** 정답과 다르게 읽힌 답을 손글씨와 다시 대조한 결과 */
+interface CheckSummary {
+  checked: number;
+  matched: number;
+  mismatched: number;
+  review: number;
+  failed: number;
+  /** 시간이 모자라 다음 요청으로 넘긴 칸 — 화면이 이어서 부른다 */
+  pending: number;
+}
+
+const NO_CHECKS: CheckSummary = { checked: 0, matched: 0, mismatched: 0, review: 0, failed: 0, pending: 0 };
+
+/** 여러 번 나눠 대조한 결과를 더한다(남은 칸 수는 마지막 것을 쓴다) */
+function addChecks(total: CheckSummary, next: CheckSummary | undefined): CheckSummary {
+  if (!next) return total;
+  return {
+    checked: total.checked + next.checked,
+    matched: total.matched + next.matched,
+    mismatched: total.mismatched + next.mismatched,
+    review: total.review + next.review,
+    failed: total.failed + next.failed,
+    pending: next.pending,
+  };
+}
+
+/** 손글씨 대조 결과를 한 문장으로 — 프로그램이 정한 것과 사람에게 넘긴 것 */
+function checkText(c: CheckSummary): string {
+  const parts: string[] = [];
+  if (c.checked > 0) {
+    parts.push(
+      `정답과 다르게 읽힌 ${c.checked}칸은 손글씨와 다시 대조해 프로그램이 정했습니다 — 정답대로 씀 ${c.matched} · 다르게 씀 ${c.mismatched}` +
+        (c.review > 0 ? ` · 판단 보류 ${c.review}(확인 필요로 남김)` : "") +
+        ".",
+    );
+  }
+  if (c.failed > 0) parts.push(`${c.failed}칸은 대조하지 못했습니다(일시 오류) — 다시 누르면 그 칸만 다시 대조합니다.`);
+  return parts.join(" ");
+}
+
+/** 지금 화면에서 사람이 정해야 하는 답 수 — 대조로도 정하지 못했고 점수가 없다 */
+function openForPerson(questions: Question[]): number {
+  return questions.reduce(
+    (sum, q) =>
+      sum +
+      q.groups
+        .filter((g) => !g.missing)
+        .reduce((n, g) => n + g.members.filter((m) => m.unclear && m.score === null).length, 0),
+    0,
+  );
 }
 
 /** 서버가 범위·진행과 함께 돌려주는 응답 */
@@ -304,6 +360,8 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
     setMessage("");
     const tally = { transcribed: 0, failed: 0, unclear: 0, cleared: 0, restored: 0, restoreFailed: 0 };
     const restoreReasons: string[] = [];
+    let checks: CheckSummary = { ...NO_CHECKS };
+    let latest: Question[] = [];
     try {
       let rounds = 0;
       let remaining = 0;
@@ -330,35 +388,41 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
         }
         auto = (data.auto as AutoSummary | undefined) ?? auto;
         tally.cleared += Number((data.auto as AutoSummary | undefined)?.cleared ?? 0);
+        checks = addChecks(checks, data.checks as CheckSummary | undefined);
+        if (Array.isArray(data.questions)) latest = data.questions as Question[];
         note = typeof data.message === "string" ? data.message : "";
-        if (remaining > 0 || restorePending > 0) {
+        if (remaining > 0 || restorePending > 0 || checks.pending > 0) {
           setMessage(
             `손글씨를 읽는 중… ${tally.transcribed}칸 읽음 · 남은 ${remaining}칸` +
               (tally.restored > 0 || restorePending > 0
                 ? ` · 원본에서 다시 만든 답안지 ${tally.restored}장${restorePending > 0 ? `(남은 ${restorePending}장)` : ""}`
+                : "") +
+              (checks.checked > 0 || checks.pending > 0
+                ? ` · 손글씨 대조 ${checks.checked}칸${checks.pending > 0 ? `(남은 ${checks.pending}칸)` : ""}`
                 : ""),
           );
         }
-      } while ((remaining > 0 || restorePending > 0) && rounds < MAX_TRANSCRIBE_ROUNDS);
+      } while ((remaining > 0 || restorePending > 0 || checks.pending > 0) && rounds < MAX_TRANSCRIBE_ROUNDS);
 
       const parts: string[] = [];
       if (tally.restored > 0) {
         parts.push(`보관된 원본으로 답안지 ${tally.restored}장의 손글씨 칸 이미지를 다시 만들어 읽었습니다.`);
       }
       if (tally.transcribed > 0) {
-        parts.push(`${tally.transcribed}칸을 읽고 자동 채점했습니다 — ${autoText(auto)}.`);
-        if (tally.unclear > 0) {
-          parts.push(`${tally.unclear}칸은 판독이 불확실해 점수를 매기지 않았습니다. 손글씨를 보고 고치거나 점수를 정해 주세요.`);
-        }
-        parts.push("0점은 손글씨를 확인해 주세요.");
+        parts.push(`${tally.transcribed}칸을 읽고 채점했습니다 — ${autoText(auto)}.`);
         if (noImage > 0) {
           parts.push(
             `손글씨 칸 이미지가 없는 ${noImage}칸은 읽을 수 없어 맨 위 '이미지 없음' 묶음에 남았습니다 — 같은 스캔 파일을 다시 올리거나 종이를 보고 학생별로 매겨 주세요.`,
           );
         }
-      } else if (tally.failed === 0) {
+      } else if (tally.failed === 0 && checks.checked === 0) {
         parts.push(note || "새로 읽을 답안이 없습니다.");
       }
+      const checkSentence = checkText(checks);
+      if (checkSentence) parts.push(checkSentence);
+      // 프로그램이 끝내 정하지 못한 답만 사람에게 — 남아 있으면 몇 칸인지 알린다
+      const open = openForPerson(latest);
+      if (open > 0) parts.push(`판단이 서지 않은 ${open}칸만 '확인 필요'로 남겼습니다. 손글씨를 보고 점수를 정해 주세요.`);
       if (noOriginal > 0 && tally.transcribed > 0) {
         parts.push(`답안지 ${noOriginal}장은 원본도 보관되어 있지 않아 이미지를 다시 만들 수 없습니다.`);
       }
@@ -375,7 +439,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
           `${tally.failed}칸은 읽지 못했습니다(일시적인 오류). 잠시 뒤 '손글씨 읽기'를 다시 누르면 그 칸만 다시 읽습니다.`,
         );
       }
-      if (remaining > 0 || restorePending > 0) {
+      if (remaining > 0 || restorePending > 0 || checks.pending > 0) {
         parts.push(`아직 남은 답안이 있습니다. '손글씨 읽기'를 다시 눌러 주세요.`);
       }
       setMessage(parts.join(" "));
@@ -393,20 +457,32 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
     setError("");
     setMessage("");
     try {
-      const data = await request(action, extra);
-      const auto = data.auto as AutoSummary | undefined;
+      let data = await request(action, extra);
+      let auto = data.auto as AutoSummary | undefined;
+      // 자동 채점·정답 저장은 손글씨 대조를 함께 한다 — 시간이 모자라 남은 칸이 있으면 이어서 부른다
+      let checks = addChecks({ ...NO_CHECKS }, data.checks as CheckSummary | undefined);
+      for (let round = 0; (action === "autoGrade" || action === "setAnswer") && checks.pending > 0 && round < MAX_TRANSCRIBE_ROUNDS; round += 1) {
+        setMessage(`손글씨 대조 중… ${checks.checked}칸 정함 · 남은 ${checks.pending}칸`);
+        data = await request("autoGrade");
+        auto = (data.auto as AutoSummary | undefined) ?? auto;
+        checks = addChecks(checks, data.checks as CheckSummary | undefined);
+      }
+      const open = Array.isArray(data.questions) ? openForPerson(data.questions as Question[]) : 0;
+      const tail = [checkText(checks), open > 0 ? `판단이 서지 않은 ${open}칸만 '확인 필요'로 남겼습니다.` : ""]
+        .filter(Boolean)
+        .join(" ");
       if (action === "autoGrade") {
         setMessage(
           auto && auto.applied + auto.zeroed > 0
-            ? `자동 채점했습니다 — ${autoText(auto)}. 0점은 손글씨를 보고 확인해 주세요.`
-            : "자동으로 매길 답안이 없습니다. 정답을 넣었는지, 손글씨를 읽었는지 확인해 주세요.",
+            ? `채점했습니다 — ${autoText(auto)}.${tail ? ` ${tail}` : ""}`
+            : tail || "자동으로 매길 답안이 없습니다. 정답을 넣었는지, 손글씨를 읽었는지 확인해 주세요.",
         );
       } else if (action === "gradeGroup") {
         setMessage(`${data.graded}명에게 점수를 매겼습니다. 자동 채점이 다시 돌아도 바뀌지 않습니다.`);
       } else if (action === "gradeOne") {
         setMessage("점수를 저장했습니다. 선생님이 매긴 점수라 자동 채점이 바꾸지 않습니다.");
       } else if (action === "setAnswer") {
-        setMessage(`정답을 저장하고 자동 채점을 다시 했습니다 — ${autoText(auto)}.`);
+        setMessage(`정답을 저장하고 다시 채점했습니다 — ${autoText(auto)}.${tail ? ` ${tail}` : ""}`);
       } else if (action === "fixText") {
         setMessage("전사를 고쳤습니다. 자동 점수였다면 고친 글로 다시 매겼습니다.");
       }
@@ -441,8 +517,10 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
   const totalAnswers = allMembers.length;
   const totalGraded = allMembers.filter((m) => m.score !== null).length;
   const autoCount = allMembers.filter((m) => m.source === "auto").length;
-  const autoZero = allMembers.filter((m) => m.source === "auto" && (m.score ?? 0) <= 0.05).length;
+  // 프로그램이 끝내 정하지 못한 답 — 사람이 정해야 한다
   const unclearCount = allMembers.filter((m) => m.unclear && m.score === null).length;
+  // 정답과 다르게 읽혀 손글씨 대조를 기다리는 답 — '자동 채점'이나 '손글씨 읽기'를 누르면 정해진다
+  const pendingCount = allMembers.filter((m) => m.pending && m.score === null).length;
   // 못 읽은 답안 중 선생님이 아직 매기지 않은 것 — 이것이 남아 있으면 성적표를 만들 수 없다
   const missingMembers = questions.flatMap((q) =>
     q.groups.filter((g) => g.missing).flatMap((g) => g.members.map((m) => ({ ...m, why: g.missing }))),
@@ -543,13 +621,18 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
               채점 완료 <strong>{totalGraded}</strong>/{totalAnswers}답안
             </span>
             {autoCount > 0 ? (
-              <span className={autoZero > 0 ? "need" : ""} title="자동으로 매겨 아직 사람이 확인하지 않은 답안">
-                자동 채점 <strong>{autoCount}</strong>답안{autoZero > 0 ? ` · 확인 필요(0점) ${autoZero}` : ""}
+              <span title="프로그램이 정답과 비교하고 필요하면 손글씨와 다시 대조해 정한 점수">
+                프로그램 채점 <strong>{autoCount}</strong>답안
+              </span>
+            ) : null}
+            {pendingCount > 0 ? (
+              <span title="정답과 다르게 읽혀 손글씨와 다시 대조할 답 — '자동 채점'을 누르면 프로그램이 정합니다">
+                손글씨 대조 대기 <strong>{pendingCount}</strong>답안
               </span>
             ) : null}
             {unclearCount > 0 ? (
-              <span className="need" title="손글씨 판독이 불확실해 점수를 매기지 않은 답안 — 손글씨를 보고 정해 주세요">
-                판독 불확실 <strong>{unclearCount}</strong>답안
+              <span className="need" title="손글씨를 다시 대조해도 판단이 서지 않은 답 — 손글씨를 보고 점수를 정해 주세요">
+                확인 필요 <strong>{unclearCount}</strong>답안
               </span>
             ) : null}
             {missingOpen.length > 0 ? (
@@ -568,14 +651,15 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
             ) : null}
           </div>
           <p className="review-note">
-            손글씨를 읽으면 바로 자동 채점합니다 — 정답과 일치하면 <strong>만점</strong>, 오답으로 보이거나
-            백지면 <strong>우선 0점</strong>입니다. 0점은 글씨를 잘못 읽었을 수 있으니 손글씨를 보고 확인해
-            주세요. 점선 테두리의 <span className="essay-score-chip zero auto">자동 0점</span>은 아직 사람이
-            보지 않은 점수이고, <strong>이대로 확인</strong>을 누르거나 점수를 고르면{" "}
-            <span className="essay-score-chip full">✓ 점수</span>가 되어 자동 채점을 다시 돌려도 바뀌지
+            손글씨를 읽으면 <strong>프로그램이 직접 채점합니다</strong>. 마침표·쉼표·물음표 같은 문장부호와
+            대소문자는 채점하지 않고 낱말과 철자만 봅니다. 정답과 같으면 <strong>만점</strong>, 백지면{" "}
+            <strong>0점</strong>입니다. 정답과 다르게 읽힌 답은 손글씨를 잘못 읽었을 수도 있어{" "}
+            <strong>손글씨 이미지와 다시 대조</strong>해, 학생이 정답대로 썼으면 만점, 다르게 썼으면 0점으로
+            정합니다. 그래도 판단이 서지 않는 답만 <span className="essay-score-chip unclear">확인 필요</span>로
+            남깁니다 — 그것만 손글씨를 보고 정해 주세요. 점선 테두리의{" "}
+            <span className="essay-score-chip zero auto">자동 0점</span>은 프로그램이 정한 점수이고, 점수를
+            고르면 <span className="essay-score-chip full">✓ 점수</span>가 되어 자동 채점이 다시 돌아도 바뀌지
             않습니다. <strong>점수를 누르면 곧바로 저장됩니다</strong>(따로 저장 버튼이 없습니다).
-            손글씨를 확실히 읽지 못한 칸은 <span className="essay-score-chip unclear">판독 불확실</span>로 따로
-            묶이고 0점으로 넘기지 않습니다 — 손글씨를 보고 글을 고치거나 점수를 정해 주세요.
             {pendingReview > 0 ? (
               <>
                 {" "}
@@ -589,7 +673,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
             <span><i style={{ background: "#d9534f" }} />0점</span>
             <span><i style={{ background: "#d99a1e" }} />부분점수</span>
             <span><i style={{ background: "#cfd6df" }} />미채점</span>
-            <span>점선 = 자동(확인 전) · ✓ = 선생님 확인</span>
+            <span>점선 = 프로그램이 정함 · ✓ = 선생님이 정함</span>
           </p>
         </div>
       </div>
@@ -613,7 +697,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                   </h3>
                   <p className="subtle" style={{ margin: "4px 0 0" }}>
                     {total}명 → <strong>{q.groups.length}개 묶음</strong> · 채점 {graded}/{total}
-                    {unconfirmed > 0 ? ` · 자동(확인 전) ${unconfirmed}` : ""}
+                    {unconfirmed > 0 ? ` · 프로그램 채점 ${unconfirmed}` : ""}
                   </p>
                 </div>
               </div>
@@ -802,15 +886,26 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                             {group.blank ? (
                               <em>(백지)</em>
                             ) : group.unclear && !group.text ? (
-                              <em>(읽지 못함 — 백지일 수도, 글씨를 못 알아본 것일 수도 있습니다)</em>
+                              <em>(글씨를 알아볼 수 없음 — 백지일 수도, 못 알아본 글씨일 수도 있습니다)</em>
                             ) : (
                               group.text
                             )}
                           </p>
                           {group.matchesKey ? <span className="essay-badge">정답 일치</span> : null}
-                          {group.unclear ? (
-                            <span className="essay-badge unclear" title="손글씨를 확실히 읽지 못했습니다. 자동 채점이 0점으로 넘기지 않았으니 손글씨를 보고 정해 주세요.">
-                              판독 불확실
+                          {group.unclear && group.members.some((m) => m.score === null) ? (
+                            <span
+                              className="essay-badge unclear"
+                              title="손글씨를 다시 대조해도 프로그램이 판단하지 못한 답입니다. 손글씨를 보고 점수를 정해 주세요."
+                            >
+                              확인 필요
+                            </span>
+                          ) : null}
+                          {group.members.some((m) => m.pending && m.score === null) ? (
+                            <span
+                              className="essay-badge unread"
+                              title="정답과 다르게 읽혀 손글씨와 다시 대조할 답입니다. '자동 채점'을 누르면 프로그램이 정합니다."
+                            >
+                              손글씨 대조 대기
                             </span>
                           ) : null}
                           {/* 누르는 즉시 저장되므로, 저장됐다는 사실과 출처를 눈에 보이게 남긴다 */}
@@ -826,7 +921,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                           >
                             {state.kind !== "none" && state.kind !== "mixed" ? (state.auto ? "자동 " : "✓ ") : ""}
                             {chipLabel}
-                            {state.auto && state.kind === "zero" ? " — 확인 필요" : ""}
+
                           </span>
                         </div>
 
@@ -897,7 +992,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                               <button
                                 className="button tiny secondary"
                                 disabled={busy !== null}
-                                title="자동으로 매긴 이 점수를 확인한 것으로 표시합니다"
+                                title="프로그램이 정한 이 점수를 선생님 점수로 고정합니다 — 자동 채점이 다시 돌아도 바뀌지 않습니다. 누르지 않아도 성적표에는 이 점수가 들어갑니다."
                                 onClick={() =>
                                   post(
                                     "gradeGroup",
@@ -906,7 +1001,7 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                                   )
                                 }
                               >
-                                이대로 확인
+                                이 점수로 고정
                               </button>
                             ) : null}
                             <button
@@ -926,7 +1021,20 @@ export default function EssayGrader({ exam, setupError, canEdit, me }: Props) {
                                 <div className="essay-crop-row" key={member.scanId}>
                                   <div className="essay-crop-head">
                                     <strong>수험번호 {member.studentId ?? "—"}</strong>
-                                    {member.unclear ? <span className="essay-badge unclear">판독 불확실</span> : null}
+                                    {member.unclear && member.score === null ? (
+                                      <span className="essay-badge unclear">확인 필요</span>
+                                    ) : null}
+                                    {member.flag === "match" ? (
+                                      <span className="essay-badge" title="처음에 잘못 읽었던 글자를 손글씨와 다시 대조해 정답대로 쓴 것을 확인했습니다">
+                                        손글씨 대조 · 정답대로 씀
+                                      </span>
+                                    ) : member.flag === "mismatch" ? (
+                                      <span className="essay-badge noimage" title="손글씨와 다시 대조해 정답과 다르게 쓴 것을 확인했습니다">
+                                        손글씨 대조 · 다르게 씀
+                                      </span>
+                                    ) : member.flag === "typed" ? (
+                                      <span className="essay-badge unread">사람이 옮겨 적음</span>
+                                    ) : null}
                                     {member.score !== null ? (
                                       <span>
                                         {fmtPoint(member.score)}점{member.source === "auto" ? " (자동)" : ""}

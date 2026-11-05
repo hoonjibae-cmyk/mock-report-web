@@ -4,25 +4,41 @@
 // 수렴한다. 같은 답끼리 묶으면 12~15번으로 줄고, 덤으로 "같은 답에 같은 점수"가
 // 구조적으로 보장된다 — 손으로 채점할 때 생기는 들쭉날쭉함이 없어진다.
 //
-// 자동 채점에는 비대칭이 있다.
-//   전사 == 정답  → 거의 확실히 정답. OCR이 우연히 정답 문장을 만들 확률은 낮다.
-//   전사 != 정답  → 학생이 틀렸는지 우리가 잘못 읽었는지 구분할 수 없다.
-// 예전에는 그래서 정답 판정만 자동으로 넘기고 나머지는 사람에게 남겼다. 그러나
-// 60명 중 오답·백지가 40명이면 그 40명을 하나하나 0점으로 누르는 것이 일이었다.
-// 지금은 오답으로 보이는 답안과 백지도 **우선 0점**으로 매기되, 점수의 출처를
-// 'auto'로 남긴다. 자동 점수는 화면에서 '확인 필요'로 보이고, 선생님이 확인하거나
-// 고치면 'teacher'가 되어 자동 채점을 다시 돌려도 건드리지 않는다. 학생 점수를
-// 깎는 방향의 실수는 이렇게 사람의 눈을 한 번 거쳐 막는다.
+// 채점 기준 — 낱말과 철자만 본다. 마침표·쉼표·물음표 같은 문장부호와 대소문자는
+// 맞고 틀림을 가르지 않는다(학원 채점 기준). 비교 전에 둘 다 지운다(normalizeEssay).
+//
+// 프로그램이 되도록 직접 정한다. 채점자의 부담을 덜려고 만든 기능이므로, 사람에게
+// 넘기는 것은 정말 판단이 서지 않는 답뿐이다.
+//   전사 == 정답        → 만점.
+//   확실한 백지          → 0점.
+//   전사 != 정답        → 손글씨를 잘못 읽었을 수도 있으므로 손글씨 이미지와 다시
+//                          대조한다(verifyPlan → 판독 엔진의 양자택일 → verifyDecision).
+//                          학생이 정답대로 썼으면 만점, 다르게 썼으면 0점.
+//   그래도 모르겠으면    → 사람에게('확인 필요').
+// 자동 점수는 출처 'auto'로 남는다. 선생님이 매기면 'teacher'가 되어 자동 채점을
+// 다시 돌려도 건드리지 않는다.
 
 /** 채점 상태 — 점수가 어디서 왔는지 남긴다 */
 export type EssayGradeSource = "auto" | "teacher";
 
 /**
- * 전사 표시 — 'unclear' 는 손글씨를 읽긴 했지만 확실하지 않다는 뜻이다.
- * 백지로 읽혔어도 정말 백지인지 모르므로 자동 채점이 0점으로 넘기지 않고
- * 사람에게 남긴다. 전사 자체가 실패한 칸은 저장하지 않는다(다음에 다시 읽는다).
+ * 전사 표시 — 칸마다 손글씨를 어떻게 읽었고 대조했는지 남긴다.
+ *   unclear   손글씨를 읽긴 했지만 확실하지 않다(손글씨 대조로 정한다)
+ *   typed     사람이 옮겨 적었다 — 이미지와 대조하지 않는다
+ *   match     손글씨 대조 결과 학생이 정답대로 썼다(전사를 정답으로 바로잡았다)
+ *   mismatch  손글씨 대조 결과 학생이 정답과 다르게 썼다
+ *   review    손글씨 대조로도 판단이 서지 않는다 — 사람이 정한다
+ * match·mismatch·review 는 그때의 정답에 대한 판단이라 정답을 바꾸면 지운다.
+ * 전사 자체가 실패한 칸은 저장하지 않는다(다음에 다시 읽는다).
  */
-export type EssayFlag = "unclear";
+export type EssayFlag = "unclear" | "typed" | "match" | "mismatch" | "review";
+
+export const ESSAY_FLAGS: readonly EssayFlag[] = ["unclear", "typed", "match", "mismatch", "review"];
+
+/** 사람이 봐야 하는 칸인가 — 불확실하게 읽었거나 대조로도 정하지 못했다 */
+export function needsPerson(flag: EssayFlag | null | undefined): boolean {
+  return flag === "unclear" || flag === "review";
+}
 
 /** 한 학생의 한 문항 현재 점수 — 자동 채점이 덮어써도 되는지 가르는 근거 */
 export interface CurrentScore {
@@ -48,6 +64,11 @@ export interface EssayAnswer {
   unclear?: boolean;
   /** 전사가 없다 — 있으면 text 는 무시하고 따로 묶으며 자동 채점하지 않는다 */
   missing?: EssayMissing;
+  /**
+   * 손글씨 이미지와 아직 대조하지 않은 답(verifyPlan 이 대조하라고 한 답) — 대조가 끝날
+   * 때까지 자동 채점이 점수를 바꾸지 않는다. 대조는 손글씨 읽기·자동 채점 때 바로 돈다.
+   */
+  pending?: boolean;
 }
 
 /** 같은 답안끼리 묶은 결과 */
@@ -89,18 +110,22 @@ function missingOfKey(key: string): EssayMissing | null {
 /**
  * 비교용으로 문자열을 다듬는다.
  *
- * 손글씨 전사에서는 대소문자·공백·따옴표 모양·끝 마침표가 답안의 옳고 그름과
- * 무관하게 흔들린다. 그것들 때문에 같은 답이 다른 묶음으로 갈라지면 묶어서
- * 채점하는 의미가 없다. 철자와 단어는 건드리지 않는다 — 그건 채점 대상이다.
+ * 학원 채점 기준에서 문장부호(마침표·쉼표·물음표 등)의 누락·잘못된 사용과
+ * 대소문자는 맞고 틀림을 가르지 않는다. 손글씨 전사에서도 이것들은 쉽게 흔들린다.
+ * 그래서 비교 전에 모두 지운다 — 같은 답이 다른 묶음으로 갈라지지도 않는다.
+ * 낱말과 철자는 건드리지 않는다 — 그건 채점 대상이다.
  */
 export function normalizeEssay(text: string): string {
   return (text ?? "")
-    .replace(/[‘’ʼ´`]/g, "'") // 여러 모양의 작은따옴표 → '
-    .replace(/[“”]/g, '"')
+    .normalize("NFKC") // 전각 문장부호·글자를 보통 글자로
+    // 아포스트로피(작은따옴표 모양 전부)는 지운다 — 빠뜨려도 틀린 것이 아니다(don't = dont)
+    .replace(/['‘’ʼ´`]/g, "")
+    // 그 밖의 문장부호(마침표·쉼표·물음표·느낌표·따옴표·괄호·줄표 등)는 띄어쓰기로 —
+    // 어디에 찍었든 빠뜨렸든 채점하지 않는다. 띄어쓰기로 바꿔야 well-known = well known
+    .replace(/\p{P}+/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/[.!?]+$/, "") // 끝 마침표·물음표는 정오와 무관하게 자주 빠진다
-    .toLowerCase();
+    .toLowerCase(); // 대소문자도 채점하지 않는다
 }
 
 /**
@@ -191,6 +216,8 @@ export interface AutoGradeResult {
   pending: EssayGroup[];
   /** 선생님이 매긴 점수가 있어 건드리지 않은 학생 수 */
   kept: number;
+  /** 손글씨 대조를 기다리느라 이번에 점수를 바꾸지 않은 학생 수 */
+  waiting: number;
   /**
    * 자동 점수를 지울 학생 — 지금은 판정할 수 없는데(못 읽음·불확실·정답 없음) 예전
    * 판정의 자동 점수가 남아 있다. 남겨 두면 근거 없는 점수가 성적표에 들어간다.
@@ -238,6 +265,7 @@ export function autoGrade(
   const pending: EssayGroup[] = [];
   const cleared: string[] = [];
   let kept = 0;
+  let waiting = 0;
 
   for (const group of groups) {
     // 못 읽은 답안은 판정하지 않는다. 불확실한 묶음은 일치할 때만 만점, 아니면 사람에게.
@@ -259,6 +287,11 @@ export function autoGrade(
         kept += 1;
         continue;
       }
+      // 손글씨 대조 전 — 대조 결과로 정할 것이므로 지금 점수를 바꾸지 않는다
+      if (member.pending) {
+        waiting += 1;
+        continue;
+      }
       if (verdict === null) {
         unresolved += 1;
         if (current[member.scanId]?.source === "auto") cleared.push(member.scanId);
@@ -270,7 +303,172 @@ export function autoGrade(
     if (scored > 0) (verdict === 0 ? zeroKeys : autoKeys).push(group.key);
     if (unresolved > 0) pending.push(group);
   }
-  return { scores, autoKeys, zeroKeys, pending, kept, cleared };
+  return { scores, autoKeys, zeroKeys, pending, kept, waiting, cleared };
+}
+
+/* ------------------------------------------------------------------ *
+ * 손글씨 대조 — 정답과 다르게 읽힌 답을 프로그램이 직접 정하기 위한 규칙.
+ *
+ * 전사가 정답과 다르면 학생이 틀렸을 수도, 손글씨를 잘못 읽었을 수도 있다. 사람에게
+ * 넘기는 대신, 다른 낱말만 뽑아 판독 엔진에 손글씨 이미지와 함께 보이고 "학생이 쓴
+ * 것이 A(정답 표기)인가 B(처음 읽은 표기)인가"를 고르게 한다. 정답 문장을 통째로
+ * 보이고 맞느냐고 물으면 정답 쪽으로 끌려가므로, 다른 낱말 두 표기 중 하나를 고르게
+ * 한다. 차이가 크면(문장이 많이 다름) 정답대로 썼다는 대답을 믿지 않고 사람에게 넘긴다.
+ * ------------------------------------------------------------------ */
+
+/** 대조할 한 부분 — 정답 쪽 표기와 처음 읽은 표기. 한쪽이 비면 빠뜨리거나 더 쓴 낱말 */
+export interface EssaySegment {
+  expected: string;
+  read: string;
+}
+
+/** 손글씨 대조에서 고른 것 — 학생이 정답 표기대로·처음 읽은 대로·다르게 썼다, 또는 알아볼 수 없다 */
+export type VerifyChoice = "expected" | "read" | "other" | "unclear";
+
+function essayTokens(text: string): string[] {
+  const norm = normalizeEssay(text);
+  return norm ? norm.split(" ") : [];
+}
+
+function levenshtein(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return row[b.length];
+}
+
+/** 두 표기가 글자로 얼마나 비슷한가(0~1) */
+export function charSimilarity(a: string, b: string): number {
+  const longest = Math.max(a.length, b.length);
+  return longest === 0 ? 1 : 1 - levenshtein(a, b) / longest;
+}
+
+/**
+ * 정답과 처음 읽은 답을 낱말 단위로 맞춰 보고, 다른 부분만 뽑는다. 이어진 차이는 한
+ * 부분으로 묶는다. 문장부호·대소문자는 이미 지운 뒤라 차이로 나오지 않는다.
+ */
+export function essaySegments(expected: string, read: string): EssaySegment[] {
+  const a = essayTokens(expected);
+  const b = essayTokens(read);
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+  );
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+  }
+  // 뒤에서부터 되짚어 같은 낱말·바뀐 낱말·빠진 낱말·더 쓴 낱말을 가른다
+  const steps: Array<{ same: boolean; e?: string; r?: string }> = [];
+  let i = a.length;
+  let j = b.length;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1] && d[i][j] === d[i - 1][j - 1]) {
+      steps.push({ same: true });
+      i -= 1;
+      j -= 1;
+    } else if (i > 0 && j > 0 && d[i][j] === d[i - 1][j - 1] + 1) {
+      steps.push({ same: false, e: a[i - 1], r: b[j - 1] });
+      i -= 1;
+      j -= 1;
+    } else if (i > 0 && d[i][j] === d[i - 1][j] + 1) {
+      steps.push({ same: false, e: a[i - 1] });
+      i -= 1;
+    } else {
+      steps.push({ same: false, r: b[j - 1] });
+      j -= 1;
+    }
+  }
+  steps.reverse();
+  const segments: EssaySegment[] = [];
+  let open: { e: string[]; r: string[] } | null = null;
+  for (const step of steps) {
+    if (step.same) {
+      if (open) segments.push({ expected: open.e.join(" "), read: open.r.join(" ") });
+      open = null;
+      continue;
+    }
+    open ??= { e: [], r: [] };
+    if (step.e) open.e.push(step.e);
+    if (step.r) open.r.push(step.r);
+  }
+  if (open) segments.push({ expected: open.e.join(" "), read: open.r.join(" ") });
+  return segments;
+}
+
+/** 이 차이가 손글씨를 잘못 읽어 생겼을 법한가 — 글자가 비슷하거나, 짧은 낱말 하나가 빠지거나 더해졌다 */
+function plausibleMisread(segment: EssaySegment): boolean {
+  const e = segment.expected.replace(/ /g, "");
+  const r = segment.read.replace(/ /g, "");
+  if (e && r) return charSimilarity(e, r) >= 0.5;
+  const only = segment.expected || segment.read;
+  return only.split(" ").length <= 2 && only.replace(/ /g, "").length <= 8;
+}
+
+/** 손글씨 대조 계획 — 어느 정답과 무엇을 대조할지 */
+export interface VerifyPlan {
+  /** 대조할 정답(허용 답안 중 가장 가까운 것) — 학생이 이대로 썼으면 전사를 이것으로 바로잡는다 */
+  expected: string;
+  /** 대조할 부분. 차이가 크면 문장 전체 한 부분 */
+  segments: EssaySegment[];
+  /** 한두 낱말만 조금 다른가 — 손글씨를 잘못 읽었을 법한 차이 */
+  near: boolean;
+}
+
+/**
+ * 이 답을 손글씨 이미지와 대조해야 하는가 — 그렇다면 무엇을 대조할지. null 이면 대조하지
+ * 않는다: 정답과 일치, 확실한 백지, 정답 없음, 사람이 옮겨 적었거나 매긴 답, 이미 대조한 답,
+ * 손글씨 칸 이미지가 없는 답.
+ */
+export function verifyPlan(
+  text: string,
+  accepted: string[],
+  options: { flag?: EssayFlag | null; teacherScored?: boolean; hasCrop?: boolean },
+): VerifyPlan | null {
+  if (accepted.length === 0 || options.teacherScored || !options.hasCrop) return null;
+  const flag = options.flag ?? null;
+  if (flag === "typed" || flag === "match" || flag === "mismatch" || flag === "review") return null;
+  if (matchesAccepted(text, accepted)) return null;
+  // 확실히 비어 있다고 읽은 칸은 백지로 0점 — 대조할 것이 없다
+  if (!normalizeEssay(text) && flag !== "unclear") return null;
+
+  let best: { expected: string; segments: EssaySegment[]; cost: number } | null = null;
+  for (const answer of accepted) {
+    const segments = essaySegments(answer, text);
+    const cost = segments.reduce(
+      (sum, seg) => sum + Math.max(seg.expected.split(" ").filter(Boolean).length, seg.read.split(" ").filter(Boolean).length),
+      0,
+    );
+    if (!best || cost < best.cost) best = { expected: answer, segments, cost };
+  }
+  if (!best || best.segments.length === 0) return null;
+  const near = best.segments.length <= 3 && best.segments.every(plausibleMisread);
+  return {
+    expected: best.expected,
+    // 차이가 크면 낱말 하나하나가 아니라 '이 문장대로 썼는가'를 한 번에 묻는다
+    segments: near ? best.segments : [{ expected: normalizeEssay(best.expected), read: normalizeEssay(text) }],
+    near,
+  };
+}
+
+/**
+ * 손글씨 대조 결과로 정한다.
+ *   match     모든 부분을 정답 표기대로 썼다(손글씨를 잘못 읽었던 것) — 만점
+ *   mismatch  한 곳이라도 처음 읽은 대로나 다르게 썼다 — 0점
+ *   review    알아볼 수 없는 곳이 있다, 또는 문장이 많이 달랐는데 정답대로 썼다고 한다 — 사람에게
+ */
+export function verifyDecision(plan: VerifyPlan, choices: VerifyChoice[]): "match" | "mismatch" | "review" {
+  if (choices.length !== plan.segments.length || choices.some((choice) => choice === "unclear")) return "review";
+  // 정답과 많이 달랐던 답을 '정답대로 썼다'고 하면 정답 쪽으로 끌려간 대답일 수 있다 — 사람이 본다
+  if (choices.every((choice) => choice === "expected")) return plan.near ? "match" : "review";
+  return "mismatch";
 }
 
 /**

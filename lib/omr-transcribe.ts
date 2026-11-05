@@ -162,3 +162,94 @@ export async function transcribeMany(
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// 손글씨 대조 — 정답과 다르게 읽힌 답을 이미지와 다시 맞춰 본다.
+//
+// 처음 읽기(전사)에는 정답을 알려 주지 않는다 — 알려 주면 정답 쪽으로 끌려간다. 그래서
+// 읽은 글이 정답과 다르면, 학생이 정말 다르게 썼는지 우리가 잘못 읽었는지 모른다. 여기서는
+// 다른 낱말만 두 표기(A 정답 쪽 · B 처음 읽은 쪽)로 보이고 이미지에 실제로 쓰인 쪽을
+// 고르게 한다. 문장 전체를 보이고 "정답이냐"고 묻는 것보다 정답 쪽으로 덜 끌려간다.
+
+const VerifySchema = z.object({
+  items: z.array(
+    z.object({
+      /** 항목 번호(1부터) */
+      no: z.number(),
+      choice: z.enum(["A", "B", "other", "unclear"]),
+    }),
+  ),
+});
+
+const VERIFY_SYSTEM = `당신은 손으로 쓴 시험 답안을 대조하는 검수자입니다. 채점자가 아닙니다.
+
+이미지는 학생 한 명의 답안 칸입니다. 항목마다 A와 B 두 표기가 주어집니다.
+A는 정답의 표기이고, B는 이 손글씨를 처음 읽은 사람이 적은 표기입니다.
+학생이 실제로 쓴 글자가 어느 쪽인지 항목마다 하나를 고르십시오.
+- A: 학생이 A처럼 썼다
+- B: 학생이 B처럼 썼다
+- other: 둘 다 아니다(다른 글자를 썼다)
+- unclear: 글씨를 알아볼 수 없어 고를 수 없다
+
+반드시 지킬 원칙:
+- 대문자·소문자, 마침표·쉼표·물음표·느낌표·따옴표·아포스트로피 같은 문장부호는 보지 않습니다. 그것 때문에 A와 B를 가르지 마십시오.
+- 철자는 한 글자도 봐주지 않습니다. 'foward'와 'forward'는 다른 표기입니다. 학생이 틀리게 썼으면 그대로 B나 other입니다.
+- A가 정답이라는 이유로 A를 고르지 마십시오. 해당 낱말의 글자를 한 자씩 보고, 이미지에 실제로 쓰인 쪽을 고르십시오.
+- '(없음)'은 그 자리에 아무것도 쓰지 않았다는 뜻입니다.
+- 지우거나 줄을 그어 지운 글자는 쓰지 않은 것으로 봅니다.
+- 확실하지 않으면 unclear를 고르십시오. 추측하지 마십시오.`;
+
+/**
+ * 손글씨 칸 이미지 한 장을 대조한다. 항목마다 학생이 쓴 쪽을 돌려준다.
+ * 실패하면 null — 대조하지 않은 것으로 두고 다음에 다시 한다(사람에게 넘기지 않는다).
+ */
+export async function verifyEssay(
+  jpeg: Buffer,
+  input: { question: number; read: string; segments: Array<{ expected: string; read: string }> },
+  requestedModel: AiModelId = DEFAULT_AI_MODEL,
+): Promise<Array<"expected" | "read" | "other" | "unclear"> | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new TranscribeNotConfiguredError();
+  if (input.segments.length === 0) return [];
+
+  const client = new OpenAI({ apiKey });
+  const model = resolveAiModel(requestedModel);
+  const show = (text: string) => (text.trim() ? `"${text.trim()}"` : "(없음)");
+  const lines = input.segments.map((segment, i) => `${i + 1}) A: ${show(segment.expected)} · B: ${show(segment.read)}`);
+
+  try {
+    const response = await client.responses.parse({
+      ...aiModelParams(model),
+      input: [
+        { role: "system", content: VERIFY_SYSTEM },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                `${input.question}번 답안 칸입니다.`,
+                `처음 읽은 전체 답안: ${show(input.read)}`,
+                "항목마다 학생이 실제로 쓴 쪽을 고르십시오.",
+                ...lines,
+              ].join("\n"),
+            },
+            { type: "input_image", image_url: `data:image/jpeg;base64,${jpeg.toString("base64")}`, detail: "high" },
+          ],
+        },
+      ],
+      text: { format: zodTextFormat(VerifySchema, "handwriting_check") },
+    });
+    const items = response.output_parsed?.items ?? [];
+    return input.segments.map((_, i) => {
+      const choice = items.find((item) => item.no === i + 1)?.choice;
+      if (choice === "A") return "expected";
+      if (choice === "B") return "read";
+      if (choice === "other") return "other";
+      return "unclear";
+    });
+  } catch (error) {
+    console.warn(`손글씨 대조 실패(${input.question}번)`, error);
+    return null;
+  }
+}
