@@ -3,6 +3,7 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { z } from "zod";
+import { AiDraftError, classifyAiError, messageFor } from "@/lib/ai-errors";
 import { aiModelParams, resolveAiModel, DEFAULT_AI_MODEL, type AiModelId } from "@/lib/ai-models";
 import type { OmrExam } from "@/lib/omr-types";
 import { EXAM_TYPE_LABELS } from "@/lib/omr-types";
@@ -13,25 +14,69 @@ import { withStudentTitle } from "@/lib/student-honorific";
 const DraftSchema = z.object({ draft: z.string() });
 
 /**
- * 개별 코멘트 초안 — 종합 평가와 영역별 평가를 한 번에 받는다.
+ * 개별 코멘트 초안 — 종합 평가와 영역별 평가.
  *
- * 나눠서 두 번 부르면 같은 학생을 두 번 읽어야 하고 말이 어긋나기 쉽다.
+ * 예전에는 한 번에 받았다. 그런데 영역이 대여섯이면 글이 길어 한 요청이 서버 함수
+ * 제한 시간을 넘겨 끊기는 학생이 생겼다(반에서 서너 명). 지금은 종합 평가와 영역별
+ * 평가를 **동시에 따로** 받는다 — 걸리는 시간이 긴 쪽 하나로 줄고, 한쪽이 실패해도
+ * 그쪽만 다시 받는다. 둘 다 같은 수치를 근거로 쓰므로 말이 어긋날 여지는 작다.
  * 등급은 성취율에서 이미 제안해 두었으므로, AI에게는 서술만 맡긴다.
  */
-const StudentDraftSchema = z.object({
-  overall: z.string(),
-  areas: z.array(z.object({ area: z.string(), text: z.string() })),
-});
+const OverallDraftSchema = z.object({ overall: z.string() });
 
-/** 영역별 출제 안내 초안 — 응시생 전원에게 똑같이 실린다 */
+/** 영역별 서술(학생별 평가·출제 안내 공용) */
 const AreaNotesSchema = z.object({
   areas: z.array(z.object({ area: z.string(), text: z.string() })),
 });
 
+/**
+ * AI 호출 시간 — 서버 함수 제한(300초) 안에서 한 번 더 시도할 여지를 남긴다.
+ * SDK 는 429·5xx·연결 끊김을 스스로 다시 시도한다(maxRetries).
+ */
+const AI_TIMEOUT_MS = 110_000;
+
 function getClient(): OpenAI | null {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
-  return new OpenAI({ apiKey });
+  return new OpenAI({ apiKey, timeout: AI_TIMEOUT_MS, maxRetries: 3 });
+}
+
+/**
+ * 구조화된 답을 받되, 답을 끝맺지 못했으면(길이 제한·내용 필터) 한 번 더 시도한다.
+ *
+ * SDK 는 응답 상태가 completed 가 아니면 output_parsed 를 null 로 둘 뿐 예외를 던지지
+ * 않는다. 그걸 그냥 "실패"로 보이면 선생님은 왜인지 모른 채 같은 결과를 반복한다.
+ */
+async function parsedOrRetry<T>(
+  label: string,
+  call: () => Promise<{ status?: string | null; incomplete_details?: { reason?: string | null } | null; output_parsed: T | null }>,
+): Promise<NonNullable<T>> {
+  let lastReason = "";
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const started = Date.now();
+    let response: Awaited<ReturnType<typeof call>>;
+    try {
+      response = await call();
+    } catch (error) {
+      const kind = classifyAiError(error);
+      console.error(`[ai-draft] ${label} ${attempt}차 실패 ${Date.now() - started}ms — ${kind}`, error);
+      throw new AiDraftError(kind, kind === "unknown" && error instanceof Error ? error.message : messageFor(kind));
+    }
+    const elapsed = Date.now() - started;
+    if (response.status && response.status !== "completed") {
+      lastReason = `status=${response.status} reason=${response.incomplete_details?.reason ?? "?"}`;
+      console.warn(`[ai-draft] ${label} ${attempt}차 미완성 ${elapsed}ms — ${lastReason}`);
+      continue;
+    }
+    if (response.output_parsed === null || response.output_parsed === undefined) {
+      lastReason = "output_parsed=null";
+      console.warn(`[ai-draft] ${label} ${attempt}차 빈 응답 ${elapsed}ms`);
+      continue;
+    }
+    console.info(`[ai-draft] ${label} ${attempt}차 완료 ${elapsed}ms`);
+    return response.output_parsed as NonNullable<T>;
+  }
+  throw new AiDraftError(lastReason.startsWith("status=") ? "incomplete" : "empty", messageFor(lastReason.startsWith("status=") ? "incomplete" : "empty"));
 }
 
 const COMMON_RULES = `반드시 지킬 작성 원칙:
@@ -150,7 +195,7 @@ ${COMMON_RULES}
   }));
 }
 
-/** 학생별 개별 코멘트 초안 — 종합 평가 + 영역별 평가 */
+/** 학생별 개별 코멘트 초안 — 종합 평가 + 영역별 평가(동시에 따로 받는다) */
 export async function draftStudentComment(
   exam: OmrExam,
   report: GenericReportData,
@@ -159,78 +204,126 @@ export async function draftStudentComment(
 ): Promise<{ overall: string; areas: Array<{ area: string; text: string }> }> {
   const client = getClient();
   if (!client) {
-    throw new Error("OPENAI_API_KEY가 설정되어 있지 않아 AI 초안을 만들 수 없습니다. 직접 작성해 주세요.");
+    throw new AiDraftError("config", "OPENAI_API_KEY가 설정되어 있지 않아 AI 초안을 만들 수 없습니다. 직접 작성해 주세요.");
   }
   const model = resolveAiModel(requestedModel);
+  const name = report.student.name;
 
-  const weakDetail = report.items
-    .filter((item) => report.weakItems.includes(item.no))
+  // 예전 성적표에는 없을 수 있는 칸들 — 없으면 빈 것으로 본다(TypeError 로 통째로 실패하지 않게)
+  const weakItems = Array.isArray(report.weakItems) ? report.weakItems : [];
+  const items = Array.isArray(report.items) ? report.items : [];
+  const areasIn = Array.isArray(report.areas) ? report.areas : [];
+  const growth = Array.isArray(report.growth) ? report.growth : [];
+  const contents = Array.isArray(report.contents) ? report.contents : [];
+
+  const weakDetail = items
+    .filter((item) => weakItems.includes(item.no))
     .map((item) => ({ no: item.no, marked: item.marked, answer: item.answer, correctRate: item.correctRate }));
 
-  const payload = {
+  const base = {
     examTitle: exam.title,
     examType: EXAM_TYPE_LABELS[exam.examType],
-    studentName: report.student.name,
+    studentName: name,
     score: report.score,
     cohort: report.cohort,
     standardScore: report.standardScore,
-    growth: report.growth.map((point) => ({ date: point.date, standardScore: point.standardScore })),
-    weakItems: weakDetail,
-    /** 영역별 성취 — 각 영역에 대해 한 단락씩 써야 한다 */
-    areas: report.areas.map((a) => ({
+    /** 영역별 성취 */
+    areas: areasIn.map((a) => ({
       area: a.area,
       earned: a.earned,
       possible: a.possible,
       rate: a.rate,
       classAverageRate: a.cohortRate,
     })),
+  };
+  const overallPayload = {
+    ...base,
+    growth: growth.map((point) => ({ date: point.date, standardScore: point.standardScore })),
+    weakItems: weakDetail,
+    /** 성적표에 칩으로도 노출되는 긍정 키워드 — 문장에 자연스럽게 녹일 것 */
+    displayKeywords: keywords.display,
+    /** 노출되지 않는 참고 키워드(보완점 포함 가능) — 표현을 다듬어 반영하되 그대로 나열하지 말 것 */
+    weaveKeywords: keywords.weave,
+  };
+  const areasPayload = {
+    ...base,
+    weakItems: weakDetail,
     /** 세부 유형별 성취 — 영역 서술을 구체적으로 만들 근거 */
-    contents: (report.contents ?? []).map((c) => ({
+    contents: contents.map((c) => ({
       content: c.area,
       earned: c.earned,
       possible: c.possible,
       rate: c.rate,
       classAverageRate: c.cohortRate,
     })),
-    /** 성적표에 칩으로도 노출되는 긍정 키워드 — 문장에 자연스럽게 녹일 것 */
-    displayKeywords: keywords.display,
-    /** 노출되지 않는 참고 키워드(보완점 포함 가능) — 표현을 다듬어 반영하되 그대로 나열하지 말 것 */
-    weaveKeywords: keywords.weave,
   };
 
-  const response = await client.responses.parse({
-    ...aiModelParams(model),
-    input: [
-      {
-        role: "system",
-        content: `당신은 영어학원 담임 선생님을 돕는 보조 작가입니다. 학생 개인 성적표에 실릴 담임 의견 초안을 작성합니다. 읽는 사람은 학부모입니다.
+  const nameRule = `- 학생을 가리킬 때는 실제 이름 뒤에 '학생'을 붙여 "${name} 학생은", "${name} 학생이"처럼 씁니다. 이름만 쓰거나("${name}은") 이름을 비운 "OO 학생"은 쓰지 않습니다.`;
+
+  const overallCall = parsedOrRetry<z.infer<typeof OverallDraftSchema>>(`학생 ${name} 종합`, () =>
+    client.responses.parse({
+      ...aiModelParams(model),
+      input: [
+        {
+          role: "system",
+          content: `당신은 영어학원 담임 선생님을 돕는 보조 작가입니다. 학생 개인 성적표에 실릴 담임 의견의 '종합 평가'를 작성합니다. 읽는 사람은 학부모입니다.
 
 ${COMMON_RULES}
 - overall(종합 평가)은 6~9문장으로 작성합니다: 이번 시험에서의 성취(점수·학원 평균 대비·표준점수 흐름) → 수업에서 관찰된 강점(displayKeywords 반영) → 이번 시험에서 드러난 보완점(weakItems·weaveKeywords를 다듬어 반영) → 다음 달 학습 방향과 격려.
-- areas는 입력으로 받은 areas의 **모든 영역**에 대해 하나씩, 순서를 유지해 작성합니다. area 값은 받은 그대로 돌려줍니다.
-- 각 영역 서술은 3~5문장입니다. "N문항 중 M문항을 맞혔습니다"처럼 그 영역의 득점 사실로 시작한 뒤, contents(세부 유형별 성취)를 근거로 무엇을 잘했고 무엇이 아쉬운지 구체적으로 씁니다.
 - 성취율이 반 평균보다 낮은 영역은 감추지 말고 무엇을 보완할지 분명히 적되, 학부모가 읽기에 건설적인 표현을 씁니다.
 - 등급(매우 우수·우수 등)은 시스템이 따로 표기하므로 서술 안에서 등급을 선언하지 않습니다.
 - displayKeywords는 학생의 강점이므로 긍정적 맥락에서 자연스럽게 문장에 녹입니다.
 - weaveKeywords는 성적표에 노출되지 않는 참고 사항입니다. 단어를 그대로 옮기지 말고, 학부모가 듣기에 건설적인 표현으로 다듬어 반영합니다.
 - growth에 이전 회차가 있으면 표준점수 흐름(상승·유지·하락)을 언급합니다. 첫 응시면 언급하지 않습니다.
-- 학생을 가리킬 때는 실제 이름 뒤에 '학생'을 붙여 "${report.student.name} 학생은", "${report.student.name} 학생이"처럼 씁니다. 이름만 쓰거나("${report.student.name}은") 이름을 비운 "OO 학생"은 쓰지 않습니다.`,
-      },
-      {
-        role: "user",
-        content: `아래 학생 데이터를 바탕으로 담임 의견 초안을 작성하세요.\n${JSON.stringify(payload)}`,
-      },
-    ],
-    text: { format: zodTextFormat(StudentDraftSchema, "student_comment_draft") },
-  });
+${nameRule}`,
+        },
+        {
+          role: "user",
+          content: `아래 학생 데이터를 바탕으로 담임 의견의 종합 평가 초안을 작성하세요.\n${JSON.stringify(overallPayload)}`,
+        },
+      ],
+      text: { format: zodTextFormat(OverallDraftSchema, "student_overall_draft") },
+    }),
+  );
+
+  // 영역이 없으면(분석영역을 안 채운 시험) 영역별 평가는 받을 것이 없다
+  const areasCall =
+    areasIn.length === 0
+      ? Promise.resolve({ areas: [] as Array<{ area: string; text: string }> })
+      : parsedOrRetry<z.infer<typeof AreaNotesSchema>>(`학생 ${name} 영역`, () =>
+          client.responses.parse({
+            ...aiModelParams(model),
+            input: [
+              {
+                role: "system",
+                content: `당신은 영어학원 담임 선생님을 돕는 보조 작가입니다. 학생 개인 성적표에 실릴 담임 의견의 '영역별 평가'를 작성합니다. 읽는 사람은 학부모입니다.
+
+${COMMON_RULES}
+- areas는 입력으로 받은 areas의 **모든 영역**에 대해 하나씩, 순서를 유지해 작성합니다. area 값은 받은 그대로 돌려줍니다.
+- 각 영역 서술은 3~5문장입니다. "N문항 중 M문항을 맞혔습니다"처럼 그 영역의 득점 사실로 시작한 뒤, contents(세부 유형별 성취)를 근거로 무엇을 잘했고 무엇이 아쉬운지 구체적으로 씁니다.
+- 성취율이 반 평균보다 낮은 영역은 감추지 말고 무엇을 보완할지 분명히 적되, 학부모가 읽기에 건설적인 표현을 씁니다.
+- 등급(매우 우수·우수 등)은 시스템이 따로 표기하므로 서술 안에서 등급을 선언하지 않습니다.
+${nameRule}`,
+              },
+              {
+                role: "user",
+                content: `아래 학생 데이터를 바탕으로 영역별 평가 초안을 작성하세요.\n${JSON.stringify(areasPayload)}`,
+              },
+            ],
+            text: { format: zodTextFormat(AreaNotesSchema, "student_area_draft") },
+          }),
+        );
+
+  // 둘을 동시에 — 한쪽이 실패하면 그 실패를 그대로 올린다(화면이 한 번 더 시도한다)
+  const [overallResult, areasResult] = await Promise.all([overallCall, areasCall]);
 
   // 모델이 '학생'을 빼먹고 "김도영은"이라 쓰면 여기서 "김도영 학생은"으로 맞춘다
-  const polish = (text: string) => withStudentTitle(stripHanja(text), report.student.name);
-  const overall = polish(response.output_parsed?.overall ?? "");
-  if (!overall) throw new Error("AI 초안 생성에 실패했습니다. 다시 시도해 주세요.");
+  const polish = (text: string) => withStudentTitle(stripHanja(text), name);
+  const overall = polish(overallResult.overall ?? "");
+  if (!overall) throw new AiDraftError("empty", messageFor("empty"));
   return {
     overall,
-    areas: (response.output_parsed?.areas ?? []).map((entry) => ({
+    areas: (areasResult.areas ?? []).map((entry) => ({
       area: stripHanja(String(entry.area)),
       text: polish(String(entry.text)),
     })),
