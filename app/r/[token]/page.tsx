@@ -1,11 +1,12 @@
 import type {PlacementReportFeedback} from '@/lib/placement-report-feedback';
 import AcademyLogo from "@/components/AcademyLogo";
-import GenericReport, { type ReportComments } from "@/components/GenericReport";
+import GenericReport from "@/components/GenericReport";
 import PinGate from "@/components/PinGate";
 import ReportView from "@/components/ReportView";
 import { canViewExamType, getCurrentUser, hasPermission, hasReportAccess } from "@/lib/auth";
 import { getExamOverview, parseTeacherComment } from "@/lib/omr-comments";
 import { isGenericReport } from "@/lib/omr-report-types";
+import { publishedComments } from "@/lib/report-comments";
 import { getReportByToken, recordReportView } from "@/lib/reports";
 import { gatePhoneHint } from "@/lib/utils";
 import {resolveAssignedReport} from '@/lib/placement-service';
@@ -65,22 +66,20 @@ export default async function PublicReportPage({ params }: { params: Promise<{ t
       report=assigned.report;keyFeedback=assigned.keyFeedback;
     }
     // 담임 의견(총평·개별)은 성적표 생성 이후에도 수정되므로 열람 시점에 읽는다.
+    // 초안(draft) 상태는 아직 학부모에게 보일 글이 아니므로 확정된 것만 싣는다(publishedComments).
     const personal = parseTeacherComment(row.teacher_comment);
     const overview = row.exam_id
       ? await getExamOverview(row.exam_id).catch(() => null)
       : null;
-    // 초안(draft) 상태는 아직 학부모에게 보일 글이 아니므로 확정된 것만 싣는다.
-    const overviewFinal = overview?.status === "final";
-    const personalFinal = personal.status === "final";
-    const comments: ReportComments = {
-      overview: overviewFinal ? overview.final : null,
-      style: overview?.style ?? "free",
-      areaNotes: overviewFinal ? overview.areaNotes : [],
-      personal: personalFinal ? personal.personalFinal : null,
-      areaFeedback: personalFinal ? personal.areaFeedback : [],
-      keywords: personalFinal ? personal.displayKeywords : [],
-    };
-    return <GenericReport report={report} keyFeedback={keyFeedback} comments={comments} />;
+    // 직원에게만 웹/A4 보기 전환과 '인쇄 · PDF 저장' 막대를 띄운다 — 학부모 화면에는 없다.
+    return (
+      <GenericReport
+        report={report}
+        keyFeedback={keyFeedback}
+        comments={publishedComments(overview, personal)}
+        staffTools={staffViewing}
+      />
+    );
   }
-  return <ReportView report={row.report_data} />;
+  return <ReportView report={row.report_data} staffTools={staffViewing} />;
 }

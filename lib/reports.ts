@@ -12,8 +12,8 @@ import {
 import { EMPTY_RANGE, rangeBounds, type DateRange } from "@/lib/date-range";
 import { compactItems, homeroomKey, mergeTeacherNames, questionsOf, type HomeroomReport } from "@/lib/homeroom";
 import type { StudentReport } from "@/lib/student-history";
-import { parseTeacherComment } from "@/lib/omr-comments";
-import { isGenericReport } from "@/lib/omr-report-types";
+import { parseTeacherComment, type TeacherComment } from "@/lib/omr-comments";
+import { isGenericReport, type GenericReportData } from "@/lib/omr-report-types";
 import { EXAM_TYPE_LABELS, type ExamType } from "@/lib/omr-types";
 import type { ReportDbRow } from "@/lib/types";
 
@@ -440,6 +440,52 @@ export async function listReviewStudents(examId: string): Promise<ReviewStudentR
       commentText: text || null,
       viewCount: (row.view_count as number) ?? 0,
       createdAt: row.created_at as string,
+    });
+  }
+  return out.sort((a, b) => a.studentName.localeCompare(b.studentName, "ko"));
+}
+
+/** 시험 전체 A4 인쇄에 쓰는 성적표 한 장 — 본문과 그 학생의 담임 의견 */
+export interface ExamReportRow {
+  id: string;
+  token: string;
+  studentKey: string | null;
+  studentName: string;
+  className: string;
+  report: GenericReportData;
+  teacherComment: TeacherComment;
+}
+
+/**
+ * 이 시험의 성적표 본문을 학생별로(다시 만든 학생은 마지막 것만) 이름순으로 —
+ * 시험 전체 A4 인쇄의 재료. 중지된 성적표와 OMR 꼴이 아닌 행은 뺀다.
+ */
+export async function listExamReportRows(examId: string): Promise<ExamReportRow[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("student_reports")
+    .select("id,public_token,student_key,student_name,class_name,is_active,created_at,report_data,teacher_comment")
+    .eq("exam_id", examId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`성적표 목록 조회 실패: ${error.message}`);
+
+  const seen = new Set<string>();
+  const out: ExamReportRow[] = [];
+  for (const row of data ?? []) {
+    if (row.is_active === false) continue;
+    const key = (row.student_key as string | null) ?? `#${row.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const body: unknown = row.report_data;
+    if (!isGenericReport(body)) continue;
+    out.push({
+      id: row.id as string,
+      token: row.public_token as string,
+      studentKey: (row.student_key as string | null) ?? null,
+      studentName: ((row.student_name as string | null) ?? "").trim() || body.student.name,
+      className: (row.class_name as string | null) ?? body.student.className ?? "",
+      report: body,
+      teacherComment: parseTeacherComment(row.teacher_comment),
     });
   }
   return out.sort((a, b) => a.studentName.localeCompare(b.studentName, "ko"));

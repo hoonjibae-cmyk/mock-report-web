@@ -10,7 +10,7 @@
  * app/admin/omr/[id]/summary/page.tsx 가, 어떻게 보이는지는 ExamSummary 가 안다.
  */
 import type { MarkValue } from "@/lib/omr-answers";
-import type { OmrExam } from "@/lib/omr-types";
+import type { ExamType, OmrExam } from "@/lib/omr-types";
 import {
   areaOf,
   isEssayQuestion,
@@ -79,6 +79,8 @@ export interface SummaryQuestion {
 export interface ExamSummaryData {
   examId: string;
   title: string;
+  /** 시험 유형 — 반배치고사는 A4 전체 인쇄 대신 반별 출력 링크를 쓴다 */
+  examType: ExamType;
   typeLabel: string;
   examDate: string | null;
   numQuestions: number;

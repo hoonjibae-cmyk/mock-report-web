@@ -70,6 +70,7 @@ export default async function ExamSummaryPage(context: { params: Promise<{ id: s
   const data: ExamSummaryData = {
     examId: exam.id,
     title: exam.title,
+    examType: exam.examType,
     typeLabel: EXAM_TYPE_LABELS[exam.examType],
     examDate: exam.examDate,
     numQuestions: exam.numQuestions,
