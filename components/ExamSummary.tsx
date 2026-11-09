@@ -83,6 +83,16 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
               성적 엑셀 받기
             </a>
           ) : null}
+          {/* 성적표를 종이·PDF 로 — 반배치고사는 반별 출력 링크가 따로 있다 */}
+          {data.reportCount > 0 && data.examType !== "placement" ? (
+            <Link
+              className="button secondary"
+              href={`${base}/print`}
+              title="응시생 전원의 성적표를 A4 쪽으로 이어 붙인 인쇄 화면을 엽니다. 인쇄 창에서 ‘PDF로 저장’을 고르면 파일로 받습니다."
+            >
+              성적표 A4 인쇄
+            </Link>
+          ) : null}
           <button className="button primary" type="button" onClick={() => window.print()}>
             인쇄
           </button>

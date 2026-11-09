@@ -121,7 +121,14 @@ function SubjectSection({ subject }: { subject: SubjectReport }) {
   );
 }
 
-export default function ReportView({ report }: { report: StudentReportData }) {
+export default function ReportView({
+  report,
+  staffTools = false,
+}: {
+  report: StudentReportData;
+  /** 직원이 보는 중 — 웹/A4 보기 전환과 인쇄 막대를 띄운다. 학부모 화면에는 절대 주지 않는다 */
+  staffTools?: boolean;
+}) {
   const subjects = SUBJECT_KEYS.map((key) => report.subjects[key]).filter(Boolean) as SubjectReport[];
   const review = report.aiReview;
   const nationalSnapshot = subjects
@@ -144,7 +151,7 @@ export default function ReportView({ report }: { report: StudentReportData }) {
 
   return (
     <main className="report-shell">
-      <ReportLayoutEffects />
+      <ReportLayoutEffects tools={staffTools} />
       <article className="report-document web-report-document">
         <header className="report-hero">
           <div className="brand-lockup report-brand">

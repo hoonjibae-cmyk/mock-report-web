@@ -706,6 +706,15 @@ export default function OmrReportBuilder({
             ← {essayCount > 0 ? "주관식 채점" : "스캔 · 검수"}
           </Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/summary`}>결과 요약</Link>
+          {!isPlacement && existingReports > 0 ? (
+            <Link
+              className="button secondary"
+              href={`/admin/omr/${exam.id}/print`}
+              title="응시생 전원의 성적표를 A4 쪽으로 이어 붙인 인쇄 화면을 엽니다. 인쇄 창에서 ‘PDF로 저장’을 고르면 파일로 받습니다."
+            >
+              A4 전체 인쇄
+            </Link>
+          ) : null}
           <Link className="button secondary" href={`/admin/omr/${exam.id}/comments`}>담임 의견 →</Link>
           <Link className="button secondary" href={`/admin/omr/${exam.id}/send`}>알림톡 발송 →</Link>
         </div>
@@ -859,6 +868,13 @@ export default function OmrReportBuilder({
                 나눠 두었다면 그 두 칸이 나옵니다.
               </p>
             ) : null}
+            {!isPlacement && existingReports > 0 ? (
+              <p className="subtle">
+                <strong>A4 전체 인쇄</strong>를 누르면 응시생 전원의 성적표가 학생마다 새 쪽에서 시작하는 A4 문서로
+                열립니다. 인쇄 창에서 대상을 ‘PDF로 저장’으로 고르면 파일로 받을 수 있고, 학생 한 명만 필요하면 아래
+                링크 목록의 <strong>A4</strong>를 누르세요.
+              </p>
+            ) : null}
           </div>
           <div className="toolbar" style={{ flexWrap: "wrap" }}>
             {canCreate ? (
@@ -908,6 +924,15 @@ export default function OmrReportBuilder({
               >
                 성적 엑셀 받기
               </a>
+            ) : null}
+            {!isPlacement && existingReports > 0 ? (
+              <Link
+                className="button secondary"
+                href={`/admin/omr/${exam.id}/print`}
+                title="응시생 전원의 성적표를 A4 쪽으로 이어 붙인 인쇄 화면을 엽니다. 인쇄 창에서 ‘PDF로 저장’을 고르면 파일로 받습니다."
+              >
+                A4 전체 인쇄
+              </Link>
             ) : null}
           </div>
         </div>
@@ -1208,6 +1233,17 @@ export default function OmrReportBuilder({
                   <a className="button small ghost" href={report.url} target="_blank" rel="noreferrer">
                     웹 보기
                   </a>
+                  {!isPlacement ? (
+                    <a
+                      className="button small ghost"
+                      href={`${report.url}?layout=a4`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="A4 판으로 엽니다 — 아래 막대의 ‘인쇄 · PDF 저장’으로 바로 뽑을 수 있습니다"
+                    >
+                      A4
+                    </a>
+                  ) : null}
                   <button
                     className="button small primary"
                     onClick={() => copyLink(report.url, report.id)}

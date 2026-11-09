@@ -1,38 +1,17 @@
 import type {PlacementReportFeedback} from '@/lib/placement-report-feedback';
+import A4GenericReport from "@/components/A4GenericReport";
 import AcademyLogo from "@/components/AcademyLogo";
+import ParentTrendChart from "@/components/ParentTrendChart";
 import ReportLayoutEffects from "@/components/ReportLayoutEffects";
 import { formatChoices, toChoices } from "@/lib/omr-answers";
-import type { AreaStat, GenericReportData, GrowthPoint } from "@/lib/omr-report-types";
+import type { AreaStat, GenericReportData } from "@/lib/omr-report-types";
 import { orderedPlacementAreas } from "@/lib/placement-areas";
+import { ratingClass, type ReportComments } from "@/lib/report-comments";
 import { gradeRangeSentence } from "@/lib/school-grade";
-import { shortDate, trendSentence } from "@/lib/score-history";
+import { trendSentence } from "@/lib/score-history";
 
-/** 열람 시점에 주입되는 담임 의견(성적표 생성 후에도 수정 가능) */
-export interface ReportComments {
-  /** 시험 공통 총평 */
-  overview: string | null;
-  /**
-   * 의견 작성 방식. 'free'면 영역별 항목을 싣지 않는다 — 선생님이 자유 서술로
-   * 쓰기로 한 시험이므로, 예전에 잠깐 채워 둔 영역별 글이 있어도 내보내지 않는다.
-   */
-  style?: "free" | "structured";
-  /** 영역별 출제 안내 — 응시생 전원에게 똑같이 실린다 */
-  areaNotes?: Array<{ area: string; text: string }>;
-  /** 학생별 개별 의견(종합 평가) */
-  personal: string | null;
-  /** 영역별 평가 — 등급 + 서술 */
-  areaFeedback?: Array<{ area: string; rating: string; text: string }>;
-  /** 성적표에 칩으로 노출되는 긍정 키워드 */
-  keywords: string[];
-}
-
-/** 등급 이름을 CSS 클래스로 — 한글 클래스명 대신 안정적인 영문 키를 쓴다 */
-function ratingClass(rating: string): string {
-  if (rating === "매우 우수") return "best";
-  if (rating === "우수") return "good";
-  if (rating === "보통") return "fair";
-  return "work";
-}
+// 열람 시점에 주입되는 담임 의견 — 공개 성적표·반배치고사 출력·A4 인쇄가 같은 꼴을 쓰므로 lib 에 둔다
+export type { ReportComments } from "@/lib/report-comments";
 
 /**
  * 토요모의고사 — 응시 학년 범위 안내. 여러 학년이 한 시험을 보므로 평균이 낮아
@@ -43,68 +22,6 @@ function GradeRangeNotice({ report }: { report: GenericReportData }) {
   if (report.examType !== "saturday") return null;
   const sentence = gradeRangeSentence(report.cohortGrades);
   return sentence ? <p className="cohort-grade-notice">{sentence}</p> : null;
-}
-
-/**
- * 학부모용 성적 추이 — 회차마다 내 점수와 반 평균을 막대 둘로.
- *
- * 숫자를 막대 위에 그대로 적어 축을 읽지 않아도 된다. 표준점수 같은 보정값은
- * 여기 두지 않는다 — 학부모가 알고 싶은 것은 "몇 점이었고 올랐나"다.
- */
-function ParentTrendChart({ points }: { points: GrowthPoint[] }) {
-  const W = 640;
-  const H = 230;
-  const pad = { l: 16, r: 16, t: 34, b: 44 };
-  const innerW = W - pad.l - pad.r;
-  const innerH = H - pad.t - pad.b;
-  const yMax = Math.max(100, ...points.map((p) => Math.max(p.raw, p.mean)));
-  const yTo = (v: number) => pad.t + innerH * (1 - v / yMax);
-  const base = H - pad.b;
-  const group = innerW / points.length;
-  const bw = Math.min(34, group * 0.3);
-
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      role="img"
-      aria-label="성적 추이 그래프 — 회차별 내 점수와 반 평균"
-      style={{ width: "100%", height: "auto", display: "block" }}
-    >
-      {[0, 25, 50, 75, 100].filter((v) => v <= yMax).map((v) => (
-        <line key={v} x1={pad.l} x2={W - pad.r} y1={yTo(v)} y2={yTo(v)} stroke="#e5eaf1" strokeWidth={1} />
-      ))}
-      {/* 범례 */}
-      <g fontSize={11} fill="#667085">
-        <rect x={W - pad.r - 150} y={8} width={12} height={12} rx={3} fill="#183c73" />
-        <text x={W - pad.r - 133} y={18}>내 점수</text>
-        <rect x={W - pad.r - 76} y={8} width={12} height={12} rx={3} fill="#d5dde9" />
-        <text x={W - pad.r - 59} y={18}>반 평균</text>
-      </g>
-      {points.map((p, i) => {
-        const cx = pad.l + group * (i + 0.5);
-        const last = i === points.length - 1;
-        return (
-          <g key={p.examId}>
-            <rect x={cx - bw - 2} y={yTo(p.raw)} width={bw} height={Math.max(0, base - yTo(p.raw))} rx={4} fill={last ? "#183c73" : "#4a6a9e"}>
-              <title>{`${p.title} (${p.date}) · 내 점수 ${p.raw}점`}</title>
-            </rect>
-            <rect x={cx + 2} y={yTo(p.mean)} width={bw} height={Math.max(0, base - yTo(p.mean))} rx={4} fill="#d5dde9">
-              <title>{`${p.title} (${p.date}) · 반 평균 ${p.mean}점`}</title>
-            </rect>
-            <text x={cx - bw / 2 - 2} y={yTo(p.raw) - 6} textAnchor="middle" fontSize={last ? 13.5 : 12} fontWeight={800} fill="#102b55">
-              {p.raw}
-            </text>
-            <text x={cx + bw / 2 + 2} y={yTo(p.mean) - 6} textAnchor="middle" fontSize={10.5} fill="#667085">
-              {p.mean}
-            </text>
-            <text x={cx} y={H - 14} textAnchor="middle" fontSize={11.5} fontWeight={last ? 700 : 500} fill="#344054">
-              {shortDate(p.date)}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
 }
 
 /** 응시 집단 내 위치 바 — 최저~최고 트랙 위에 평균·내 점수 마커 */
@@ -238,10 +155,13 @@ export default function GenericReport({
   report,
   comments,
   keyFeedback,
+  staffTools = false,
 }: {
   report: GenericReportData;
   comments?: ReportComments;
   keyFeedback?: PlacementReportFeedback | null;
+  /** 직원이 보는 중 — 웹/A4 보기 전환과 인쇄 막대를 띄운다. 학부모 화면에는 절대 주지 않는다 */
+  staffTools?: boolean;
 }) {
   const { score, cohort } = report;
   // 반배치고사 — 집단은 배정 반이고, 반 평균만 싣는다. 표준편차·반 최고·최저 점수는
@@ -275,7 +195,7 @@ export default function GenericReport({
 
   return (
     <main className="report-shell">
-      <ReportLayoutEffects />
+      <ReportLayoutEffects tools={staffTools} />
       <article className={placement?"report-document web-report-document placement-report-document":"report-document web-report-document"}>
         <header className="report-hero">
           <div className="brand-lockup report-brand">
@@ -697,6 +617,13 @@ export default function GenericReport({
           </div>
         </footer>
       </article>
+      {/* A4 판 — 화면에서는 숨어 있다가 ?layout=a4 나 인쇄 때 웹 문서 대신 나온다.
+          반배치고사는 웹 문서를 그대로 인쇄하는 제 규칙이 있어 여기서 만들지 않는다. */}
+      {placement ? null : (
+        <div className="a4-report-root" aria-label="A4 출력용 성적표">
+          <A4GenericReport report={report} comments={comments} />
+        </div>
+      )}
     </main>
   );
 }

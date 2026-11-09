@@ -9,6 +9,7 @@ import {PRINT_COOKIE,validPrintScope} from '@/lib/placement-print';
 import {resolveAssignedReport} from '@/lib/placement-service';
 import {getSupabaseAdmin} from '@/lib/supabase-admin';
 import {getExamOverview,parseTeacherComment} from '@/lib/omr-comments';
+import {publishedComments} from '@/lib/report-comments';
 export const dynamic='force-dynamic';
 export default async function PlacementPrint({params,searchParams}:{params:Promise<{reportId:string}>;searchParams:Promise<{workspace?:string;class?:string;preview?:string}>}){
   const {reportId}=await params,q=await searchParams,workspaceId=q.workspace??'',classId=q.class??'';
@@ -22,6 +23,5 @@ export default async function PlacementPrint({params,searchParams}:{params:Promi
   const keyFeedback=result.report?result.keyFeedback:await loadPlacementReportFeedback(report);
   const overview=await getExamOverview(report.examId).catch(()=>null);
   const personal=parseTeacherComment(result.report?result.teacherComment:source?.teacher_comment);
-  const overviewFinal=overview?.status==='final',personalFinal=personal.status==='final';
-  return <EmbeddedReportSize enabled={q.preview==='1'}><GenericReport report={report} keyFeedback={keyFeedback} comments={{overview:overviewFinal?overview.final:null,style:overview?.style??'free',areaNotes:overviewFinal?overview.areaNotes:[],personal:personalFinal?personal.personalFinal:null,areaFeedback:personalFinal?personal.areaFeedback:[],keywords:personalFinal?personal.displayKeywords:[]}}/></EmbeddedReportSize>;
+  return <EmbeddedReportSize enabled={q.preview==='1'}><GenericReport report={report} keyFeedback={keyFeedback} comments={publishedComments(overview,personal)}/></EmbeddedReportSize>;
 }

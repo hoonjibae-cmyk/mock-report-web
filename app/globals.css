@@ -2868,3 +2868,181 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 .admin-skeleton .subtle { margin-top: 18px; }
 @keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton-line, .skeleton-block { animation: none; } }
+
+/* --- OMR 성적표 A4 판 (v1.62.0) ---
+   토요모의고사·월말평가·인클래스·국영수 OMR 성적표를 A4 쪽 단위로 다시 그린다.
+   종이에 찍히는 것이라 mm·pt 단위로 적는다. 쪽 틀(.a4-page, 바닥글, 맞춤 배율)은
+   위의 A4 블록을 그대로 쓰고, 여기에는 쪽 안의 모양만 둔다. */
+.a4g-body { display: flex; flex-direction: column; gap: 4mm; color: #172033; }
+.a4g-body > * { flex: 0 0 auto; }
+
+/* 머리글 — 왼쪽 학원, 오른쪽 시험 이름, 아래 학생 띠 */
+.a4g-header { border-top: 2mm solid var(--navy); padding-top: 4mm; }
+.a4g-header-row { display: flex; align-items: center; justify-content: space-between; gap: 6mm; padding-bottom: 3.5mm; border-bottom: .3mm solid #d9e0ea; }
+.a4g-brand { display: flex; align-items: center; gap: 3mm; flex: 0 0 auto; }
+.a4-report-root .a4g-brand .brand-logo { width: 14mm; height: auto; }
+.a4g-brand strong { display: block; color: var(--navy); font-size: 12pt; letter-spacing: -.03em; white-space: nowrap; }
+.a4g-brand span { display: block; margin-top: .5mm; color: #6b778a; font-size: 7.5pt; }
+.a4g-title { min-width: 0; text-align: right; }
+.a4g-title p { margin: 0 0 1mm; color: var(--blue); font-size: 8.5pt; font-weight: 850; }
+.a4g-title h1 { margin: 0; color: var(--navy-deep); font-size: 17pt; line-height: 1.2; letter-spacing: -.04em; }
+.a4g-student { display: flex; margin-top: 3.5mm; background: var(--navy); color: #fff; border-radius: 2.5mm; overflow: hidden; }
+.a4g-student > div { flex: 1 1 0; min-width: 0; padding: 2.6mm 3.5mm; border-right: .25mm solid rgba(255,255,255,.2); }
+.a4g-student > div:last-child { border-right: 0; }
+.a4g-student span { display: block; color: #c8d9ec; font-size: 6.5pt; }
+.a4g-student strong { display: block; margin-top: .6mm; font-size: 9pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 점수 칸 — 원점수는 남색 바탕으로 크게 */
+.a4g-kpis { display: flex; border: .3mm solid #d8e1ec; border-radius: 2.5mm; overflow: hidden; }
+.a4g-kpis > div { flex: 1 1 0; min-width: 0; padding: 2.8mm 3.5mm; border-right: .25mm solid #e1e7ef; }
+.a4g-kpis > div:last-child { border-right: 0; }
+.a4g-kpis span { display: block; color: #667085; font-size: 6.6pt; }
+.a4g-kpis strong { display: block; margin-top: .8mm; color: var(--navy); font-size: 15pt; line-height: 1.1; letter-spacing: -.03em; }
+.a4g-kpis small { display: block; margin-top: .8mm; color: #667085; font-size: 6.3pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a4g-kpis .primary { flex-grow: 1.35; background: var(--navy); color: #fff; }
+.a4g-kpis .primary span, .a4g-kpis .primary small { color: #c8d8eb; }
+.a4g-kpis .primary strong { color: #fff; font-size: 20pt; }
+.a4g-kpis .primary strong em { margin-left: 1.2mm; font-style: normal; font-size: 8.5pt; font-weight: 600; color: #c8d8eb; }
+
+/* 카드 */
+.a4g-card { border: .3mm solid #dbe3ed; border-radius: 2.5mm; background: #fff; padding: 3mm 3.5mm; break-inside: avoid; }
+.a4g-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 3mm; margin-bottom: 2mm; }
+.a4g-card-head h2 { margin: 0; color: var(--navy-deep); font-size: 9.5pt; letter-spacing: -.02em; white-space: nowrap; }
+.a4g-card-head span { color: #667085; font-size: 6.5pt; text-align: right; }
+.a4g-note { margin: 2mm 0 0; color: #667085; font-size: 6.6pt; line-height: 1.45; }
+.a4g-notice { margin: 0 0 2mm; padding: 1.6mm 2.5mm; border-radius: 1.5mm; background: #fff8df; color: #6b4e00; font-size: 7pt; line-height: 1.45; }
+.a4g-cohort-note { margin: 0 0 2mm; color: #4e5f75; font-size: 7pt; }
+.a4g-listening { color: #6b4e00; }
+
+/* 응시 집단 내 위치 — 최저~최고 트랙 위에 평균·내 점수 */
+.a4g-dist { margin: 8.5mm 7mm 0; }
+.a4g-dist-track { position: relative; height: 2.6mm; border-radius: 99px; background: linear-gradient(90deg, #eaf0f8, #d6e2f2); }
+.a4g-dist-marker { position: absolute; top: 50%; transform: translate(-50%, -50%); }
+.a4g-dist-marker i { display: block; width: 3.8mm; height: 3.8mm; border-radius: 50%; border: .6mm solid #fff; box-shadow: 0 .3mm 1mm rgba(16,43,85,.3); background: var(--navy); }
+.a4g-dist-marker.mean i { width: 3mm; height: 3mm; background: #98a2b3; }
+.a4g-dist-marker em { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-style: normal; font-size: 6.6pt; font-weight: 700; color: #667085; }
+.a4g-dist-marker.mean em { top: 3.4mm; }
+.a4g-dist-marker.me em { bottom: 3.4mm; color: var(--navy-deep); font-weight: 800; }
+.a4g-dist-ends { display: flex; justify-content: space-between; margin: 6.5mm 0 0; font-size: 6.6pt; color: #667085; }
+
+/* 표 — 영역별·내용별 성취, 우선 복습 */
+.a4g-table { width: 100%; border-collapse: collapse; font-size: 7.2pt; }
+.a4g-table th { padding: 1.4mm 1.5mm; background: #f4f7fb; color: #667085; font-size: 6.4pt; font-weight: 800; text-align: right; border-bottom: .35mm solid #d9e0ea; white-space: nowrap; }
+.a4g-table td { padding: 1.5mm 1.5mm; border-bottom: .2mm solid #e5eaf0; text-align: right; white-space: nowrap; vertical-align: middle; }
+.a4g-table th:first-child, .a4g-table td.name, .a4g-table th.bar { text-align: left; }
+.a4g-table td.name { font-weight: 750; color: var(--navy-deep); white-space: normal; }
+.a4g-table td.bar { width: 36%; padding-right: 3mm; }
+.a4g-table td strong { font-size: 8pt; color: var(--navy-deep); }
+.a4g-table td.up { color: var(--success); font-weight: 800; }
+.a4g-table td.down { color: var(--danger); font-weight: 800; }
+.a4g-estimated { display: block; color: #8a6100; font-size: 6pt; font-weight: 600; }
+.a4g-bar { position: relative; height: 2.4mm; border-radius: 99px; background: #eef1f6; }
+.a4g-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: linear-gradient(90deg, #2f67b1, #183c73); }
+.a4g-bar b { position: absolute; top: -.8mm; width: .6mm; height: 4mm; background: #667085; border-radius: .2mm; transform: translateX(-50%); }
+.a4g-rate { display: flex; align-items: center; gap: 2mm; }
+.a4g-rate .a4g-bar { flex: 1 1 auto; }
+.a4g-rate span { flex: 0 0 auto; color: #667085; font-size: 6.8pt; }
+.a4g-review td.bar { width: 26%; }
+.a4g-chip { display: inline-block; padding: .3mm 1.8mm; border-radius: 99px; font-size: 6pt; font-weight: 800; white-space: nowrap; }
+.a4g-chip.d-쉬움 { background: #e8f7f1; }
+.a4g-chip.d-보통 { background: #fff8df; }
+.a4g-chip.d-어려움 { background: #fee2e2; }
+
+/* 문항별 채점 결과 — 15열 격자 */
+.a4g-items { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); gap: 1mm; }
+.a4g-item { min-height: 9.2mm; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3mm; border: .25mm solid #dce3ec; border-radius: 1.3mm; background: #fff; }
+.a4g-item .no { color: #667085; font-size: 5.6pt; font-weight: 700; line-height: 1; }
+.a4g-item .mark { color: #172033; font-size: 7.8pt; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; }
+.a4g-item .rate { font-size: 5.6pt; font-weight: 800; line-height: 1; }
+.a4g-item.ok { background: #e8f7f1; border-color: #b9e4d5; }
+.a4g-item.ok .mark { color: var(--success); }
+.a4g-item.wrong { background: #fee2e2; border-color: #f3b8b8; }
+.a4g-item.wrong .mark { color: var(--danger); }
+.a4g-item.blank { background: #f3f5f7; }
+.a4g-item.blank .mark { color: #98a2b3; }
+.a4g-item.partial { background: #fff8df; border-color: #ecd9a0; }
+.a4g-item.partial .mark { color: #8a6100; }
+.a4g-item.absent { background: #f3f5f7; border-style: dashed; }
+.a4g-item.absent .mark { color: #98a2b3; font-size: 5.8pt; }
+.a4g-item.weak { box-shadow: inset 0 0 0 .45mm var(--danger); }
+.a4g-legend { margin: 2mm 0 0; color: #667085; font-size: 6.3pt; line-height: 1.5; }
+.a4g-legend b { font-weight: 800; }
+
+/* 위치 카드 + 성적 추이를 반씩 나눠 한 줄에 */
+.a4g-row { display: flex; gap: 4mm; align-items: stretch; }
+.a4g-row > .a4g-card { flex: 1 1 0; min-width: 0; }
+.a4g-row > .a4g-card:first-child { flex-grow: 1.12; }
+.a4g-row .a4g-card-head { flex-wrap: wrap; }
+.a4g-row .a4g-card-head span { text-align: left; }
+
+/* 성적 추이 */
+.a4g-growth svg { display: block; width: 100%; height: auto; }
+
+/* 전국 비교(국영수 OMR) */
+.a4g-national { display: flex; gap: 2mm; }
+.a4g-national > div { flex: 1 1 0; border: .25mm solid #e0e6ee; border-radius: 2mm; padding: 2mm 2.5mm; background: #f8fafc; }
+.a4g-national span { display: block; color: #667085; font-size: 6.3pt; }
+.a4g-national strong { display: block; margin-top: .5mm; color: var(--navy); font-size: 11pt; }
+.a4g-national strong.up { color: var(--success); }
+.a4g-national strong.down { color: var(--danger); }
+
+/* 분류 기준별 성취(국영수 OMR) */
+.a4g-group + .a4g-group { margin-top: 1.5mm; }
+.a4g-group-label { margin: 1mm 0 .8mm; color: var(--blue); font-size: 7pt; font-weight: 850; }
+.a4g-mini-row { display: grid; grid-template-columns: minmax(22mm, 1.2fr) 1fr 10mm 14mm; gap: 2mm; align-items: center; min-height: 5mm; font-size: 6.6pt; }
+.a4g-mini-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #344054; font-weight: 700; }
+.a4g-mini-row strong { text-align: right; color: var(--navy-deep); }
+.a4g-mini-row em { font-style: normal; color: #667085; font-size: 6pt; }
+
+/* 선생님 의견 — 편지처럼 왼쪽 남색 띠 */
+.a4g-comments { border-left: 1.2mm solid var(--navy); border-radius: 2.5mm; background: #f6f9fd; padding: 3mm 4mm; break-inside: avoid; }
+.a4g-comments-head { display: flex; align-items: center; gap: 2mm; margin-bottom: 2.2mm; }
+.a4g-comments-head span { padding: .5mm 2mm; border-radius: 99px; background: var(--navy); color: #fff; font-size: 6.3pt; font-weight: 850; }
+.a4g-comments-head strong { color: var(--navy-deep); font-size: 9.5pt; }
+.a4g-comments h3 { margin: 0 0 1.4mm; color: var(--navy-deep); font-size: 8.3pt; }
+.a4g-comments p { margin: 0; color: #2b3a4f; font-size: 8pt; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.a4g-chips { display: flex; flex-wrap: wrap; gap: 1.2mm; margin: 0 0 1.8mm; }
+.a4g-chips span { padding: .5mm 2.2mm; border-radius: 99px; border: .25mm solid #b9c8db; background: #fff; color: var(--navy); font-size: 6.6pt; font-weight: 750; }
+.a4g-area-note + .a4g-area-note, .a4g-area-feedback + .a4g-area-feedback { margin-top: 1.8mm; padding-top: 1.8mm; border-top: .2mm solid #dbe3ed; }
+.a4g-area-note strong { display: block; margin-bottom: .6mm; color: var(--navy-deep); font-size: 7.8pt; }
+.a4g-area-feedback-head { display: flex; align-items: center; justify-content: space-between; gap: 2mm; margin-bottom: .6mm; }
+.a4g-area-feedback-head strong { color: var(--navy-deep); font-size: 7.8pt; }
+.a4g-comments .rating-chip { padding: .4mm 2mm; font-size: 6.3pt; }
+
+/* 바닥 안내문 — 마지막 쪽 맨 아래에 붙는다 */
+.a4g-footnote { margin-top: auto; padding-top: 2mm; color: #6b778a; font-size: 6.4pt; line-height: 1.5; }
+.a4g-footnote p { margin: 0; }
+
+/* 바닥글 — 왼쪽 학원, 가운데 시험·학생, 오른쪽 쪽수(여러 학생을 한 번에 뽑을 때 섞이지 않게) */
+.a4g-footer-mid { flex: 1 1 auto; min-width: 0; padding: 0 4mm; text-align: center; color: #6b778a; font-size: 7pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a4g-footer-page { flex: 0 0 auto; }
+
+/* --- 직원용 보기·인쇄 도구(성적표 화면 아래 떠 있는 막대, 직원에게만) --- */
+.report-staff-tools { position: fixed; left: 50%; bottom: 18px; z-index: 60; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 999px; background: rgba(16, 43, 85, .94); color: #fff; box-shadow: 0 12px 30px rgba(16, 43, 85, .35); font-size: 13px; white-space: nowrap; }
+.report-staff-tools-label { color: #c8d9ec; font-size: 11.5px; font-weight: 800; letter-spacing: .02em; }
+.report-staff-tools-switch { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, .12); }
+.report-staff-tools-switch button { border: 0; background: transparent; color: #d8e4f2; padding: 6px 12px; border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.report-staff-tools-switch button[aria-pressed="true"] { background: #fff; color: var(--navy-deep); }
+.report-staff-tools-print { border: 0; background: var(--gold); color: #1f1a0a; padding: 8px 14px; border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+.report-staff-tools-print:hover { background: #e0b94a; }
+@media (max-width: 560px) {
+  .report-staff-tools { left: 10px; right: 10px; transform: none; justify-content: space-between; gap: 6px; padding-left: 10px; }
+  .report-staff-tools-label { display: none; }
+}
+
+/* --- 시험 전체 A4 인쇄 화면 --- */
+.a4-print-toolbar { position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #d9e0ea; box-shadow: 0 6px 20px rgba(16, 43, 85, .08); }
+.a4-print-toolbar-title { min-width: 0; }
+.a4-print-toolbar-title strong { display: block; color: var(--navy-deep); font-size: 15px; }
+.a4-print-toolbar-title span { display: block; margin-top: 2px; color: #667085; font-size: 12.5px; }
+.a4-print-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.a4-print-classes { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+.a4-print-classes > span { color: #667085; font-weight: 700; margin-right: 4px; }
+.a4-print-classes a { padding: 3px 10px; border-radius: 999px; border: 1px solid #b9c8db; color: var(--navy); background: #fff; text-decoration: none; font-weight: 700; }
+.a4-print-classes a[aria-current="page"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+.a4-print-tip { flex-basis: 100%; margin: 0; color: #4e5f75; font-size: 12.5px; line-height: 1.6; }
+.a4-print-tip b { color: var(--navy-deep); }
+.a4-print-empty { width: 210mm; max-width: 100%; margin: 0 auto; padding: 24px; border-radius: 12px; background: #fff; color: #475467; font-size: 14px; }
+@media print {
+  body.a4-print-body .a4-print-toolbar { display: none !important; }
+}
