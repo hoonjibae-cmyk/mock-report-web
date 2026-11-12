@@ -3046,3 +3046,17 @@ body.report-layout-a4 .placement-report-document{display:block;width:190mm;margi
 @media print {
   body.a4-print-body .a4-print-toolbar { display: none !important; }
 }
+
+/* --- 답안지 찾기(검수·성적표 생성·결과 요약): 이름·수험번호 검색 + 올린 날짜 칩 (v1.66.0) --- */
+.scan-filter { margin: 0 0 14px; }
+.scan-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.scan-search input[type="search"] { flex: 1 1 220px; min-width: 0; max-width: 380px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 9px; font: inherit; font-size: 13.5px; background: #fff; }
+.scan-search input[type="search"]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47, 103, 177, .1); }
+/* 브라우저가 그리는 지우기(×)는 끈다 — 우리 지우기 단추와 둘이 나란히 보이면 어색하다 */
+.scan-search input[type="search"]::-webkit-search-cancel-button, .summary-search::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.scan-search-clear { border: 0; background: #eef1f6; color: var(--muted); width: 26px; height: 26px; border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; }
+.scan-search-clear:hover { background: #dfe6f0; color: var(--navy); }
+.scan-search-count { font-size: 12.5px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scan-student-name { font-size: 13.5px; font-weight: 800; color: var(--navy-deep); white-space: nowrap; }
+.summary-search { padding: 6px 10px; border: 1px solid var(--line); border-radius: 9px; font: inherit; font-size: 13px; background: #fff; width: 200px; }
+.summary-search:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47, 103, 177, .1); }

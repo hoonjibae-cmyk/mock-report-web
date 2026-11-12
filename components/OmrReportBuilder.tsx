@@ -33,6 +33,8 @@ import ImportedExamClasses from './ImportedExamClasses';
 import {importedPrintTitle} from '@/lib/imported-exam-title';
 import { EXAM_TYPE_LABELS, mockSubjectOf, type OmrExam } from "@/lib/omr-types";
 import { scanKey, type OmrScan } from "@/lib/omr-scans";
+import { matchesScanQuery, onDay, summarizeScanDays } from "@/lib/scan-filter";
+import ScanFilterBar from "@/components/ScanFilterBar";
 
 /** 학생 관리 프로그램이 준 학생 한 명(서버가 정규화한 모양) */
 interface DirectoryInfo {
@@ -110,6 +112,10 @@ export default function OmrReportBuilder({
 
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [pinRequired, setPinRequired] = useState(true);
+  // 찾기 — 100명 넘는 시험에서 한 학생의 줄을 바로 찾는다. 보는 것만 좁히고,
+  // 성적표 생성은 언제나 검수 완료 전원이 대상이다.
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentDay, setStudentDay] = useState<string | null>(null);
   const [existingReports, setExistingReports] = useState(0);
   // 이미 살아 있는 성적표가 있는 학생의 수험번호 — 같은 학생은 새로 만들지 않고 갱신한다
   const [existingKeys, setExistingKeys] = useState<Set<string>>(new Set());
@@ -478,6 +484,17 @@ export default function OmrReportBuilder({
   }
 
   const namedCount = reviewed.filter((scan) => draftFor(scan).name.trim()).length;
+  const reviewedDays = summarizeScanDays(reviewed);
+  const shownReviewed = reviewed.filter((scan) => {
+    const draft = draftFor(scan);
+    return (
+      onDay(scan, studentDay) &&
+      matchesScanQuery(
+        { name: draft.name, studentId: scan.studentId, filename: scan.filename, school: draft.school },
+        studentQuery,
+      )
+    );
+  });
 
   // 반 인원 대비 응시 — 검수 완료 답안지가 있는 학생을 응시로 본다. 이름은 불러온
   // 학생 정보가 있으면 그것, 없으면 수험번호. 기준 반은 시험을 만들 때 고른 반.
@@ -1071,6 +1088,19 @@ export default function OmrReportBuilder({
               <span>학부모 휴대전화 뒤 4자리로 성적표 보호 (전화번호를 입력한 학생만 적용)</span>
             </label>
 
+            <ScanFilterBar
+              query={studentQuery}
+              onQuery={setStudentQuery}
+              days={reviewedDays}
+              day={studentDay}
+              onDay={setStudentDay}
+              total={reviewed.length}
+              shown={shownReviewed.length}
+              unit="명"
+              placeholder="학생 이름 · 수험번호 · 학교"
+              note="찾기는 보는 줄만 좁힙니다 — 성적표 생성은 검수 완료 전원이 대상이고, 입력한 이름·연락처도 그대로 남습니다."
+            />
+
             <div className="table-scroll">
               <table className="admin-table">
                 <thead>
@@ -1085,7 +1115,24 @@ export default function OmrReportBuilder({
                   </tr>
                 </thead>
                 <tbody>
-                  {reviewed.map((scan) => {
+                  {shownReviewed.length === 0 ? (
+                    <tr>
+                      <td colSpan={isPlacement ? 7 : 5} className="subtle">
+                        {studentQuery.trim() ? `‘${studentQuery.trim()}’에 맞는 학생이 없습니다.` : "그날 올린 답안지가 없습니다."}{" "}
+                        <button
+                          type="button"
+                          className="button tiny ghost"
+                          onClick={() => {
+                            setStudentQuery("");
+                            setStudentDay(null);
+                          }}
+                        >
+                          전체 보기
+                        </button>
+                      </td>
+                    </tr>
+                  ) : null}
+                  {shownReviewed.map((scan) => {
                     const draft = draftFor(scan);
                     // 반배치고사 — 답안지의 선호 요일 칸을 판독기가 어떻게 읽었는지
                     const read = isPlacement ? scheduleRead(scan) : null;

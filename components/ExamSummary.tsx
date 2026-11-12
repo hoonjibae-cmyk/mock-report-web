@@ -17,6 +17,7 @@ import {
   type SummarySort,
 } from "@/lib/exam-summary";
 import { copyText } from "@/lib/clipboard";
+import { matchesScanQuery } from "@/lib/scan-filter";
 import { formatWhen } from "@/lib/review";
 
 
@@ -34,8 +35,17 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
   /** 엑셀용 복사 결과 — 몇 초 보이고 사라진다 */
   const [copied, setCopied] = useState("");
   const copiedTimer = useRef<number | null>(null);
+  // 찾기 — 이름·수험번호·학교로 좁힌다. 표에 보이는 줄만 바뀌고 엑셀 복사도 보이는 줄을 따른다.
+  const [query, setQuery] = useState("");
 
-  const rows = useMemo(() => sortRows(data.rows, sort), [data.rows, sort]);
+  const rows = useMemo(
+    () =>
+      sortRows(
+        data.rows.filter((r) => matchesScanQuery({ name: r.name, studentId: r.studentKey, school: r.school }, query)),
+        sort,
+      ),
+    [data.rows, sort, query],
+  );
   const areas = useMemo(() => areasOf(data.questions), [data.questions]);
   const maxima = useMemo(() => areaMaxima(data.questions), [data.questions]);
   const bins = useMemo(() => scoreBins(data.rows), [data.rows]);
@@ -187,6 +197,19 @@ export default function ExamSummary({ data, canExport }: { data: ExamSummaryData
                 </h2>
               </div>
               <div className="summary-controls no-print">
+                <input
+                  type="search"
+                  className="summary-search"
+                  value={query}
+                  placeholder="학생 이름 · 수험번호"
+                  aria-label="학생 이름 · 수험번호로 찾기"
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                {query.trim() ? (
+                  <span className="subtle" aria-live="polite">
+                    {rows.length}/{data.rows.length}명 표시
+                  </span>
+                ) : null}
                 <span className="trend-seg" role="group" aria-label="정렬">
                   {(
                     [
