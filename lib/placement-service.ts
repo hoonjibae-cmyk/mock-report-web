@@ -8,7 +8,7 @@ import {deliverToClassfit} from '@/lib/classfit-delivery';
 import {classfitDestinationUrl} from '@/lib/classfit-destination';
 
 export const PLACEMENT_CHANNEL='C06PAG818TZ';
-type PlacementRequest={report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
+type PlacementRequest={requested_by:string;report_id:string;exam_id:string;student_key:string;grade:string;preferred_schedule:string;workspace_id:string|null;notification_state:string;image_token:string;requested_at:string};
 type Member={studentId:string;classId:string;excluded?:boolean};
 type PlacementStudent={id:string;cardNo:string;reportId?:string;reportWorkspaceId?:string;examId?:string;removed?:boolean;registryStatus?:string;examOnly?:boolean;regularEnrolled?:boolean};
 type PlacementWorkspace={id:string;state:{students:PlacementStudent[];memberships:Member[];waitlist?:Member[];classes:Array<{id:string;name:string;schedule?:string;archived?:boolean}>}};
@@ -17,7 +17,7 @@ export function validSummarySignature(token:string,expires:number,signature:stri
   if(!process.env.AUTH_SECRET||!Number.isSafeInteger(expires)||expires<Date.now()||expires>Date.now()+8*86400000)return false;
   const a=Buffer.from(signature),b=Buffer.from(summarySignature(token,expires));return a.length===b.length&&timingSafeEqual(a,b);
 }
-function summaryUrl(token:string){const expires=Date.now()+7*86400000;return `https://report.yussam.com/api/placement/summary/${token}?expires=${expires}&signature=${summarySignature(token,expires)}`;}
+export function summaryUrl(token:string){const expires=Date.now()+7*86400000;return `https://report.yussam.com/api/placement/summary/${token}?expires=${expires}&signature=${summarySignature(token,expires)}`;}
 async function notifyRequest(row:PlacementRequest,name:string){
   const client=getSupabaseAdmin(),claim=randomUUID();
   const destination=await client.from('placement_requests').select('workspace_id,grade').eq('report_id',row.report_id).single();
@@ -30,7 +30,8 @@ async function notifyRequest(row:PlacementRequest,name:string){
   if(!data?.length)return {state:row.notification_state};
   let state='uncertain',reason='알림 응답을 확인하지 못했습니다. 중복 전송을 막기 위해 채널 확인이 필요합니다.';
   try{
-    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(row.image_token),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
+    const responsibleEmpNo=await placementResponsibleEmployee(row.requested_by);
+    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({placementRequest:{requestId:row.image_token,studentName:name,requestedBy:row.requested_by,responsibleEmpNo},channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(row.image_token),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
     const result=await response.json().catch(()=>null);
     if(result?.delivered===true&&result.imageIncluded===true){state='sent';reason='';}
     else if(result?.delivered===false||response.status===400||response.status===401||response.status===403){state='error';reason=result?.error??'슬랙 알림 서비스 설정을 확인해 주세요.';}
@@ -127,4 +128,11 @@ export async function placementStatuses(examId:string){
     const classes=s?w!.state.classes.filter(c=>!c.archived&&w!.state.memberships.some(m=>!m.excluded&&m.studentId===s.id&&m.classId===c.id)):[];
     return {reportId:r.report_id,name:reports?.find(p=>p.id===r.report_id)?.student_name??r.student_key,preferredSchedule:r.preferred_schedule,notification:r.notification_state,classes:classes.map(c=>({id:c.id,name:c.name,url:`/placement/print/${r.report_id}?workspace=${w!.id}&class=${encodeURIComponent(c.id)}`}))};
   });
+}
+
+// Resolve the original requester by immutable HR employee number, never by student/name matching.
+export async function placementResponsibleEmployee(username:string){
+ const {data,error}=await getSupabaseAdmin().from('app_users').select('hr_emp_no').eq('username',username).eq('is_active',true).maybeSingle();
+ if(error)throw Error('반배정 요청 담당 직원을 확인하지 못했습니다.');
+ return typeof data?.hr_emp_no==='string'&&data.hr_emp_no.trim()?data.hr_emp_no.trim():null;
 }
