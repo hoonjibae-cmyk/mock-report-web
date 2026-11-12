@@ -4,6 +4,7 @@ import { isListeningAbsentCandidate } from "@/lib/listening";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import AcademyLogo from "@/components/AcademyLogo";
+import ScanFilterBar from "@/components/ScanFilterBar";
 import ScanPreview from "@/components/ScanPreview";
 import UploaderScopeBar from "@/components/UploaderScopeBar";
 import { useOmrWarmup } from "@/components/useOmrWarmup";
@@ -12,6 +13,7 @@ import { compactMark, isMultiAnswer, toChoices, type MarkValue } from "@/lib/omr
 import { EXAM_TYPE_LABELS, type OmrExam } from "@/lib/omr-types";
 import type { OmrScan } from "@/lib/omr-scans";
 import { describeSkipped, idRange, planConfirm, runPool } from "@/lib/scan-bulk";
+import { matchesScanQuery, onDay, summarizeScanDays } from "@/lib/scan-filter";
 import {
   defaultUploaderScope,
   inScope,
@@ -30,6 +32,11 @@ interface Props {
   me: string;
   /** 계정 ID → 표시 이름 */
   uploaderNames: Record<string, string>;
+  /**
+   * 수험번호(또는 학생 열쇠) → 학생 이름. 이미 만든 성적표와 학생 관리 프로그램에서 가져온다.
+   * 목록에서 이름으로 찾기 위한 것이라 없어도 화면은 그대로 돈다.
+   */
+  studentNames?: Record<string, string>;
 }
 
 interface Draft {
@@ -141,7 +148,15 @@ interface ReviewSummary {
   directoryUsed: boolean;
 }
 
-export default function OmrScanReview({ exam, initialScans, setupError, canEdit, me, uploaderNames }: Props) {
+export default function OmrScanReview({
+  exam,
+  initialScans,
+  setupError,
+  canEdit,
+  me,
+  uploaderNames,
+  studentNames = {},
+}: Props) {
   // 이 화면에서 답안지를 뽑고 스캔을 올린다. 들어온 김에 판독 서버를 깨워 둔다.
   useOmrWarmup(Boolean(exam));
 
@@ -261,11 +276,39 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
     return map;
   }, [summary]);
 
+  // 찾기 — 이름·수험번호 검색어와 올린 날짜. 100장 넘는 시험에서 한 학생을 바로 찾는다.
+  const [query, setQuery] = useState("");
+  const [day, setDay] = useState<string | null>(null);
+  const days = useMemo(() => summarizeScanDays(scopedScans), [scopedScans]);
+  // 범위를 바꿔 그 날짜가 사라지면 날짜 조건도 푼다 — 빈 목록 앞에서 왜 비었는지 헤매지 않게
+  useEffect(() => {
+    if (day !== null && !days.some((entry) => entry.key === day)) setDay(null);
+  }, [day, days]);
+
+  /** 이 답안지의 학생 이름 — 고치는 중인 수험번호를 따라간다. 모르면 빈 문자열 */
+  const nameOf = useCallback(
+    (scan: OmrScan) => {
+      const id = drafts[scan.id]?.studentId ?? scan.studentId ?? "";
+      return studentNames[(scan.studentKey ?? "").trim()] ?? studentNames[id] ?? "";
+    },
+    [drafts, studentNames],
+  );
+
   const visibleScans = useMemo(
-    () => (onlyFlagged ? scopedScans.filter((scan) => reasonsById.has(scan.id)) : scopedScans),
-    [scopedScans, onlyFlagged, reasonsById],
+    () =>
+      scopedScans.filter(
+        (scan) =>
+          (!onlyFlagged || reasonsById.has(scan.id)) &&
+          onDay(scan, day) &&
+          matchesScanQuery(
+            { name: nameOf(scan), studentId: drafts[scan.id]?.studentId ?? scan.studentId, filename: scan.filename },
+            query,
+          ),
+      ),
+    [scopedScans, onlyFlagged, reasonsById, day, query, nameOf, drafts],
   );
   const visibleIds = useMemo(() => visibleScans.map((scan) => scan.id), [visibleScans]);
+  const filtering = query.trim() !== "" || day !== null;
 
   // 안 보이는 답안지는 선택에서 뺀다 — '확인 필요만 보기'로 좁힌 뒤 일괄 처리가
   // 숨은 장까지 건드리면 안 된다. 삭제된 장도 여기서 빠진다.
@@ -869,6 +912,22 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
           }
         />
 
+        {/* 찾기 — 이름·수험번호로 검색하고 올린 날짜로 좁힌다. 일괄 선택은 보이는 장만 고른다 */}
+        <ScanFilterBar
+          query={query}
+          onQuery={setQuery}
+          days={days}
+          day={day}
+          onDay={setDay}
+          total={scopedScans.length}
+          shown={visibleScans.length}
+          note={
+            days.length > 1
+              ? "날짜는 답안지를 올린 날(대개 응시일)입니다. 따로 와서 본 학생은 그날 올린 묶음에서 찾으세요. 검색·날짜로 좁히면 '전체 선택'과 일괄 처리도 보이는 장만 대상입니다."
+              : "이름은 학생 관리 프로그램과 이미 만든 성적표에서 가져옵니다. 검색으로 좁히면 '전체 선택'과 일괄 처리도 보이는 장만 대상입니다."
+          }
+        />
+
         {summary && pendingCount > 0 ? (
           <div className="review-summary">
             <div className="review-counts">
@@ -925,10 +984,29 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
           </p>
         ) : visibleScans.length === 0 ? (
           <p className="subtle">
-            확인이 필요한 답안지가 없습니다.{" "}
-            <button className="button tiny ghost" onClick={() => setOnlyFlagged(false)}>
-              전체 보기
-            </button>
+            {filtering ? (
+              <>
+                {query.trim() ? `‘${query.trim()}’에 맞는 답안지가 없습니다.` : "그날 올린 답안지가 없습니다."}
+                {onlyFlagged ? " (확인 필요만 보는 중)" : ""}{" "}
+                {query.trim() ? (
+                  <button className="button tiny ghost" onClick={() => setQuery("")}>
+                    검색 지우기
+                  </button>
+                ) : null}{" "}
+                {day !== null ? (
+                  <button className="button tiny ghost" onClick={() => setDay(null)}>
+                    날짜 전체
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <>
+                확인이 필요한 답안지가 없습니다.{" "}
+                <button className="button tiny ghost" onClick={() => setOnlyFlagged(false)}>
+                  전체 보기
+                </button>
+              </>
+            )}
           </p>
         ) : (
           <>
@@ -1060,6 +1138,12 @@ export default function OmrScanReview({ exam, initialScans, setupError, canEdit,
                                 }
                               />
                             </label>
+                            {/* 이름 — 수험번호만으로는 누구 답안지인지 한눈에 안 보인다 */}
+                            {nameOf(scan) ? (
+                              <span className="scan-student-name" title="학생 관리 프로그램 또는 이미 만든 성적표의 이름">
+                                {nameOf(scan)}
+                              </span>
+                            ) : null}
                             {/* 반배치고사 — 답안지 '재원 구분' 칸. 신규생이면 위 칸은 수험번호가 아니라 전화번호 뒤 4자리다 */}
                             {exam?.examType === "placement" && scan.enrollment ? (
                               <span
