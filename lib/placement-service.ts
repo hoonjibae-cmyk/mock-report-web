@@ -1,3 +1,4 @@
+import {registerPlacementSnapshot} from '@/lib/placement-result-snapshot';
 import {loadPlacementReportFeedback,type PlacementReportFeedback} from '@/lib/placement-report-feedback';
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
 import {getSupabaseAdmin} from '@/lib/supabase-admin';
@@ -28,14 +29,19 @@ async function notifyRequest(row:PlacementRequest,name:string){
   const {data,error}=await client.rpc('placement_claim_notification',{p_report_id:row.report_id,p_claim:claim});
   if(error)throw Error('반배정 알림 처리에 필요한 데이터베이스 업데이트를 확인해 주세요.');
   if(!data?.length)return {state:row.notification_state};
+  let submitted=false;
   let state='uncertain',reason='알림 응답을 확인하지 못했습니다. 중복 전송을 막기 위해 채널 확인이 필요합니다.';
   try{
     const responsibleEmpNo=await placementResponsibleEmployee(row.requested_by);
-    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({placementRequest:{requestId:row.image_token,studentName:name,requestedBy:row.requested_by,responsibleEmpNo},channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(row.image_token),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
+    const currentReport=await client.from('student_reports').select('report_data').eq('id',row.report_id).single();
+    if(currentReport.error||!isGenericReport(currentReport.data?.report_data))throw Error('알림 성적표를 확인하지 못했습니다.');
+    const snapshot=await registerPlacementSnapshot(row.image_token,row.report_id,currentReport.data.report_data,row.preferred_schedule);
+    submitted=true;
+    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({placementRequest:{requestId:row.image_token,resultId:snapshot.id,requestedAt:row.requested_at,studentName:name,requestedBy:row.requested_by,responsibleEmpNo},channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(snapshot.id),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
     const result=await response.json().catch(()=>null);
     if(result?.delivered===true&&result.imageIncluded===true){state='sent';reason='';}
     else if(result?.delivered===false||response.status===400||response.status===401||response.status===403){state='error';reason=result?.error??'슬랙 알림 서비스 설정을 확인해 주세요.';}
-  }catch{/* 통신 단절은 전송 실패와 다르므로 자동 재전송하지 않는다. */}
+  }catch{if(!submitted){state='error';reason='발송 성적표를 준비하지 못했습니다. 저장된 요청을 재시도합니다.';}/* 발송 후 통신 단절은 자동 재전송하지 않는다. */}
   const {error:updateError}=await client.from('placement_requests').update({notification_state:state,notification_reason:reason||null,notification_at:new Date().toISOString()}).eq('report_id',row.report_id).eq('notification_claim',claim);
   if(updateError)throw Error('슬랙 응답 기록을 저장하지 못했습니다. 중복 전송을 피하려면 채널을 먼저 확인해 주세요.');
   return {state,reason};
@@ -53,7 +59,18 @@ export async function requestPlacement(rows:Array<{id:string;key:string;data:Gen
     if(!saved){const {data,error}=await client.from('placement_requests').upsert({report_id:row.id,exam_id:row.data.examId,student_key:row.key,grade,preferred_schedule:schedule,requested_by:actor,notification_state:decision==='send'?'pending':decision==='skip'?'skipped':'blocked',notification_reason:decision==='hold'?'Student Card의 재원 여부 확인이 필요합니다.':null},{onConflict:'exam_id,student_key',ignoreDuplicates:true}).select('*').maybeSingle();if(error)throw Error('반배정 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');saved=data as PlacementRequest|null;created=!!saved;
       if(!saved){const current=await client.from('placement_requests').select('*').eq('exam_id',row.data.examId).eq('student_key',row.key).single();if(current.error)throw Error('반배정 요청 상태를 확인하지 못했습니다.');saved=current.data as PlacementRequest;}
     }
-    if(!created){const patch:Record<string,unknown>={report_id:row.id,grade,preferred_schedule:schedule};if(['blocked','skipped','error','pending'].includes(saved.notification_state)){patch.notification_state=decision==='send'?'pending':decision==='skip'?'skipped':'blocked';patch.notification_reason=decision==='hold'?'Student Card의 재원 여부 확인이 필요합니다.':null;}
+    let newResultPending=false;
+    if(!created&&decision==='send'){
+      // Freeze the prior delivered image BEFORE changing its report pointer.
+      if(['sent','sending','uncertain'].includes(saved.notification_state)){
+        const previous=await client.from('student_reports').select('report_data').eq('id',saved.report_id).maybeSingle();
+        if(previous.error)throw Error('기존 성적표 보관 상태를 확인하지 못했습니다.');
+        if(isGenericReport(previous.data?.report_data))await registerPlacementSnapshot(saved.image_token,saved.report_id,previous.data.report_data,saved.preferred_schedule,true);
+      }
+      const current=await registerPlacementSnapshot(saved.image_token,row.id,row.data,schedule);
+      newResultPending=current.state==='pending'||current.state==='error';
+    }
+    if(!created){const patch:Record<string,unknown>={report_id:row.id,grade,preferred_schedule:schedule};if(['blocked','skipped','error','pending'].includes(saved.notification_state)||saved.notification_state==='sent'&&newResultPending){patch.notification_state=decision==='send'?'pending':decision==='skip'?'skipped':'blocked';patch.notification_reason=decision==='hold'?'Student Card의 재원 여부 확인이 필요합니다.':null;}
       const {data,error}=await client.from('placement_requests').update(patch).eq('report_id',saved.report_id).eq('notification_state',saved.notification_state).select('*').maybeSingle();if(error)throw Error('반배정 요청을 갱신하지 못했습니다.');
       if(data)saved=data as PlacementRequest;else{const current=await client.from('placement_requests').select('*').eq('exam_id',row.data.examId).eq('student_key',row.key).single();if(current.error)throw Error('반배정 요청 상태를 확인하지 못했습니다.');saved=current.data as PlacementRequest;}
     }

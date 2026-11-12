@@ -13,7 +13,9 @@ export async function GET(request:Request){
  const db=getSupabaseAdmin();const result=await db.from('placement_requests').select('requested_by,report_id').eq('image_token',id).maybeSingle();
  if(result.error)return Response.json({error:'lookup failed'},{status:503});
  if(!result.data)return Response.json({error:'not found'},{status:404});
- const report=await db.from('reports').select('student_name').eq('id',result.data.report_id).maybeSingle();
+ const imageId=new URL(request.url).searchParams.get('image')??id;
+ if(!/^[a-f0-9-]{36}$/i.test(imageId))return Response.json({error:'invalid image'},{status:400});
+ const report=await db.from('student_reports').select('student_name').eq('id',result.data.report_id).maybeSingle();
  if(report.error||!report.data)return Response.json({error:'report unavailable'},{status:503});
- return Response.json({studentName:report.data.student_name,requestedBy:result.data.requested_by,responsibleEmpNo:await placementResponsibleEmployee(result.data.requested_by),imageUrl:summaryUrl(id)},{headers:{'Cache-Control':'no-store'}});
+ return Response.json({studentName:report.data.student_name,requestedBy:result.data.requested_by,responsibleEmpNo:await placementResponsibleEmployee(result.data.requested_by),imageUrl:summaryUrl(imageId)},{headers:{'Cache-Control':'no-store'}});
 }

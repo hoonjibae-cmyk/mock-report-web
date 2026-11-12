@@ -1,3 +1,4 @@
+import {freezePlacementReportImage} from '@/lib/placement-result-snapshot';
 import {requestPlacement,placementStatuses} from '@/lib/placement-service';
 import { enrollmentOf, isNewStudentScan, placementGrade, preferredSchedule } from "@/lib/placement-policy";
 import { NextResponse } from "next/server";
@@ -449,6 +450,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     await Promise.all(
       toUpdate.map(async (p) => {
         const existing = existingByKey.get(p.key)!;
+        if(exam.examType==='placement')await freezePlacementReportImage(existing.id);
         const change: Record<string, unknown> = {
           student_name: p.input.name.trim(),
           report_data: p.reportData,
