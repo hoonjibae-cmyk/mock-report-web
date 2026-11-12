@@ -1,3 +1,4 @@
+import {placementStudentContext} from '@/lib/placement-student-context';
 import {registerPlacementSnapshot} from '@/lib/placement-result-snapshot';
 import {loadPlacementReportFeedback,type PlacementReportFeedback} from '@/lib/placement-report-feedback';
 import {createHmac,randomUUID,timingSafeEqual} from 'node:crypto';
@@ -23,7 +24,7 @@ async function notifyRequest(row:PlacementRequest,name:string){
   const client=getSupabaseAdmin(),claim=randomUUID();
   const destination=await client.from('placement_requests').select('workspace_id,grade').eq('report_id',row.report_id).single();
   if(destination.error||!destination.data.workspace_id)throw Error('Where’s My Class? 자동 반영 후 알림을 보낼 수 있습니다.');
-  const workspace=await client.from('placement_workspaces').select('id,state').eq('id',destination.data.workspace_id).single();
+  const workspace=await client.from('placement_workspaces').select('id,title,state').eq('id',destination.data.workspace_id).single();
   if(workspace.error||!workspace.data)throw Error('반편성 배정 학년을 확인하지 못했습니다. 알림을 재시도합니다.');
   const classfitUrl=classfitDestinationUrl(workspace.data,row.report_id);
   const {data,error}=await client.rpc('placement_claim_notification',{p_report_id:row.report_id,p_claim:claim});
@@ -33,11 +34,13 @@ async function notifyRequest(row:PlacementRequest,name:string){
   let state='uncertain',reason='알림 응답을 확인하지 못했습니다. 중복 전송을 막기 위해 채널 확인이 필요합니다.';
   try{
     const responsibleEmpNo=await placementResponsibleEmployee(row.requested_by);
-    const currentReport=await client.from('student_reports').select('report_data').eq('id',row.report_id).single();
+    const currentReport=await client.from('student_reports').select('report_data,school,grade').eq('id',row.report_id).single();
     if(currentReport.error||!isGenericReport(currentReport.data?.report_data))throw Error('알림 성적표를 확인하지 못했습니다.');
     const snapshot=await registerPlacementSnapshot(row.image_token,row.report_id,currentReport.data.report_data,row.preferred_schedule);
+    const target=workspace.data.state.students?.find((s:{reportId?:string;removed?:boolean})=>s.reportId===row.report_id&&!s.removed);
+    const context=placementStudentContext({school:currentReport.data.school||currentReport.data.report_data.student.school,sourceGrade:currentReport.data.grade||row.grade,targetGrade:target?.grade,workspaceTitle:workspace.data.title,requestedAt:row.requested_at});
     submitted=true;
-    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({placementRequest:{requestId:row.image_token,resultId:snapshot.id,requestedAt:row.requested_at,studentName:name,requestedBy:row.requested_by,responsibleEmpNo},channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(snapshot.id),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
+    const response=await fetch(`${(process.env.HR_API_URL??'').replace(/\/$/,'')}/api/slack/notify`,{method:'POST',headers:{'content-type':'application/json','x-app':'omr-report','x-api-key':process.env.HR_API_KEY??''},body:JSON.stringify({placementRequest:{requestId:row.image_token,resultId:snapshot.id,requestedAt:row.requested_at,studentName:name,requestedBy:row.requested_by,responsibleEmpNo},channel:PLACEMENT_CHANNEL,text:`반배정 요청 · ${name}${context?` · ${context}`:''}\n선호 요일: ${row.preferred_schedule}\n${classfitUrl}`,imageUrl:summaryUrl(snapshot.id),imageAlt:`${name} 반배치고사 성적 요약 · 선호 요일 ${row.preferred_schedule}`}),signal:AbortSignal.timeout(25000)});
     const result=await response.json().catch(()=>null);
     if(result?.delivered===true&&result.imageIncluded===true){state='sent';reason='';}
     else if(result?.delivered===false||response.status===400||response.status===401||response.status===403){state='error';reason=result?.error??'슬랙 알림 서비스 설정을 확인해 주세요.';}
