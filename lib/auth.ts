@@ -138,7 +138,7 @@ export async function authenticateByEmail(email: string): Promise<CurrentUser | 
   return fromRow(data);
 }
 
-export async function setSessionCookie(user: CurrentUser): Promise<void> {
+export async function setSessionCookie(user: CurrentUser, slackUserId?: string): Promise<void> {
   const store = await cookies();
   const token = signPayload({
     // 자리(admin/user)가 아니라 **어디서 온 계정인지** 를 담는다. 예전에는 자리로
@@ -147,6 +147,7 @@ export async function setSessionCookie(user: CurrentUser): Promise<void> {
     kind: user.source === "environment" ? "environment-admin" : "database-user",
     userId: user.id ?? undefined,
     username: user.username,
+    ...(slackUserId ? { slackUserId } : {}),
     exp: Date.now() + 12 * 60 * 60 * 1000,
   });
   store.set(SESSION_COOKIE, token, {

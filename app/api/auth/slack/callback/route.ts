@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { authenticateByEmail, setSessionCookie } from "@/lib/auth";
+import { authenticateByEmail, setSessionCookie, SESSION_COOKIE } from "@/lib/auth";
 import { safeNextPath } from "@/lib/login-next";
-import { SLACK_NEXT_COOKIE, SLACK_STATE_COOKIE, exchangeCode, stateMatches } from "@/lib/slack-auth";
+import { SLACK_NEXT_COOKIE, SLACK_STATE_COOKIE, exchangeCode, stateMatches, expectedSlackUserForState } from "@/lib/slack-auth";
 import { siteBaseUrl } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -13,6 +13,9 @@ function backToLogin(message: string) {
   const res = NextResponse.redirect(`${base}/login?error=${encodeURIComponent(message)}`);
   res.cookies.set(SLACK_STATE_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
   res.cookies.set(SLACK_NEXT_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
+  res.cookies.set(SESSION_COOKIE, '', { path: '/', maxAge: 0 });
+  res.cookies.set('ys_mock_admin', '', { path: '/', maxAge: 0 });
+  res.headers.set('Cache-Control', 'private, no-store');
   return res;
 }
 
@@ -65,6 +68,10 @@ export async function GET(request: Request) {
     );
   }
 
+  const expected = expectedSlackUserForState(cookieState!);
+  if (expected && identity.slackUserId !== expected)
+    return backToLogin('포털과 다른 Slack 계정입니다. 포털에 로그인한 Slack 계정을 선택해 다시 시도해 주세요.');
+
   const user = await authenticateByEmail(identity.email);
   if (!user) {
     // 슬랙이 넘겨준 이메일을 그대로 보여 준다. 방금 그 슬랙 계정으로 로그인한
@@ -79,11 +86,12 @@ export async function GET(request: Request) {
     );
   }
 
-  await setSessionCookie(user);
+  await setSessionCookie(user, identity.slackUserId);
   // 로그인 전에 가려던 곳(검토 화면 등)이 있으면 거기로, 없으면 메인으로
   const next = safeNextPath(readCookie(request, SLACK_NEXT_COOKIE));
   const res = NextResponse.redirect(`${siteBaseUrl().replace(/\/$/, "")}${next}`);
   res.cookies.set(SLACK_STATE_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
   res.cookies.set(SLACK_NEXT_COOKIE, "", { path: "/api/auth/slack", maxAge: 0 });
+  res.headers.set('Cache-Control', 'private, no-store');
   return res;
 }
