@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { cookies } from 'next/headers';
+import { getCurrentUser, SESSION_COOKIE } from '@/lib/auth';
+import { verifyPayload } from '@/lib/crypto';
 
 import {
   SLACK_NEXT_COOKIE,
@@ -15,8 +18,27 @@ export const dynamic = "force-dynamic";
 
 /** 슬랙 로그인 시작 — 로그인 화면의 '슬랙으로 로그인' 이 여기로 온다 */
 export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const hasConstraint = params.has('portal_slack_user');
+  const expectedSlackUserId = params.get('portal_slack_user') || undefined;
+  const clearPrevious = (response: NextResponse) => {
+    for (const name of [SESSION_COOKIE, 'ys_mock_admin']) response.cookies.set(name, '', { path: '/', maxAge: 0 });
+    response.headers.set('Cache-Control', 'private, no-store');
+    return response;
+  };
+  if (hasConstraint && (!expectedSlackUserId || !/^[UW][A-Z0-9]{5,30}$/.test(expectedSlackUserId)))
+    return clearPrevious(NextResponse.json({ error: '포털 계정을 확인하지 못했습니다. 포털에서 다시 열어 주세요.' }, { status: 400 }));
   try {
-    const state = createState();
+    const token = (await cookies()).get(SESSION_COOKIE)?.value;
+    const session = token ? verifyPayload<{ slackUserId?: string }>(token) : null;
+    if (expectedSlackUserId && session?.slackUserId === expectedSlackUserId && await getCurrentUser()) {
+      const response = NextResponse.redirect(`${siteBaseUrl().replace(/\/$/, '')}${DEFAULT_AFTER_LOGIN}`);
+      response.cookies.set(SLACK_STATE_COOKIE, '', { path: '/api/auth/slack', maxAge: 0 });
+      response.cookies.set(SLACK_NEXT_COOKIE, '', { path: '/api/auth/slack', maxAge: 0 });
+      response.headers.set('Cache-Control', 'private, no-store');
+      return response;
+    }
+    const state = createState(expectedSlackUserId);
     // 슬랙에 갔다 오는 동안 가려던 곳을 잊지 않게 쿠키에 적어 둔다
     const next = safeNextPath(new URL(request.url).searchParams.get("next"));
     const url = authorizeUrl(siteBaseUrl(), state);
@@ -38,14 +60,16 @@ export async function GET(request: Request) {
         maxAge: 10 * 60,
       });
     }
-    return res;
+    res.headers.set('Cache-Control', 'private, no-store');
+    return expectedSlackUserId ? clearPrevious(res) : res;
   } catch (error) {
     const message =
       error instanceof SlackLoginNotConfiguredError
         ? error.message
         : "슬랙 로그인을 시작하지 못했습니다.";
-    return NextResponse.redirect(
+    const response = NextResponse.redirect(
       `${siteBaseUrl().replace(/\/$/, "")}/login?error=${encodeURIComponent(message)}`,
     );
+    return expectedSlackUserId ? clearPrevious(response) : response;
   }
 }

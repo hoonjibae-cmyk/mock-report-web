@@ -54,11 +54,16 @@ export function slackRedirectUri(siteUrl: string): string {
  * 이것이 없으면 남이 만든 로그인 요청을 우리 쪽에서 그대로 처리하게 된다(CSRF).
  * 쿠키에 넣은 값과 슬랙이 돌려준 값이 같아야 통과시킨다.
  */
-export function createState(): string {
+export function createState(expectedSlackUserId?: string): string {
   return signPayload({
     nonce: Math.random().toString(36).slice(2) + Date.now().toString(36),
     exp: Date.now() + 10 * 60 * 1000,
+    ...(expectedSlackUserId ? { expectedSlackUserId } : {}),
   });
+}
+
+export function expectedSlackUserForState(state: string): string | undefined {
+  return verifyPayload<{ expectedSlackUserId?: string }>(state)?.expectedSlackUserId;
 }
 
 export function stateMatches(fromCookie: string | undefined, fromSlack: string | null): boolean {
