@@ -52,7 +52,7 @@ export function placementSummarySvg(report:GenericReportData,schedule:string){
       <path d="M24 0H976Q1000 0 1000 24V104H0V24Q0 0 24 0" fill="#142d43"/>
       ${text(40,44,'반배정 요청',27,'#ffffff',300,700)}
       ${text(40,77,report.examTitle,16,'#c8d6e3',730)}
-      ${text(802,44,'CLASSFIT',16,'#85e0cf',158,700)}
+      ${text(802,44,'유쌤 반편성',16,'#85e0cf',158,700)}
       ${text(802,77,report.examDate||'응시일 미확인',15,'#c8d6e3',158)}
       <rect x="40" y="128" width="920" height="104" rx="16" fill="white"/>
       ${text(62,157,'학생 정보',13,'#64748b')}

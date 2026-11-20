@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  *
  * 학생마다 새 쪽에서 시작하고 바닥글에 시험명·학생 이름이 찍힌다. `?class=반이름`으로 한 반만,
  * `?students=열쇠,열쇠`로 고른 학생만 뽑을 수 있다. 담임 의견은 공개 성적표와 같은 규칙으로
- * 확정한 글만 싣는다. 반배치고사는 반별 출력 링크(Where’s My Class?)를 쓰므로 여기서 다루지 않는다.
+ * 확정한 글만 싣는다. 반배치고사는 반별 출력 링크(유쌤 반편성)를 쓰므로 여기서 다루지 않는다.
  */
 export default async function OmrPrintPage(context: {
   params: Promise<{ id: string }>;
