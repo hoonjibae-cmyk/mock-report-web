@@ -54,7 +54,7 @@ export const FIXED_AI_USES: FixedAiUse[] = [
   },
   {
     feature: "학생별 상담 분석",
-    where: "반배치고사 상담(Where's My Class?)에서 학생마다 답안과 공통 분석을 엮어 강약점 정리",
+    where: "반배치고사 상담(유쌤 반편성)에서 학생마다 답안과 공통 분석을 엮어 강약점 정리",
     model: STUDENT_COUNSELLING_MODEL,
     effort: STUDENT_REASONING_EFFORT,
     reason: "학생 수만큼 도는 일이라 가장 싼 모델을 쓴다. 공통 문항 분석을 재사용해 학생당 입력을 줄인다.",
